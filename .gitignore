@@ -1,0 +1,9 @@
+node_modules
+dist
+.vercel
+.env*.local
+scripts/out
+.taste-skill
+CLAUDE.local.md
+.claude/skills/
+skills-lock.json

@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-canvas text-slate-900 antialiased;
+    font-family: 'Be Vietnam Pro', system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type='number'] { -moz-appearance: textfield; }
+}
+
+@layer components {
+  /* thẻ trắng trên canvas xám — viền mảnh, không bóng (khuôn Manhattan) */
+  .card { @apply rounded-lg border border-slate-200 bg-white; }
+  /* nút / ô nhập: 36 px khi dùng chuột, 44 px khi chạm tay */
+  .tap { @apply min-h-[36px]; }
+  .tap-icon { @apply h-9 w-9; }
+  @media (pointer: coarse) {
+    .tap { min-height: 44px; }
+    .tap-icon { height: 44px; width: 44px; }
+  }
+  .num { font-variant-numeric: tabular-nums; }
+  .pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
+}
+
+/* thanh trượt bước xếp */
+input[type='range'].steps { -webkit-appearance: none; appearance: none; height: 28px; background: transparent; }
+/* hai màu đặc cắt cứng tại --p (phần đã chạy / còn lại), không phải dải chuyển màu */
+input[type='range'].steps::-webkit-slider-runnable-track { height: 4px; border-radius: 99px; background: linear-gradient(to right, /* taste-skill-ignore */ #1a66ff var(--p, 100%), #d6dde7 var(--p, 100%)); }
+input[type='range'].steps::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -7px; border-radius: 99px; background: #fff; border: 2px solid #1a66ff; }
+input[type='range'].steps::-moz-range-track { height: 4px; border-radius: 99px; background: #d6dde7; }
+input[type='range'].steps::-moz-range-progress { height: 4px; border-radius: 99px; background: #1a66ff; }
+input[type='range'].steps::-moz-range-thumb { width: 16px; height: 16px; border-radius: 99px; background: #fff; border: 2px solid #1a66ff; }
+
+@keyframes sheet-up { from { transform: translateY(24px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes sheet-left { from { transform: translateX(24px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}

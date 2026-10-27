@@ -1,0 +1,112 @@
+import { useRef, useState, type ReactNode } from 'react'
+import { Download, LogIn, MessageCircle, RotateCcw, Upload } from 'lucide-react'
+import { exportBackup, parseBackup, useData, type BackupData } from '../data/store'
+import { DEFAULT_PALLET_SETTINGS } from '../data/catalog'
+import { Button, Confirm, Field, NumInput, SectionBand, fmtInt } from '../ui/kit'
+import { ListCard, Page, PageHeader } from '../ui/Shell'
+
+/** Một nhóm cài đặt: band tiêu đề + câu giải thích nhìn thấy ngay + phần điều khiển. */
+function Group({ title, desc, children, first }: { title: string; desc: ReactNode; children: ReactNode; first?: boolean }) {
+  return (
+    <>
+      <SectionBand title={title} className={first ? 'border-t-0 sm:rounded-t-[7px]' : undefined} />
+      <div className="px-4 py-4">
+        <p className="max-w-2xl text-sm text-slate-700">{desc}</p>
+        <div className="mt-3">{children}</div>
+      </div>
+    </>
+  )
+}
+
+export default function AccountPage() {
+  const s = useData()
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [pending, setPending] = useState<BackupData | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [askReset, setAskReset] = useState(false)
+
+  const download = () => {
+    const blob = new Blob([JSON.stringify(exportBackup(), null, 1)], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `malcargo-sao-luu-${new Date().toLocaleDateString('en-CA')}.json`
+    a.click(); URL.revokeObjectURL(a.href)
+  }
+  const onFile = async (f: File | undefined) => {
+    if (!f) return
+    const r = parseBackup(await f.text())
+    if (typeof r === 'string') setMsg(r); else { setMsg(null); setPending(r) }
+    if (fileRef.current) fileRef.current.value = ''
+  }
+  const p = s.pallet
+  const counts = [[s.items.length, 'mã hàng'], [s.vehicles.length, 'xe'], [s.orders.length, 'đơn'], [s.trips.length, 'chuyến']] as const
+
+  return (
+    <>
+      <PageHeader title="Tài khoản & dữ liệu" />
+      <Page flush className="space-y-4">
+        <ListCard>
+          <Group first title="Dữ liệu trên máy này"
+            desc="Mọi thứ bạn nhập đang lưu trong trình duyệt của máy này. Đăng nhập để dùng trên máy khác và chia sẻ cho người khác — tính năng sắp có.">
+            <div className="grid grid-cols-4 divide-x divide-slate-200 rounded-md border border-slate-200">
+              {counts.map(([n, label]) => (
+                <div key={label} className="px-3 py-2">
+                  <div className="num text-xl font-semibold text-slate-900">{fmtInt(n)}</div>
+                  <div className="text-[12px] text-slate-600">{label}</div>
+                </div>
+              ))}
+            </div>
+            <Button className="mt-3 w-full sm:w-auto" disabled title="Sắp có"><LogIn size={17} />Đăng nhập bằng Google hoặc email — sắp có</Button>
+          </Group>
+
+          <Group title="Sao lưu"
+            desc="Xoá dữ liệu trình duyệt hoặc gỡ app là mất dữ liệu trên máy. Tải file sao lưu để giữ, hoặc để chuyển sang máy khác.">
+            <div className="flex flex-wrap gap-2">
+              <Button variant="primary" onClick={download}><Download size={17} />Tải file sao lưu</Button>
+              <Button onClick={() => fileRef.current?.click()}><Upload size={17} />Nạp từ file</Button>
+              <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={e => onFile(e.target.files?.[0])} />
+            </div>
+            {msg && <p className="mt-2 text-sm text-red-700">{msg}</p>}
+          </Group>
+
+          <Group title="Pallet dùng khi chở xe pallet"
+            desc="Áp cho mọi chuyến xe pallet. Pallet hàng nguyên cao theo số thùng/pallet của từng mã; pallet gộp hàng lẻ không cao quá mức dưới.">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Field label="Dài chân"><NumInput value={p.l} onChange={v => v && s.setPallet({ ...p, l: v })} suffix="mm" /></Field>
+              <Field label="Rộng chân"><NumInput value={p.w} onChange={v => v && s.setPallet({ ...p, w: v })} suffix="mm" /></Field>
+              <Field label="Cao tối đa pallet lẻ"><NumInput value={p.maxH} onChange={v => v && s.setPallet({ ...p, maxH: v })} suffix="mm" /></Field>
+              <Field label="Cao đế · nặng"><div className="grid grid-cols-2 gap-1.5">
+                <NumInput value={p.baseH} onChange={v => v && s.setPallet({ ...p, baseH: v })} aria-label="Cao đế pallet (mm)" />
+                <NumInput value={p.kg} onChange={v => v != null && s.setPallet({ ...p, kg: v })} suffix="kg" aria-label="Khối lượng pallet (kg)" />
+              </div></Field>
+            </div>
+            <button className="tap mt-2 text-[13px] font-medium text-brand-700 hover:text-brand-600" onClick={() => s.setPallet(DEFAULT_PALLET_SETTINGS)}>Về mặc định 1200 × 1000</button>
+          </Group>
+
+          <Group title="Xoá dữ liệu" desc="Xoá mọi mã hàng, xe, đơn, chuyến của bạn trên máy này. Nên tải file sao lưu trước.">
+            <Button variant="danger" onClick={() => setAskReset(true)}><RotateCcw size={16} />Xoá toàn bộ dữ liệu trên máy này</Button>
+          </Group>
+        </ListCard>
+
+        <section className="mx-4 flex flex-col gap-3 rounded-lg bg-navy-950 p-5 text-white sm:mx-0 sm:flex-row sm:items-center">
+          <div className="flex-1">
+            <div className="text-[15px] font-semibold">Cần quản lý cả kho và vận tải?</div>
+            <p className="mt-0.5 text-sm text-slate-300">SUPPLYC — phần mềm kho & vận tải, dùng thử 3 tháng miễn phí.</p>
+          </div>
+          <div className="flex gap-2">
+            <a href="https://mal.com.vn" target="_blank" rel="noreferrer" className="tap inline-flex items-center rounded-md bg-white px-4 text-sm font-semibold text-navy-950 hover:bg-slate-100">Xem SUPPLYC</a>
+            <a href="https://zalo.me/0972702149" target="_blank" rel="noreferrer" className="tap inline-flex items-center gap-2 rounded-md bg-brand-500 px-4 text-sm font-semibold text-white hover:bg-brand-600"><MessageCircle size={17} />Zalo</a>
+          </div>
+        </section>
+      </Page>
+
+      <Confirm open={!!pending} onClose={() => setPending(null)} danger={false} okText="Nạp và thay"
+        title="Thay dữ liệu bằng file sao lưu?"
+        body={pending && `File có ${pending.items.length} mã · ${pending.vehicles.length} xe · ${pending.orders.length} đơn · ${pending.trips.length} chuyến. Dữ liệu hiện tại trên máy sẽ bị thay.`}
+        onOk={() => { if (pending) s.replaceAll(pending) }} />
+      <Confirm open={askReset} onClose={() => setAskReset(false)} okText="Xoá hết" title="Xoá toàn bộ dữ liệu?"
+        body="Mã hàng, xe, đơn, chuyến của bạn trên máy này sẽ mất. Nên tải file sao lưu trước."
+        onOk={() => s.replaceAll({ app: 'malcargo', version: 1, items: [], vehicles: [], orders: [], trips: [], pallet: DEFAULT_PALLET_SETTINGS })} />
+    </>
+  )
+}
