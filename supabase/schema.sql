@@ -70,5 +70,5 @@ insert into public.catalog (id, kind, sort, data) values
   ('adm-i-th170', 'item', 3, '{"code":"MAU-TH170","name":"Sữa thạch 170ml x48","l":430,"w":250,"h":130,"kg":9.5,"perPallet":100,"maxLayers":11,"light":false}'),
   ('adm-i-c100', 'item', 4, '{"code":"MAU-C100","name":"Sữa chua chai 100ml x48","l":430,"w":250,"h":100,"kg":5.9,"perPallet":143,"maxLayers":14,"light":false}'),
   ('adm-i-c85', 'item', 5, '{"code":"MAU-C85","name":"Sữa chai 85ml x48","l":357,"w":276,"h":105,"kg":5.05,"perPallet":143,"maxLayers":13,"light":false}'),
-  ('adm-i-tui110', 'item', 6, '{"code":"MAU-TUI110","name":"Thạch túi 110ml x24","l":310,"w":130,"h":130,"kg":3.08,"perPallet":216,"maxLayers":8,"light":true,"ownPallet":true}')
+  ('adm-i-tui110', 'item', 6, '{"code":"MAU-TUI110","name":"Thạch túi 110ml x24","l":310,"w":130,"h":130,"kg":3.08,"perPallet":216,"maxLayers":8,"light":true}')
 on conflict (id) do nothing;

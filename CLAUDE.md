@@ -24,7 +24,7 @@ Ghi chú nội bộ của chủ dự án (không nằm trong repo công khai): @
 - **Không sửa lõi ở đây.** Sửa luật xếp ở bản gốc rồi chép lại file sang → `npm test`. Chỗ nào cần khác thì vá ở lớp ghép `plan.ts`.
 - Luật 8 (27/10): mọi chỗ đặt thùng LÊN MẶT khối khác (hàng nhẹ, hàng lên nóc pallet) đi qua `levelFill` — lát kín kiểu rót nước, không tháp lẻ; pallet gộp chia cho cao đều. Ca "hàng nhẹ thùng to ở đơn xếp sau" lõi đã tự xếp được; lớp dự phòng trong `plan.ts` vẫn giữ cho chắc.
 - Bộ đo hình khối: `node scripts/out/q.mjs` (gitignore — chép lại từ phiên trước nếu mất) — ma trận xe × đơn, đếm tháp / treo / vực / chồng lấn / pallet lùn.
-- Pipeline: xe xá → `computeLoadPlan`; xe pallet → `palletizeGroups` rồi hàng nhẹ `spreadOnTopOfPallets` (mã nhẹ khai **Pallet riêng** — `Item.ownPallet` — thì không lên nóc mà đóng pallet bể riêng `remPool`). Đơn GIAO TRƯỚC xếp SAU CÙNG (sát cửa). Bảng đếm chân = gom thùng theo (x,y) → "n chân × L lớp". Gợi ý xe = xe CÙNG KIỂU nhỏ nhất (thể tích) chở hết + không vượt tải.
+- Pipeline: xe xá → `computeLoadPlan`; xe pallet → `palletizeGroups` rồi hàng nhẹ `spreadOnTopOfPallets` (chuyến bật **Hàng nhẹ đóng pallet** — `Trip.lightInPallet`, công tắc trên dải thông số xe — thì hàng nhẹ đóng pallet như hàng khác: pallet chẵn + phần lẻ dồn chung pallet gộp của đơn). Đơn GIAO TRƯỚC xếp SAU CÙNG (sát cửa). Bảng đếm chân = gom thùng theo (x,y) → "n chân × L lớp". Gợi ý xe = xe CÙNG KIỂU nhỏ nhất (thể tích) chở hết + không vượt tải.
 - Tính trong Web Worker (`worker.ts`); three.js chỉ tải khi màn 3D mở (`src/three/LazyScene.tsx`) — **đừng import `three` vào file nằm ngoài `src/three/`** trừ qua LazyScene (sẽ kéo ~550 KB vào gói chính).
 
 ## Đồ hoạ 3D (`src/three/`)

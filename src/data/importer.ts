@@ -14,10 +14,9 @@ export const SHEETS: SheetDef[] = [
       { label: 'Mã hàng', req: true, w: 14 }, { label: 'Tên hàng', req: true, w: 30 }, { label: 'Dài (mm)', req: true, w: 10 },
       { label: 'Rộng (mm)', req: true, w: 10 }, { label: 'Cao (mm)', req: true, w: 10 }, { label: 'Kg/thùng', w: 10 },
       { label: 'Thùng/pallet', w: 12 }, { label: 'Chồng tối đa (lớp)', w: 16 }, { label: 'Hàng nhẹ (x)', w: 12 },
-      { label: 'Xe pallet: pallet riêng (x)', w: 24 },
     ],
-    note: 'Kích thước THÙNG, đo mặt ngoài, tính mm. Hàng nhẹ ghi x. Hàng nhẹ chở xe pallet: cột cuối ghi x = đóng pallet riêng, để trống = rải lên nóc pallet. Mã trùng mã đã có ⇒ cập nhật.',
-    sample: [['SP001', 'Sữa 110ml x48', 420, 255, 100, 6.2, 140, 14, '', ''], ['SP002', 'Thạch túi 110ml x24', 310, 130, 130, 3.08, 216, 8, 'x', 'x']],
+    note: 'Kích thước THÙNG, đo mặt ngoài, tính mm. Hàng nhẹ ghi x. Mã trùng mã đã có ⇒ cập nhật.',
+    sample: [['SP001', 'Sữa 110ml x48', 420, 255, 100, 6.2, 140, 14, ''], ['SP002', 'Thạch túi 110ml x24', 310, 130, 130, 3.08, 216, 8, 'x']],
   },
   {
     key: 'vehicles', title: 'Xe',
@@ -56,7 +55,6 @@ const num = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : NaN
 }
 const key = (s: string) => s.trim().toLowerCase()
-const yes = (v: unknown) => /^(x|1|có|co|yes|y|true)$/i.test(str(v))
 
 /** Chép từ Excel = các cột cách nhau bằng Tab (hoặc ;). */
 export const splitPasted = (text: string): Rows => text.split(/\r?\n/).filter(l => l.trim()).map(l => l.split(/\t|;/))
@@ -89,9 +87,8 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
       kg: kg != null && !Number.isNaN(kg) ? kg : null,
       perPallet: pp != null && pp > 0 ? Math.round(pp) : null,
       maxLayers: ml != null && ml > 0 ? Math.round(ml) : null,
-      light: yes(r[8]), updatedAt: 0,
+      light: /^(x|1|có|co|yes|y|true)$/i.test(str(r[8])), updatedAt: 0,
     }
-    if (it.light && yes(r[9])) it.ownPallet = true
     out.items = [...out.items.filter(x => key(x.code) !== key(code)), it]
   }
 
@@ -145,7 +142,8 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     if (!t) {
       const old = have.trips.find(x => key(x.name) === key(name))
       if (old) out.updated++
-      t = { id: old?.id ?? newId(), name, vehicleId: old?.vehicleId ?? null, orderIds: [], updatedAt: 0 }
+      // chuyến đã có: giữ mã chuyến + cài đặt (hàng nhẹ xe pallet…), file chỉ ghi đè xe và đơn
+      t = { ...old, id: old?.id ?? newId(), name, vehicleId: old?.vehicleId ?? null, orderIds: [], updatedAt: 0 }
       tripMap.set(key(name), t)
     }
     if (vs) {

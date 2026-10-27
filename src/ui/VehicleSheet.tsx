@@ -92,7 +92,7 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
           <Field label="Tên xe" error={tried ? errs.name : null}><TextInput value={f.name} onChange={e => set('name', e.target.value)} placeholder="Xe 5 tấn số 1" /></Field>
           <Field label="Biển số"><TextInput value={f.plate} onChange={e => set('plate', e.target.value)} placeholder="29C12345" /></Field>
         </div>
-        <Field label="Cách chở">
+        <Field label="Cách chở" group>
           <Segmented value={f.kind} onChange={v => set('kind', v)} options={[
             { value: 'loose', label: 'Thùng rời (xe xá)' }, { value: 'pallet', label: 'Xếp pallet' },
           ]} />

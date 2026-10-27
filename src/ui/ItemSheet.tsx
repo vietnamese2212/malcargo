@@ -4,7 +4,7 @@ import { Copy, Trash2 } from 'lucide-react'
 import type { Item } from '../data/types'
 import { newId, useData } from '../data/store'
 import { removeCatalog, saveCatalog, useAuth } from '../data/cloud'
-import { Badge, Button, Confirm, Field, NumInput, Segmented, Sheet, Switch, TextInput, fmtDims } from './kit'
+import { Badge, Button, Confirm, Field, NumInput, Sheet, Switch, TextInput, fmtDims } from './kit'
 
 const blank = (owner: Item['owner'] = 'me'): Item => ({ id: newId(), owner, code: '', name: '', l: 0, w: 0, h: 0, kg: null, perPallet: null, maxLayers: null, light: false, updatedAt: 0 })
 
@@ -94,15 +94,6 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample }: {
         </div>
         <Field label="Số thùng trên 1 pallet" hint="Chỉ cần khi chở bằng xe pallet"><NumInput value={f.perPallet} onChange={v => set('perPallet', v == null ? null : Math.round(v))} suffix="thùng" placeholder="—" /></Field>
         <Switch checked={f.light} onChange={v => set('light', v)} label="Hàng nhẹ — cho lên trên hàng khác" hint="Túi, hộp giấy nhẹ… được xếp lên mặt các khối hàng nặng" />
-        {/* không dùng Field (thẻ label): bấm vào chữ nhãn sẽ tự chọn nút đầu */}
-        {f.light && (
-          <div>
-            <span className="mb-1.5 block text-[13px] font-medium text-slate-700">Khi chở xe pallet</span>
-            <Segmented value={f.ownPallet ? 'own' : 'top'} onChange={v => set('ownPallet', v === 'own')}
-              options={[{ value: 'top', label: 'Lên nóc pallet' }, { value: 'own', label: 'Pallet riêng' }]} />
-            <span className="mt-1 block text-xs text-slate-500">{f.ownPallet ? 'Đóng pallet của riêng mã này, không rải thùng lên nóc' : 'Rải thùng lên nóc các pallet hàng khác'}</span>
-          </div>
-        )}
         {sample && item && <p className="text-xs text-slate-600">Mẫu gốc: thùng {fmtDims(item?.l ?? 0, item?.w ?? 0, item?.h ?? 0)} mm, số tham khảo, nên đo lại thùng thật.</p>}
       </fieldset>
       <Confirm open={askDel} onClose={() => setAskDel(false)} title={`Xoá ${sample ? 'mã mẫu' : 'mã'} ${f.code}?`}

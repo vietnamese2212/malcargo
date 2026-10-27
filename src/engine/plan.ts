@@ -1,15 +1,18 @@
 // Ghép dữ liệu của người dùng (xe · mã hàng · đơn) vào thuật toán xếp — cùng trình tự với màn 3D
 // của SUPPLYC: xe xá xếp thẳng thùng; xe pallet gom hàng lên pallet trước, hàng nhẹ rải lên nóc
-// pallet (hoặc đóng pallet riêng nếu mã khai vậy). File này THUẦN (không React) để chạy được trong Web Worker và trong bài kiểm.
+// pallet (hoặc đóng pallet như hàng khác nếu chuyến bật vậy). File này THUẦN (không React) để chạy được trong Web Worker và trong bài kiểm.
 import {
-  computeLoadPlan, palletizeGroups, spreadOnTopOfPallets, palletFitError, palletsTooTall,
+  computeLoadPlan, palletizeGroups, spreadOnTopOfPallets, palletFitError, palletsTooTall, cartonsPerLayer,
   palletFloorSlots, type LoadGroup, type LoadPlan, type PalletSpec, type PalletizeInput,
 } from './loadPlan'
 import type { Item, PalletSettings, VehicleKind } from '../data/types'
 
 export interface TruckInput { id: string; name: string; kind: VehicleKind; l: number; w: number; h: number; payloadKg: number | null }
 export interface OrderInput { id: string; name: string; place: string; lines: { item: Item; qty: number }[] }
-export interface TripInput { truck: TruckInput; orders: OrderInput[]; pallet: PalletSettings }
+export interface TripInput {
+  truck: TruckInput; orders: OrderInput[]; pallet: PalletSettings
+  lightInPallet?: boolean   // xe pallet: hàng nhẹ đóng pallet như hàng khác thay vì rải thùng lên nóc pallet
+}
 
 export interface PlanGroupMeta {
   label: string
@@ -44,6 +47,16 @@ export interface TripResult {
   floorSlots: number | null
   errors: string[]           // không vẽ được sơ đồ
   warnings: string[]
+}
+
+/** Số pallet khi xếp các lớp hàng lẻ first-fit-decreasing dưới trần `budget` — cùng cách lõi gom pallet gộp. */
+function ffdCount(layers: number[], budget: number): number {
+  const pals: number[] = []
+  for (const h of [...layers].sort((a, b) => b - a)) {
+    const i = pals.findIndex(p => p + h <= budget)
+    if (i >= 0) pals[i] += h; else pals.push(h)
+  }
+  return pals.length
 }
 
 const toSpec = (p: PalletSettings): PalletSpec =>
@@ -90,7 +103,6 @@ export function orderTotals(lines: { item: Item; qty: number }[], pallet: Pallet
       key: item.id, label: item.name, doKey: 'o', doLabel: 'o', cartons: qty,
       cartonsPerPallet: item.perPallet, isPalletCarrier: false, weightKg: item.kg,
       carton: { l: item.l, w: item.w, h: item.h }, assumed: false, unitless: false,
-      remPool: item.light && item.ownPallet ? { key: `own:${item.id}`, label: item.name } : undefined,
     })), toSpec(pallet))
     pallets = res.palletCount
   }
@@ -148,17 +160,39 @@ export function computeTrip(input: TripInput): TripResult {
     if (fitErr) errors.push(fitErr)
     floorSlots = fitErr ? null : palletFloorSlots(spec, T)
     const itemOf = (g: G) => allLines.find(l => l.item.id === g.meta.itemId)?.item
-    // Hàng nhẹ: mặc định rải thùng lên nóc pallet; mã khai "Pallet riêng" thì đóng pallet của
-    // riêng mã đó (phần lẻ không gộp với mã khác). "Lên nóc" chỉ có nghĩa khi có pallet làm nền.
-    const own = (g: G) => g.onTop && itemOf(g)?.ownPallet === true
-    const hasBase = cartons.some(g => !g.onTop || own(g))
-    const top = cartons.filter(g => g.onTop && !own(g) && hasBase)
+    // Hàng nhẹ: mặc định rải thùng lên nóc pallet ("lên nóc" chỉ có nghĩa khi có pallet làm nền).
+    // Chuyến bật "Hàng nhẹ đóng pallet" ⇒ đóng pallet như hàng khác: đủ thùng thì pallet chẵn,
+    // phần lẻ dồn chung pallet gộp với phần lẻ các mã khác của đơn (luật pallet gộp của lõi).
+    const hasBase = cartons.some(g => !g.onTop)
+    const top = cartons.filter(g => g.onTop && hasBase && !input.lightInPallet)
     const toPal = cartons.filter(g => !top.includes(g))
+    // …nhưng phần lẻ của MỘT mã nhẹ đã tự đủ pallet (tách ra không làm tăng số pallet của đơn — vd 200
+    // túi / 216) thì để pallet RIÊNG của mã đó, không trộn lớp với hàng khác; gộp chỉ khi bớt được pallet.
+    const ownLight = new Set<G>()
+    if (input.lightInPallet) {
+      const budget = spec.h - spec.baseH
+      const layersOf = (g: G): number[] => {   // lớp phần lẻ — cùng cách lõi tính pallet gộp
+        const cpp = itemOf(g)?.perPallet, rem = cpp ? g.count % cpp : 0
+        if (!rem) return []
+        const per = cartonsPerLayer(spec, g)
+        return per > 0 ? Array<number>(Math.ceil(rem / per)).fill(g.h) : [budget]
+      }
+      const height = (g: G) => layersOf(g).reduce((s, h) => s + h, 0)
+      for (const doKey of new Set(toPal.map(g => g.doKey))) {
+        const mine = toPal.filter(g => g.doKey === doKey)
+        const need = ffdCount(mine.flatMap(layersOf), budget)
+        for (const g of mine.filter(x => x.onTop && height(x) > 0).sort((a, b) => height(b) - height(a))) {
+          const sep = mine.filter(x => ownLight.has(x) || x === g)
+          const n = sep.reduce((s, x) => s + ffdCount(layersOf(x), budget), 0) + ffdCount(mine.filter(x => !sep.includes(x)).flatMap(layersOf), budget)
+          if (n <= need) ownLight.add(g)
+        }
+      }
+    }
     const items: PalletizeInput[] = toPal.map(g => ({
       key: g.key, label: g.label, doKey: g.doKey, doLabel: g.doLabel, cartons: g.count,
       cartonsPerPallet: itemOf(g)?.perPallet ?? null,
       isPalletCarrier: false, weightKg: g.weightKg, carton: { l: g.l, w: g.w, h: g.h }, assumed: false, unitless: false,
-      remPool: own(g) ? { key: `own:${g.meta.itemId}`, label: g.label } : undefined,
+      remPool: ownLight.has(g) ? { key: `own:${g.meta.itemId}`, label: g.label } : undefined,
     }))
     const res = palletizeGroups(items, spec)
     palletsUsed = res.palletCount
@@ -167,7 +201,7 @@ export function computeTrip(input: TripInput): TripResult {
       warnings.push(`Chưa khai số thùng/pallet: ${[...new Set(missing.map(g => g.label))].join(', ')} — đang tạm tính mỗi mã 1 pallet.`)
     const srcByKey = new Map(toPal.map(g => [g.key, g]))
     const palGroups: G[] = res.groups.map(pg => {
-      // Pallet lẻ của mã "Pallet riêng": khoá `<đơn>|mixed|own:<mã>|<n>` — vẫn mang tên + màu của mã
+      // pallet lẻ riêng của một mã: khoá `<đơn>|mixed|own:<mã>|<n>` — mang tên + màu của mã
       const ownId = /\|mixed\|own:(.+)\|\d+$/.exec(pg.key)?.[1]
       const src = ownId ? toPal.find(g => g.doKey === pg.doKey && g.meta.itemId === ownId) : srcByKey.get(pg.key.replace(/\|(full|plt)$/, ''))
       const mixed = !src
@@ -227,7 +261,7 @@ export function computeTrip(input: TripInput): TripResult {
 }
 
 /** Xe nhỏ nhất (theo thể tích lòng thùng) chở hết hàng và không vượt tải — cùng kiểu xe. */
-export function suggestTruck(orders: OrderInput[], pallet: PalletSettings, candidates: TruckInput[]): string | null {
+export function suggestTruck(orders: OrderInput[], pallet: PalletSettings, candidates: TruckInput[], lightInPallet?: boolean): string | null {
   const t = orderTotals(orders.flatMap(o => o.lines), pallet)
   if (!t.cartons) return null
   const list = candidates
@@ -236,7 +270,7 @@ export function suggestTruck(orders: OrderInput[], pallet: PalletSettings, candi
     .filter(c => !(c.payloadKg && t.kgKnown && t.kg > c.payloadKg))
     .sort((a, b) => a.l * a.w * a.h - b.l * b.w * b.h)
   for (const c of list) {
-    const r = computeTrip({ truck: c, orders, pallet })
+    const r = computeTrip({ truck: c, orders, pallet, lightInPallet })
     if (r.fits) return c.id
   }
   return null

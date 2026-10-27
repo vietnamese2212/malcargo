@@ -36,14 +36,16 @@ export function IconButton({ label, className, children, ...rest }: ButtonHTMLAt
   )
 }
 
-export function Field({ label, hint, error, children, className }: { label: ReactNode; hint?: ReactNode; error?: string | null; children: ReactNode; className?: string }) {
+// `group`: bọc một NHÓM nút (Segmented…) — dùng div, vì thẻ label chuyển cú bấm vào chữ nhãn thành bấm nút đầu
+export function Field({ label, hint, error, children, className, group }: { label: ReactNode; hint?: ReactNode; error?: string | null; children: ReactNode; className?: string; group?: boolean }) {
+  const Tag = group ? 'div' : 'label'
   return (
-    <label className={cx('block', className)}>
+    <Tag className={cx('block', className)}>
       <span className="mb-1.5 block text-[13px] font-medium text-slate-700">{label}</span>
       {children}
       {error ? <span className="mt-1 block text-xs text-red-700">{error}</span>
         : hint ? <span className="mt-1 block text-xs text-slate-500">{hint}</span> : null}
-    </label>
+    </Tag>
   )
 }
 

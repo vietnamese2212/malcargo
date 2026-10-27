@@ -13,7 +13,6 @@ export interface Item {
   perPallet: number | null          // số thùng / pallet — chỉ cần khi chở xe pallet
   maxLayers: number | null          // chồng tối đa (lớp) — trống = tự tính theo chiều cao xe
   light: boolean                    // hàng nhẹ: cho lên trên hàng khác
-  ownPallet?: boolean               // hàng nhẹ trên XE PALLET: đóng pallet riêng thay vì rải thùng lên nóc pallet
   updatedAt: number
 }
 
@@ -46,6 +45,7 @@ export interface Trip {
   name: string
   vehicleId: string | null
   orderIds: string[]   // THỨ TỰ GIAO: đơn đầu giao trước ⇒ xếp sau cùng, sát cửa
+  lightInPallet?: boolean    // xe pallet: hàng nhẹ đóng pallet như hàng khác (mặc định rải thùng lên nóc pallet)
   updatedAt: number
 }
 

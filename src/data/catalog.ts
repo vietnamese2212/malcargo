@@ -27,8 +27,8 @@ export const ADMIN_ITEMS: Item[] = [
   { id: 'adm-i-th170', owner: 'admin', code: 'MAU-TH170', name: 'Sữa thạch 170ml x48', l: 430, w: 250, h: 130, kg: 9.5, perPallet: 100, maxLayers: 11, light: false, updatedAt: T0 },
   { id: 'adm-i-c100', owner: 'admin', code: 'MAU-C100', name: 'Sữa chua chai 100ml x48', l: 430, w: 250, h: 100, kg: 5.9, perPallet: 143, maxLayers: 14, light: false, updatedAt: T0 },
   { id: 'adm-i-c85', owner: 'admin', code: 'MAU-C85', name: 'Sữa chai 85ml x48', l: 357, w: 276, h: 105, kg: 5.05, perPallet: 143, maxLayers: 13, light: false, updatedAt: T0 },
-  // túi nhẹ, xếp được lên mặt khối hàng khác; chở xe pallet thì đóng pallet riêng
-  { id: 'adm-i-tui110', owner: 'admin', code: 'MAU-TUI110', name: 'Thạch túi 110ml x24', l: 310, w: 130, h: 130, kg: 3.08, perPallet: 216, maxLayers: 8, light: true, ownPallet: true, updatedAt: T0 },
+  // túi nhẹ, xếp được lên mặt khối hàng khác
+  { id: 'adm-i-tui110', owner: 'admin', code: 'MAU-TUI110', name: 'Thạch túi 110ml x24', l: 310, w: 130, h: 130, kg: 3.08, perPallet: 216, maxLayers: 8, light: true, updatedAt: T0 },
 ]
 
 export const DEFAULT_PALLET_SETTINGS: PalletSettings = { l: 1200, w: 1000, maxH: 1650, baseH: 150, kg: 25 }

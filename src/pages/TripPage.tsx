@@ -68,7 +68,7 @@ export default function TripPage({ id }: { id: string }) {
   const fallback = useMemo(() => [...candidates].sort((a, b) => b.l * b.w * b.h - a.l * a.w * a.h)[0], [candidates])
   const truck = vehicle ? truckOf(vehicle) : fallback
   const hasCargo = tripOrders.some(o => o.lines.some(l => l.qty > 0))
-  const input: TripInput | null = trip && truck && hasCargo ? { truck, orders: tripOrders, pallet } : null
+  const input: TripInput | null = trip && truck && hasCargo ? { truck, orders: tripOrders, pallet, lightInPallet: trip.lightInPallet } : null
   // bảng đổi xe đang mở ⇒ thử hàng trên MỌI xe để đánh dấu ✓ / ✗ trong danh sách
   const { result, suggestion, fits, busy, error } = useTripPlan(input, candidates, spec ? allTrucks : undefined)
 
@@ -210,7 +210,9 @@ export default function TripPage({ id }: { id: string }) {
       <div className="lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(380px,440px)_1fr]">
         {/* ── BẢN VẼ: dải thông số xe + 3D + khung tên ── */}
         <section data-scene className="sticky top-12 z-10 flex h-[50vh] min-h-[320px] flex-col bg-[#e7ecf2] sm:top-14 lg:relative lg:top-0 lg:order-2 lg:h-full">
-          <SpecStrip vehicle={vehicle} pallet={pallet} onOpen={() => setSpec(true)} onKind={k => patchVehicle({ kind: k })} />
+          <SpecStrip vehicle={vehicle} pallet={pallet} onOpen={() => setSpec(true)} onKind={k => patchVehicle({ kind: k })}
+            lightIn={tripOrders.some(o => o.lines.some(l => l.qty > 0 && l.item.light)) ? !!trip.lightInPallet : null}
+            onLightIn={v => upsertTrip({ ...trip, lightInPallet: v })} />
           <div className="relative min-h-0 flex-1">
             <Scene className="h-full w-full" truck={vehicle ? { l: vehicle.l, w: vehicle.w, h: vehicle.h, kind: vehicle.kind } : null}
               plan={plan} meta={result?.meta} colors={colors} step={step} focus={focus} view={view} walls={walls} />
@@ -299,7 +301,7 @@ export default function TripPage({ id }: { id: string }) {
                               <span className="num min-w-0 flex-1 text-[12px] leading-snug text-slate-600">
                                 <span className="whitespace-nowrap">{fmtDims(it.l, it.w, it.h)} mm</span>
                                 {it.kg != null && <> · <span className="whitespace-nowrap">{fmtDec(it.kg, 2)} kg</span></>}
-                                {it.light && <Badge tone="amber" className="ml-1">{kind !== 'pallet' ? 'nhẹ' : it.ownPallet ? 'nhẹ · pallet riêng' : 'nhẹ · lên nóc'}</Badge>}
+                                {it.light && <Badge tone="amber" className="ml-1">nhẹ</Badge>}
                               </span>
                               <div className="flex shrink-0 items-center">
                               <IconButton label="Bớt 1" onClick={() => setQty(o, l.itemId, l.qty - 1)} disabled={l.qty <= 0}><Minus size={15} /></IconButton>
@@ -544,26 +546,31 @@ function AccountButton({ onData }: { onData: () => void }) {
 }
 
 // ── Dải thông số xe ở đầu bản vẽ: đọc một dòng là biết đang cấu hình gì; xá/pallet một chạm ──────
-function SpecStrip({ vehicle, pallet, onOpen, onKind }: {
-  vehicle?: Vehicle; pallet: { l: number; w: number }; onOpen: () => void; onKind: (k: VehicleKind) => void
+// Không đủ chỗ thì XUỐNG DÒNG (không cắt chữ, không đẩy nút ra ngoài mép). `lightIn` null = không hiện
+// công tắc hàng nhẹ (chuyến không có hàng nhẹ).
+function SpecStrip({ vehicle, pallet, lightIn, onOpen, onKind, onLightIn }: {
+  vehicle?: Vehicle; pallet: { l: number; w: number }; lightIn: boolean | null
+  onOpen: () => void; onKind: (k: VehicleKind) => void; onLightIn: (v: boolean) => void
 }) {
   const chip = 'flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[13px] text-slate-900 transition-colors hover:border-slate-400 hover:bg-slate-50'
   return (
-    <div className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-300 bg-white px-4 sm:h-12 sm:overflow-x-auto sm:px-3 sm:[scrollbar-width:none]">
+    <div className="flex min-h-[56px] shrink-0 flex-wrap items-center gap-2 border-b border-slate-300 bg-white px-3 py-2 sm:min-h-[48px] sm:gap-1.5 sm:py-1.5">
       {!vehicle ? (
         <button onClick={onOpen} className={chip}><Truck size={16} />Chọn xe</button>
       ) : (
         <>
-          <button onClick={onOpen} aria-label="Đổi xe" className={cx(chip, 'min-w-0 shrink font-semibold')}>
-            <TruckGlyph pallet={vehicle.kind === 'pallet'} small />
+          {/* điện thoại: chiếm phần còn lại của hàng đầu, tên dài thì xuống dòng; máy tính: rộng theo chữ */}
+          <button onClick={onOpen} aria-label="Đổi xe" className={cx(chip, 'min-w-0 flex-1 font-semibold sm:flex-none')}>
+            <span className="max-sm:hidden"><TruckGlyph pallet={vehicle.kind === 'pallet'} small /></span>
             <span className="min-w-0 text-left leading-tight">
-              <span className="block truncate">{vehicle.name}</span>
-              {/* điện thoại: lòng thùng + tải gộp vào dòng phụ — dải không tràn mép */}
-              <span className="num block truncate text-[11px] font-normal text-slate-600 sm:hidden">
-                {m(vehicle.l)} × {m(vehicle.w)} × {m(vehicle.h)} m{vehicle.payloadKg != null && ` · ${fmtKgShort(vehicle.payloadKg)}`}
+              <span className="block break-words sm:whitespace-nowrap">{vehicle.name}</span>
+              {/* điện thoại: lòng thùng + tải gộp vào dòng phụ */}
+              <span className="num block text-[11px] font-normal text-slate-600 sm:hidden">
+                <span className="whitespace-nowrap">{m(vehicle.l)} × {m(vehicle.w)} × {m(vehicle.h)} m</span>
+                {vehicle.payloadKg != null && <> · <span className="whitespace-nowrap">{fmtKgShort(vehicle.payloadKg)}</span></>}
               </span>
             </span>
-            <ChevronDown size={15} className="shrink-0 text-slate-500" />
+            <ChevronDown size={15} className="ml-auto shrink-0 text-slate-500" />
           </button>
           <div className="flex h-9 shrink-0 rounded-md border border-slate-300 bg-slate-100 p-0.5" role="group" aria-label="Cách chất xếp">
             {(['loose', 'pallet'] as const).map(k => (
@@ -574,6 +581,16 @@ function SpecStrip({ vehicle, pallet, onOpen, onKind }: {
               </button>
             ))}
           </div>
+          {vehicle.kind === 'pallet' && lightIn != null && (
+            <button role="switch" aria-checked={lightIn} onClick={() => onLightIn(!lightIn)}
+              title={lightIn ? 'Hàng nhẹ đóng pallet: phần lẻ dồn chung pallet gộp' : 'Hàng nhẹ đang rải thùng lên nóc pallet'}
+              className={cx(chip, 'gap-2 font-semibold max-sm:w-full max-sm:justify-between')}>
+              Hàng nhẹ đóng pallet
+              <span className={cx('relative h-5 w-9 shrink-0 rounded-full transition-colors', lightIn ? 'bg-brand-500' : 'bg-slate-300')}>
+                <span className={cx('absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform', lightIn && 'translate-x-4')} />
+              </span>
+            </button>
+          )}
           <button onClick={onOpen} className={cx(chip, 'max-sm:hidden')} title="Lòng thùng dài × rộng × cao">
             <span className="text-slate-600">Lòng</span><span className="num font-semibold">{m(vehicle.l)} × {m(vehicle.w)} × {m(vehicle.h)} m</span>
           </button>
@@ -585,8 +602,8 @@ function SpecStrip({ vehicle, pallet, onOpen, onKind }: {
               <span className="text-slate-600">Pallet</span><span className="num font-semibold">{m(pallet.l)} × {m(pallet.w)} m</span>
             </button>
           )}
-          <button onClick={onOpen} aria-label="Chỉnh thông số thùng xe" className={cx(chip, 'ml-auto text-brand-700 max-sm:hidden')}>
-            <SlidersHorizontal size={15} />Chỉnh
+          <button onClick={onOpen} aria-label="Chỉnh thông số thùng xe" title="Chỉnh thông số thùng xe" className={cx(chip, 'ml-auto text-brand-700 max-sm:hidden')}>
+            <SlidersHorizontal size={16} />
           </button>
         </>
       )}
@@ -968,13 +985,6 @@ function ItemEditor({ it, palletMode, onEdit, onRemove }: { it: Item; palletMode
           : <span />}
       </div>
       <Switch checked={it.light} onChange={v => onEdit({ light: v })} label="Hàng nhẹ, cho lên trên hàng khác" />
-      {palletMode && it.light && (
-        <div>
-          <span className="mb-1 block text-[12px] font-medium text-slate-600">Trên xe pallet</span>
-          <Segmented value={it.ownPallet ? 'own' : 'top'} onChange={v => onEdit({ ownPallet: v === 'own' })}
-            options={[{ value: 'top', label: 'Lên nóc pallet' }, { value: 'own', label: 'Pallet riêng' }]} />
-        </div>
-      )}
       <div className="flex items-center justify-between gap-2">
         <span className="text-[12px] text-slate-600">{it.owner === 'admin' ? 'Mã mẫu: sửa số nào app tự tạo mã của bạn.' : `Mã ${it.code}: sửa ở đây là sửa cho mọi đơn dùng mã này.`}</span>
         <Button variant="danger" onClick={onRemove}><X size={15} />Bỏ khỏi đơn</Button>
