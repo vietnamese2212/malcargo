@@ -105,13 +105,21 @@ function detachSampleOrders(s: TO, t: Trip): { trip: Trip; added: Order[] } {
   return { trip: added.length ? { ...t, orderIds } : t, added }
 }
 
+// Hàng của 2 đơn mẫu ĐỜI TRƯỚC (đồ tiêu dùng chung, thay bằng hàng sữa ngày 27/10/2026)
+const OLD_SAMPLE_LINES: Record<string, Order['lines']> = {
+  'sample-o1': [{ itemId: 'adm-i-chai', qty: 120 }, { itemId: 'adm-i-lon', qty: 160 }, { itemId: 'adm-i-banh', qty: 30 }],
+  'sample-o2': [{ itemId: 'adm-i-mi', qty: 90 }, { itemId: 'adm-i-dau', qty: 60 }],
+}
+
 /** Nạp dữ liệu (mở app, nạp file, đồng bộ): chuyến mẫu đã bị sửa ở bản cũ ⇒ giữ thay đổi thành chuyến mới, mẫu về gốc. */
 function resetSamples(d: TO): TO {
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
   let { trips, orders } = d
   const st = trips.find(t => t.id === SAMPLE_TRIP.id)
+  // khớp bản mẫu hiện tại HOẶC bản mẫu đời trước (chưa ai sửa) ⇒ chỉ thay mẫu, không tách chuyến
+  const pristine = (o: Order, p: Order) => same([o.name, o.place, o.lines], [p.name, p.place, p.lines]) || same(o.lines, OLD_SAMPLE_LINES[o.id])
   const changed = st && (!same([st.name, st.vehicleId, st.orderIds], [SAMPLE_TRIP.name, SAMPLE_TRIP.vehicleId, SAMPLE_TRIP.orderIds])
-    || SAMPLE_ORDERS.some(p => { const o = orders.find(x => x.id === p.id); return o && !same([o.name, o.place, o.lines], [p.name, p.place, p.lines]) }))
+    || SAMPLE_ORDERS.some(p => { const o = orders.find(x => x.id === p.id); return o && !pristine(o, p) }))
   if (st && changed) { const k = makeFork({ trips, orders }, st); trips = [k.trip, ...trips]; orders = [...k.orders, ...orders] }
   trips = trips.filter(t => !isSample(t.id)).map(t => {
     const k = detachSampleOrders({ trips, orders }, t); orders = [...k.added, ...orders]; return k.trip

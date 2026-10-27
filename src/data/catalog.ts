@@ -18,15 +18,17 @@ export const ADMIN_VEHICLES: Vehicle[] = [
   { id: 'adm-v-p15t', owner: 'admin', name: 'Xe pallet 15 tấn', plate: '', kind: 'pallet', l: 9600, w: 2500, h: 2600, payloadKg: 15000, updatedAt: T0 },
 ]
 
-// Vài cỡ thùng hay gặp — chỉ để người mới bấm thử; số liệu là ước lượng.
+// Cỡ thùng hàng sữa & đồ uống đóng hộp phổ biến (thùng 48 hộp / chai, thùng 24 túi) — số đo, kg, số thùng / pallet
+// và số lớp chồng lấy theo thùng thật trong kho; tên ghi chung, không nhãn hiệu.
 export const ADMIN_ITEMS: Item[] = [
-  // Thùng/pallet chọn để pallet đầy cao ~1,4–1,7 m trên chân 1200×1000
-  { id: 'adm-i-lon', owner: 'admin', code: 'MAU-LON24', name: 'Nước giải khát 24 lon 330ml', l: 400, w: 270, h: 125, kg: 8.5, perPallet: 90, maxLayers: null, light: false, updatedAt: T0 },
-  { id: 'adm-i-chai', owner: 'admin', code: 'MAU-CHAI24', name: 'Nước suối 24 chai 500ml', l: 400, w: 270, h: 215, kg: 12.5, perPallet: 63, maxLayers: null, light: false, updatedAt: T0 },
-  { id: 'adm-i-dau', owner: 'admin', code: 'MAU-DAU12', name: 'Dầu ăn 12 chai 1L', l: 330, w: 250, h: 300, kg: 11.5, perPallet: 60, maxLayers: 6, light: false, updatedAt: T0 },
-  { id: 'adm-i-mi', owner: 'admin', code: 'MAU-MI30', name: 'Mì gói thùng 30 gói', l: 440, w: 320, h: 190, kg: 2.6, perPallet: 48, maxLayers: null, light: false, updatedAt: T0 },
-  { id: 'adm-i-giay', owner: 'admin', code: 'MAU-A4', name: 'Giấy A4 thùng 5 ram', l: 300, w: 220, h: 225, kg: 12.5, perPallet: 96, maxLayers: 8, light: false, updatedAt: T0 },
-  { id: 'adm-i-banh', owner: 'admin', code: 'MAU-BANH', name: 'Bánh kẹo hộp giấy', l: 300, w: 200, h: 150, kg: 1.5, perPallet: 100, maxLayers: 6, light: true, updatedAt: T0 },
+  { id: 'adm-i-st180', owner: 'admin', code: 'MAU-ST180', name: 'Sữa tươi tiệt trùng hộp 180ml · thùng 48', l: 420, w: 255, h: 130, kg: 9.85, perPallet: 110, maxLayers: 11, light: false, updatedAt: T0 },
+  { id: 'adm-i-st110', owner: 'admin', code: 'MAU-ST110', name: 'Sữa tiệt trùng hộp 110ml · thùng 48', l: 420, w: 255, h: 100, kg: 6.2, perPallet: 140, maxLayers: 14, light: false, updatedAt: T0 },
+  { id: 'adm-i-scu180', owner: 'admin', code: 'MAU-SCU180', name: 'Sữa chua uống hộp 180ml · thùng 48', l: 420, w: 255, h: 130, kg: 10.05, perPallet: 110, maxLayers: 11, light: false, updatedAt: T0 },
+  { id: 'adm-i-th170', owner: 'admin', code: 'MAU-TH170', name: 'Sữa có thạch hộp 170ml · thùng 48', l: 430, w: 250, h: 130, kg: 9.5, perPallet: 100, maxLayers: 11, light: false, updatedAt: T0 },
+  { id: 'adm-i-c100', owner: 'admin', code: 'MAU-C100', name: 'Sữa chua uống chai 100ml · thùng 48', l: 430, w: 250, h: 100, kg: 5.9, perPallet: 143, maxLayers: 14, light: false, updatedAt: T0 },
+  { id: 'adm-i-c85', owner: 'admin', code: 'MAU-C85', name: 'Sữa trái cây chai 85ml · thùng 48', l: 357, w: 276, h: 105, kg: 5.05, perPallet: 143, maxLayers: 13, light: false, updatedAt: T0 },
+  // túi nhẹ, xếp được lên mặt khối hàng khác
+  { id: 'adm-i-tui110', owner: 'admin', code: 'MAU-TUI110', name: 'Thạch / nước túi 110ml · thùng 24', l: 310, w: 130, h: 130, kg: 3.08, perPallet: 216, maxLayers: 8, light: true, updatedAt: T0 },
 ]
 
 export const DEFAULT_PALLET_SETTINGS: PalletSettings = { l: 1200, w: 1000, maxH: 1650, baseH: 150, kg: 25 }
@@ -34,10 +36,10 @@ export const DEFAULT_PALLET_SETTINGS: PalletSettings = { l: 1200, w: 1000, maxH:
 // Chuyến mẫu cho lần mở đầu tiên — thấy ngay sơ đồ, không phải nhập gì.
 export const SAMPLE_ORDERS: Order[] = [
   { id: 'sample-o1', name: 'Đơn mẫu 1', place: 'Cửa hàng A', updatedAt: T0, lines: [
-    { itemId: 'adm-i-chai', qty: 120 }, { itemId: 'adm-i-lon', qty: 160 }, { itemId: 'adm-i-banh', qty: 30 },
+    { itemId: 'adm-i-st180', qty: 150 }, { itemId: 'adm-i-st110', qty: 160 }, { itemId: 'adm-i-tui110', qty: 40 },
   ] },
   { id: 'sample-o2', name: 'Đơn mẫu 2', place: 'Cửa hàng B', updatedAt: T0, lines: [
-    { itemId: 'adm-i-mi', qty: 90 }, { itemId: 'adm-i-dau', qty: 60 },
+    { itemId: 'adm-i-scu180', qty: 100 }, { itemId: 'adm-i-c100', qty: 120 },
   ] },
 ]
 

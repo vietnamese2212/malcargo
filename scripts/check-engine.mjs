@@ -44,8 +44,8 @@ const cases = [
   ['Chuyến mẫu · xe 5 tấn', trucks['adm-v-5t'], sample],
   ['Chuyến mẫu · xe 1,5 tấn (quá tải)', trucks['adm-v-1t5'], sample],
   ['Chuyến mẫu · xe pallet 8 tấn', trucks['adm-v-p8t'], sample],
-  ['1 mã 1000 thùng · xe 15 tấn', trucks['adm-v-15t'], [{ id: 'x', name: 'Đơn X', place: '', lines: [{ item: items['adm-i-lon'], qty: 1000 }] }]],
-  ['Toàn hàng nhẹ · xe pallet', trucks['adm-v-p15t'], [{ id: 'y', name: 'Đơn Y', place: '', lines: [{ item: items['adm-i-banh'], qty: 50 }] }]],
+  ['1 mã 1000 thùng · xe 15 tấn', trucks['adm-v-15t'], [{ id: 'x', name: 'Đơn X', place: '', lines: [{ item: items['adm-i-st110'], qty: 1000 }] }]],
+  ['Toàn hàng nhẹ · xe pallet', trucks['adm-v-p15t'], [{ id: 'y', name: 'Đơn Y', place: '', lines: [{ item: items['adm-i-tui110'], qty: 50 }] }]],
 ]
 for (const [name, truck, orders] of cases) {
   const t0 = performance.now()
@@ -59,8 +59,8 @@ for (const [name, truck, orders] of cases) {
 }
 // Ca dự phòng: hàng nhẹ thùng to ở đơn xếp sau — phải xếp đủ (xe 5 tấn còn rộng)
 {
-  const big = { ...items['adm-i-banh'], l: 500, w: 350, h: 300 }
-  const os = sample.map(o => ({ ...o, lines: o.lines.map(l => (l.item.id === 'adm-i-banh' ? { ...l, item: big } : l)) }))
+  const big = { ...items['adm-i-tui110'], l: 500, w: 350, h: 300 }
+  const os = sample.map(o => ({ ...o, lines: o.lines.map(l => (l.item.id === 'adm-i-tui110' ? { ...l, item: big } : l)) }))
   const r = E.computeTrip({ truck: trucks['adm-v-5t'], orders: os, pallet: E.DEFAULT_PALLET_SETTINGS })
   invariants('hàng nhẹ thùng to', r)
   ok(r.plan.placedCount === r.plan.totalCount, `hàng nhẹ thùng to: chỉ xếp ${r.plan.placedCount}/${r.plan.totalCount}`)
