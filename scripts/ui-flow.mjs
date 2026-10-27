@@ -13,7 +13,7 @@ const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fail+
 await p.goto(srv.base + '#/items', { waitUntil: 'networkidle' })
 await p.getByRole('button', { name: 'Thêm mã', exact: true }).click()
 await p.getByPlaceholder('SP001').fill('SP01')
-await p.getByPlaceholder('Sữa hộp 110ml thùng 48').fill('Thùng thử nghiệm')
+await p.getByPlaceholder('Sữa 110ml x48').fill('Thùng thử nghiệm')
 await p.getByPlaceholder('Dài').fill('500'); await p.getByPlaceholder('Rộng').fill('400'); await p.getByPlaceholder('Cao').fill('300')
 await p.getByPlaceholder('0', { exact: true }).fill('10')   // kg/thùng
 await p.getByRole('button', { name: 'Lưu' }).click()

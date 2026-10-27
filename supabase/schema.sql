@@ -64,11 +64,11 @@ insert into public.catalog (id, kind, sort, data) values
   ('adm-v-15t', 'vehicle', 5, '{"name":"Xe tải 15 tấn","plate":"","kind":"loose","l":9200,"w":2350,"h":2400,"payloadKg":15000}'),
   ('adm-v-p8t', 'vehicle', 6, '{"name":"Xe pallet 8 tấn","plate":"","kind":"pallet","l":7400,"w":2350,"h":2300,"payloadKg":8000}'),
   ('adm-v-p15t', 'vehicle', 7, '{"name":"Xe pallet 15 tấn","plate":"","kind":"pallet","l":9600,"w":2500,"h":2600,"payloadKg":15000}'),
-  ('adm-i-st180', 'item', 0, '{"code":"MAU-ST180","name":"Sữa tươi tiệt trùng hộp 180ml · thùng 48","l":420,"w":255,"h":130,"kg":9.85,"perPallet":110,"maxLayers":11,"light":false}'),
-  ('adm-i-st110', 'item', 1, '{"code":"MAU-ST110","name":"Sữa tiệt trùng hộp 110ml · thùng 48","l":420,"w":255,"h":100,"kg":6.2,"perPallet":140,"maxLayers":14,"light":false}'),
-  ('adm-i-scu180', 'item', 2, '{"code":"MAU-SCU180","name":"Sữa chua uống hộp 180ml · thùng 48","l":420,"w":255,"h":130,"kg":10.05,"perPallet":110,"maxLayers":11,"light":false}'),
-  ('adm-i-th170', 'item', 3, '{"code":"MAU-TH170","name":"Sữa có thạch hộp 170ml · thùng 48","l":430,"w":250,"h":130,"kg":9.5,"perPallet":100,"maxLayers":11,"light":false}'),
-  ('adm-i-c100', 'item', 4, '{"code":"MAU-C100","name":"Sữa chua uống chai 100ml · thùng 48","l":430,"w":250,"h":100,"kg":5.9,"perPallet":143,"maxLayers":14,"light":false}'),
-  ('adm-i-c85', 'item', 5, '{"code":"MAU-C85","name":"Sữa trái cây chai 85ml · thùng 48","l":357,"w":276,"h":105,"kg":5.05,"perPallet":143,"maxLayers":13,"light":false}'),
-  ('adm-i-tui110', 'item', 6, '{"code":"MAU-TUI110","name":"Thạch / nước túi 110ml · thùng 24","l":310,"w":130,"h":130,"kg":3.08,"perPallet":216,"maxLayers":8,"light":true}')
+  ('adm-i-st180', 'item', 0, '{"code":"MAU-ST180","name":"Sữa 180ml x48","l":420,"w":255,"h":130,"kg":9.85,"perPallet":110,"maxLayers":11,"light":false}'),
+  ('adm-i-st110', 'item', 1, '{"code":"MAU-ST110","name":"Sữa 110ml x48","l":420,"w":255,"h":100,"kg":6.2,"perPallet":140,"maxLayers":14,"light":false}'),
+  ('adm-i-scu180', 'item', 2, '{"code":"MAU-SCU180","name":"Sữa chua 180ml x48","l":420,"w":255,"h":130,"kg":10.05,"perPallet":110,"maxLayers":11,"light":false}'),
+  ('adm-i-th170', 'item', 3, '{"code":"MAU-TH170","name":"Sữa thạch 170ml x48","l":430,"w":250,"h":130,"kg":9.5,"perPallet":100,"maxLayers":11,"light":false}'),
+  ('adm-i-c100', 'item', 4, '{"code":"MAU-C100","name":"Sữa chua chai 100ml x48","l":430,"w":250,"h":100,"kg":5.9,"perPallet":143,"maxLayers":14,"light":false}'),
+  ('adm-i-c85', 'item', 5, '{"code":"MAU-C85","name":"Sữa chai 85ml x48","l":357,"w":276,"h":105,"kg":5.05,"perPallet":143,"maxLayers":13,"light":false}'),
+  ('adm-i-tui110', 'item', 6, '{"code":"MAU-TUI110","name":"Thạch túi 110ml x24","l":310,"w":130,"h":130,"kg":3.08,"perPallet":216,"maxLayers":8,"light":true}')
 on conflict (id) do nothing;

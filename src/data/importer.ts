@@ -16,7 +16,7 @@ export const SHEETS: SheetDef[] = [
       { label: 'Thùng/pallet', w: 12 }, { label: 'Chồng tối đa (lớp)', w: 16 }, { label: 'Hàng nhẹ (x)', w: 12 },
     ],
     note: 'Kích thước THÙNG, đo mặt ngoài, tính mm. Hàng nhẹ ghi x. Mã trùng mã đã có ⇒ cập nhật.',
-    sample: [['SP001', 'Sữa hộp 110ml thùng 48', 420, 255, 100, 6.2, 140, 14, ''], ['SP002', 'Thạch túi 110ml thùng 24', 310, 130, 130, 3.08, 216, 8, 'x']],
+    sample: [['SP001', 'Sữa 110ml x48', 420, 255, 100, 6.2, 140, 14, ''], ['SP002', 'Thạch túi 110ml x24', 310, 130, 130, 3.08, 216, 8, 'x']],
   },
   {
     key: 'vehicles', title: 'Xe',

@@ -78,7 +78,7 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample }: {
       <fieldset className="space-y-4">
         <div className="grid grid-cols-[1fr_2fr] gap-3">
           <Field label="Mã" error={tried ? errs.code : null}><TextInput value={f.code} onChange={e => set('code', e.target.value)} placeholder="SP001" autoFocus={!item} /></Field>
-          <Field label="Tên hàng" error={tried ? errs.name : null}><TextInput value={f.name} onChange={e => set('name', e.target.value)} placeholder="Sữa hộp 110ml thùng 48" /></Field>
+          <Field label="Tên hàng" error={tried ? errs.name : null}><TextInput value={f.name} onChange={e => set('name', e.target.value)} placeholder="Sữa 110ml x48" /></Field>
         </div>
         <Field label="Kích thước thùng (mm) — dài × rộng × cao" error={tried ? errs.dims : null}
           hint={looksCm ? <span className="text-amber-800">Số khá nhỏ — có phải bạn đang nhập cm? Ô này tính bằng mm (40 cm = 400 mm).</span> : 'Đo mặt ngoài thùng. Thùng đứng đúng chiều mũi tên thì "cao" là chiều đứng.'}>
