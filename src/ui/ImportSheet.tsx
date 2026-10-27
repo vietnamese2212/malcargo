@@ -102,7 +102,7 @@ export function ImportSheet({ open, onClose, start = 'items', onDone }: { open: 
           {SHEETS.map(s => (
             <div key={s.key} className="px-3 py-2">
               <div className={cx('num text-lg font-semibold', n[s.key] ? 'text-slate-900' : 'text-slate-400')}>{fmtInt(n[s.key])}</div>
-              <div className="truncate text-[12px] text-slate-600">{s.title}</div>
+              <div className="break-words text-[12px] leading-tight text-slate-600">{s.title}</div>
             </div>
           ))}
         </div>

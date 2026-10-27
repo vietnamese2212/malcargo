@@ -35,7 +35,7 @@ export default function VehiclesPage() {
           <ListCard>
             <SummaryBand className="sm:rounded-t-[7px]" tiles={[
               { label: 'Xe', value: fmtInt(list.length) },
-              { label: 'Thùng rời (xe xá)', value: fmtInt(list.filter(v => v.kind === 'loose').length) },
+              { label: 'Thùng rời', value: fmtInt(list.filter(v => v.kind === 'loose').length) },
               { label: 'Xếp pallet', value: fmtInt(list.filter(v => v.kind === 'pallet').length) },
             ]} />
             <ListHead grid={GRID}>
@@ -47,12 +47,13 @@ export default function VehiclesPage() {
                 className={`flex w-full items-center gap-3 border-b border-slate-100 px-4 py-2.5 text-left transition-colors last:border-b-0 hover:bg-slate-50 sm:grid sm:min-h-[56px] sm:gap-4 sm:py-2 ${GRID}`}>
                 <TruckGlyph pallet={v.kind === 'pallet'} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold text-slate-900 sm:text-sm">{v.name}</span>
-                  <span className="num block truncate text-[13px] text-slate-600 sm:hidden">
-                    {[v.plate, `${fmtDims(v.l, v.w, v.h)} mm`, v.payloadKg != null && fmtKgShort(v.payloadKg)].filter(Boolean).join(' · ')}
+                  <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{v.name}</span>
+                  <span className="num block text-[13px] leading-snug text-slate-600 sm:hidden">
+                    {v.plate && `${v.plate} · `}<span className="whitespace-nowrap">{fmtDims(v.l, v.w, v.h)} mm</span>
+                    {v.payloadKg != null && <> · <span className="whitespace-nowrap">{fmtKgShort(v.payloadKg)}</span></>}
                   </span>
                 </span>
-                <span className="hidden truncate text-sm text-slate-700 sm:block">{v.plate || <span className="text-slate-500">—</span>}</span>
+                <span className="hidden break-words text-sm text-slate-700 sm:block">{v.plate || <span className="text-slate-500">—</span>}</span>
                 <span className="shrink-0"><KindBadge v={v} /></span>
                 <span className="num hidden text-right text-sm text-slate-700 sm:block">{fmtDims(v.l, v.w, v.h)}</span>
                 <span className="num hidden text-right text-sm text-slate-700 sm:block">{fmtM3(m3Of(v))}</span>

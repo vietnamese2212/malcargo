@@ -68,11 +68,12 @@ export default function ItemsPage() {
                   <button key={i.id} type="button" onClick={() => setEdit({ item: i })}
                     className={`flex w-full items-center gap-3 border-b border-slate-100 px-4 py-2.5 text-left transition-colors last:border-b-0 hover:bg-slate-50 sm:grid sm:min-h-[52px] sm:gap-4 sm:py-2 ${GRID}`}>
                     <BoxGlyph w={i.w} h={i.h} light={i.light} />
-                    <span className="hidden truncate text-sm font-medium text-slate-700 sm:block">{i.code}</span>
+                    <span className="hidden break-words text-sm font-medium text-slate-700 sm:block">{i.code}</span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] font-semibold text-slate-900 sm:text-sm">{i.name}</span>
-                      <span className="num block truncate text-[13px] text-slate-600 sm:hidden">
-                        {i.code} · {fmtDims(i.l, i.w, i.h)} mm{i.kg != null && ` · ${fmtDec(i.kg, 2)} kg`}
+                      <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{i.name}</span>
+                      <span className="num block text-[13px] leading-snug text-slate-600 sm:hidden">
+                        {i.code} · <span className="whitespace-nowrap">{fmtDims(i.l, i.w, i.h)} mm</span>
+                        {i.kg != null && <> · <span className="whitespace-nowrap">{fmtDec(i.kg, 2)} kg</span></>}
                       </span>
                     </span>
                     <span className="num hidden text-right text-sm text-slate-700 sm:block">{fmtDims(i.l, i.w, i.h)}</span>
@@ -103,7 +104,7 @@ export function ItemRow({ item: i, onClick, right }: { item: Item; onClick?: () 
     <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-slate-50">
       <BoxGlyph w={i.w} h={i.h} light={i.light} />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[15px] font-semibold text-slate-900 sm:text-sm">{i.name}</div>
+        <div className="break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{i.name}</div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-slate-600">
           <span className="font-medium text-slate-700">{i.code}</span>
           <span className="num">{fmtDims(i.l, i.w, i.h)} mm</span>

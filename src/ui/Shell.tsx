@@ -9,7 +9,7 @@ import { IconButton, cx } from './kit'
 export function Logo({ dark, compact }: { dark?: boolean; compact?: boolean }) {
   return (
     <span className="flex items-center gap-1.5 leading-none">
-      <span className={cx('text-[22px] font-extrabold italic tracking-[-0.04em]', dark ? 'text-white' : 'text-navy-950')}>MAL</span>
+      <span className={cx('font-extrabold italic tracking-[-0.04em]', compact ? 'text-[17px] sm:text-[22px]' : 'text-[22px]', dark ? 'text-white' : 'text-navy-950')}>MAL</span>
       <span className={cx('rounded bg-brand-500 px-1.5 py-[3px] text-[10px] font-bold tracking-[0.1em] text-white', compact && 'max-sm:hidden')}>CARGO</span>
     </span>
   )
@@ -68,7 +68,7 @@ export function PageHeader({ title, subtitle, back, backLabel, actions, children
           )}
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-lg font-semibold leading-tight text-navy-950 lg:text-[22px]">{title}</h1>
-            {subtitle && <p className="mt-0.5 truncate text-[13px] text-slate-600">{subtitle}</p>}
+            {subtitle && <p className="mt-0.5 text-[13px] leading-snug text-slate-600">{subtitle}</p>}
           </div>
           <div className="flex shrink-0 items-center gap-2">{actions}</div>
           {panel && <IconButton label="Đóng" onClick={panel.close} className="-mr-2"><X size={20} /></IconButton>}

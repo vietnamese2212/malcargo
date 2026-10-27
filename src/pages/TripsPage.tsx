@@ -55,12 +55,12 @@ export default function TripsPage() {
               <a key={t.id} href={`#/trip/${t.id}`} onClick={() => panel?.close()}
                 className={`group flex items-center gap-4 border-b border-slate-100 px-4 py-3 transition-colors last:border-b-0 hover:bg-slate-50 sm:grid sm:min-h-[52px] sm:py-2 ${GRID}`}>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold text-slate-900 sm:text-sm">{t.name}</span>
-                  <span className="num block truncate text-[13px] text-slate-600 sm:hidden">
+                  <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{t.name}</span>
+                  <span className="num block text-[13px] leading-snug text-slate-600 sm:hidden">
                     {v ? v.name : 'Chưa chọn xe'} · {n} đơn · {fmtKgShort(tot.kg)} · {fmtM3(tot.m3)}
                   </span>
                 </span>
-                <span className={`hidden truncate text-sm sm:block ${v ? 'text-slate-700' : 'text-amber-700'}`}>{v ? v.name : 'Chưa chọn xe'}</span>
+                <span className={`hidden break-words text-sm sm:block ${v ? 'text-slate-700' : 'text-amber-700'}`}>{v ? v.name : 'Chưa chọn xe'}</span>
                 <span className="num hidden text-right text-sm text-slate-700 sm:block">{n}</span>
                 <span className="num shrink-0 text-right text-sm font-semibold text-slate-900">
                   {fmtInt(tot.cartons)}<span className="font-normal text-slate-600 sm:hidden"> thùng</span>

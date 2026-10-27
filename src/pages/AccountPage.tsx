@@ -71,14 +71,12 @@ export default function AccountPage() {
 
           <Group title="Pallet dùng khi chở xe pallet"
             desc="Áp cho mọi chuyến xe pallet. Pallet hàng nguyên cao theo số thùng/pallet của từng mã; pallet gộp hàng lẻ không cao quá mức dưới.">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
               <Field label="Dài chân"><NumInput value={p.l} onChange={v => v && s.setPallet({ ...p, l: v })} suffix="mm" /></Field>
               <Field label="Rộng chân"><NumInput value={p.w} onChange={v => v && s.setPallet({ ...p, w: v })} suffix="mm" /></Field>
               <Field label="Cao tối đa pallet lẻ"><NumInput value={p.maxH} onChange={v => v && s.setPallet({ ...p, maxH: v })} suffix="mm" /></Field>
-              <Field label="Cao đế · nặng"><div className="grid grid-cols-2 gap-1.5">
-                <NumInput value={p.baseH} onChange={v => v && s.setPallet({ ...p, baseH: v })} aria-label="Cao đế pallet (mm)" />
-                <NumInput value={p.kg} onChange={v => v != null && s.setPallet({ ...p, kg: v })} suffix="kg" aria-label="Khối lượng pallet (kg)" />
-              </div></Field>
+              <Field label="Cao đế pallet"><NumInput value={p.baseH} onChange={v => v && s.setPallet({ ...p, baseH: v })} suffix="mm" /></Field>
+              <Field label="Nặng pallet rỗng"><NumInput value={p.kg} onChange={v => v != null && s.setPallet({ ...p, kg: v })} suffix="kg" /></Field>
             </div>
             <button className="tap mt-2 text-[13px] font-medium text-brand-700 hover:text-brand-600" onClick={() => s.setPallet(DEFAULT_PALLET_SETTINGS)}>Về mặc định 1200 × 1000</button>
           </Group>

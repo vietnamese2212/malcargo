@@ -189,11 +189,11 @@ export default function TripPage({ id }: { id: string }) {
   return (
     <div className="flex min-h-[100dvh] flex-col lg:h-[100dvh]">
       {/* ── thanh trên navy: nút danh mục (3 vạch) · chuyến đang mở ▾ + chuyến mới · … · Login · logo MAL ── */}
-      <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-1.5 bg-navy-950 pl-1 pr-3 text-white sm:h-14 sm:gap-2 sm:pl-2 sm:pr-4">
+      <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-1 bg-navy-950 pl-1 pr-3 text-white sm:h-14 sm:gap-2 sm:pl-2 sm:pr-4">
         <MainMenu onPanel={setPanel} onImport={() => setImporting(true)} />
         <TripSwitcher trip={trip} trips={trips} onRename={name => upsertTrip({ ...trip, name })} onDelete={setDelTrip}
           onAll={() => setPanel('trips')} onNew={newTrip} />
-        <Button variant="primary" onClick={newTrip} aria-label="Chuyến mới" title="Tạo chuyến mới" className="shrink-0 px-2.5 sm:px-3.5"><Plus size={18} /><span className="hidden sm:inline">Chuyến mới</span></Button>
+        <Button variant="primary" onClick={newTrip} aria-label="Chuyến mới" title="Tạo chuyến mới" className="w-10 shrink-0 px-0 sm:w-auto sm:px-3.5"><Plus size={18} /><span className="hidden sm:inline">Chuyến mới</span></Button>
         <nav className="ml-3 hidden items-center gap-0.5 xl:flex">
           {MENU.map(mn => (
             <button key={mn.p} onClick={() => setPanel(mn.p)} className="flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 hover:text-white">
@@ -201,7 +201,7 @@ export default function TripPage({ id }: { id: string }) {
             </button>
           ))}
         </nav>
-        <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-4">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-4">
           <AccountButton onData={() => setPanel('account')} />
           <a href="#/trips" aria-label="MAL Cargo, về bàn xếp xe" className="shrink-0"><Logo dark compact /></a>
         </div>
@@ -287,26 +287,28 @@ export default function TripPage({ id }: { id: string }) {
                       const isOpen = editing === key
                       return (
                         <div key={key} className={cx('border-t border-slate-100', isOpen && 'bg-brand-50/50')}>
-                          <div className="flex items-center gap-2 py-1 pl-4 pr-2">
+                          {/* tên hàng chiếm trọn dòng trên (xuống dòng được, không cắt chữ); dòng dưới: quy cách + số thùng */}
+                          <div className="py-1.5 pl-3 pr-2">
                             <button type="button" onClick={() => setEditing(isOpen ? null : key)} aria-expanded={isOpen}
-                              className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md py-1 text-left hover:bg-slate-50">
+                              className="flex w-full items-center gap-2.5 rounded-md py-0.5 pr-1 text-left hover:bg-slate-50">
                               <BoxGlyph w={it.w} h={it.h} light={it.light} color={itemColor(it.id)} />
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate text-sm font-semibold text-slate-900">{it.name}</span>
-                                <span className="num flex items-center gap-1 truncate text-[12px] text-slate-600">
-                                  {fmtDims(it.l, it.w, it.h)} mm{it.kg != null && ` · ${fmtDec(it.kg, 2)} kg`}
-                                  {it.light && <Badge tone="amber" className="ml-0.5">nhẹ</Badge>}
-                                  <Pencil size={11} className="ml-0.5 shrink-0 text-slate-500" />
-                                </span>
-                              </span>
+                              <span className="min-w-0 flex-1 break-words text-sm font-semibold leading-snug text-slate-900">{it.name}</span>
+                              <Pencil size={14} className="shrink-0 text-slate-400" />
                             </button>
-                            <div className="flex shrink-0 items-center">
+                            <div className="flex items-center gap-2 pl-[42px]">
+                              <span className="num min-w-0 flex-1 text-[12px] leading-snug text-slate-600">
+                                <span className="whitespace-nowrap">{fmtDims(it.l, it.w, it.h)} mm</span>
+                                {it.kg != null && <> · <span className="whitespace-nowrap">{fmtDec(it.kg, 2)} kg</span></>}
+                                {it.light && <Badge tone="amber" className="ml-1">nhẹ</Badge>}
+                              </span>
+                              <div className="flex shrink-0 items-center">
                               <IconButton label="Bớt 1" onClick={() => setQty(o, l.itemId, l.qty - 1)} disabled={l.qty <= 0}><Minus size={15} /></IconButton>
                               <input inputMode="numeric" value={l.qty || ''} placeholder="Số thùng" aria-label={`Số thùng ${it.name}`}
                                 onChange={e => setQty(o, l.itemId, Number(e.target.value.replace(/\D/g, '')) || 0)}
                                 className={cx('tap num w-[68px] rounded-md border px-1.5 text-center text-base font-semibold outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-sm',
                                   l.qty > 0 ? 'border-slate-300 bg-white' : 'border-amber-400 bg-amber-50 placeholder:text-[12px] placeholder:font-normal placeholder:text-amber-800')} />
                               <IconButton label="Thêm 1" onClick={() => setQty(o, l.itemId, l.qty + 1)}><Plus size={15} /></IconButton>
+                              </div>
                             </div>
                           </div>
                           {isOpen && <ItemEditor it={it} palletMode={kind === 'pallet'} onEdit={p => editItem(it, p)} onRemove={() => { toggleLine(o, l.itemId); setEditing(null) }} />}
@@ -379,7 +381,7 @@ function TripSwitcher({ trip, trips, onRename, onDelete, onAll, onNew }: {
       trigger={({ open, toggle }) => (
         <h1 className="min-w-0">
           <button onClick={() => { setRenaming(false); toggle() }} aria-expanded={open} aria-label={`Chuyến đang mở: ${trip.name}. Bấm để xem các chuyến`}
-            className="flex h-9 min-w-0 max-w-[150px] items-center gap-1 rounded-md border border-white/20 px-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/10 sm:max-w-[260px]">
+            className="flex h-9 w-full min-w-0 max-w-[170px] items-center gap-1 rounded-md border border-white/20 px-2 text-[13px] font-semibold text-white transition-colors hover:bg-white/10 sm:max-w-[260px] sm:px-2.5 sm:text-sm">
             <span className="truncate">{trip.name}</span><ChevronDown size={16} className={cx('shrink-0 text-slate-300 transition-transform', open && 'rotate-180')} />
           </button>
         </h1>
@@ -406,9 +408,9 @@ function TripSwitcher({ trip, trips, onRename, onDelete, onAll, onNew }: {
                 <div key={t.id} className={cx('flex items-center', cur && 'bg-brand-50')}>
                   <a href={`#/trip/${t.id}`} onClick={close} aria-current={cur ? 'page' : undefined} className="min-w-0 flex-1 px-3 py-2 hover:bg-slate-50">
                     <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
-                      <span className="truncate">{t.name}</span>{cur && <Badge tone="blue">đang mở</Badge>}
+                      <span className="min-w-0 break-words">{t.name}</span>{cur && <Badge tone="blue">đang mở</Badge>}
                     </span>
-                    <span className="num block truncate text-[12px] text-slate-600">{t.code && t.code !== t.name && `${t.code} · `}{v ? v.name : 'Chưa chọn xe'} · {fmtInt(tot.cartons)} thùng · {fmtKgShort(tot.kg)}</span>
+                    <span className="num block break-words text-[12px] leading-snug text-slate-600">{t.code && t.code !== t.name && `${t.code} · `}{v ? v.name : 'Chưa chọn xe'} · {fmtInt(tot.cartons)} thùng · {fmtKgShort(tot.kg)}</span>
                   </a>
                   {isSample(t.id)
                     ? <span className="mr-2 w-[60px] shrink-0 text-right" title="Chuyến mặc định của app, không xoá được"><Badge>mặc định</Badge></span>
@@ -434,7 +436,7 @@ function MainMenu({ onPanel, onImport }: { onPanel: (p: PanelName) => void; onIm
     <Popover className="shrink-0" panelClass="w-[270px] max-w-[calc(100vw-16px)] overflow-hidden py-1"
       trigger={({ open, toggle }) => (
         <button onClick={toggle} aria-expanded={open} aria-label="Danh mục" title="Danh mục"
-          className="grid h-11 w-11 place-items-center rounded-md text-slate-200 transition-colors hover:bg-white/10 hover:text-white"><Menu size={22} /></button>
+          className="grid h-11 w-10 place-items-center rounded-md text-slate-200 transition-colors hover:bg-white/10 hover:text-white sm:w-11"><Menu size={22} /></button>
       )}>
       {close => (
         <>
@@ -506,7 +508,7 @@ function AccountButton({ onData }: { onData: () => void }) {
     <Popover hover align="right" panelClass="w-[300px] max-w-[calc(100vw-24px)] p-4"
       trigger={({ open, toggle }) => (
         <button onClick={toggle} aria-expanded={open} disabled={status === 'loading'}
-          className="flex h-9 items-center rounded-md border border-white/30 px-3 text-sm font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-60">
+          className="flex h-9 items-center rounded-md border border-white/30 px-2 text-sm font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-60 sm:px-3">
           Login
         </button>
       )}>
@@ -643,7 +645,7 @@ function TitleBlock({ r, busy, error, hasCargo, vehicle, tripName, orders, sug, 
             return (
               <div key={o.name + i} className="flex items-center gap-2 border-t border-slate-300 px-2 py-1">
                 <span className="num grid h-[18px] min-w-[18px] place-items-center rounded-sm bg-navy-950 px-0.5 text-[11px] font-bold text-white">{i + 1}</span>
-                <span className="min-w-0 flex-1 truncate text-[12px] text-slate-800">{o.name}</span>
+                <span className="min-w-0 flex-1 break-words text-[12px] leading-snug text-slate-800">{o.name}</span>
                 <span className={cx('num shrink-0 text-right text-[12px] font-semibold', short ? 'text-red-700' : 'text-slate-900')}>
                   {!pal && short ? `${fmtInt(cp)}/` : ''}{fmtInt(o.cartons)} thùng
                   {pal && pt > 0 && <span className="block text-[11px] font-normal text-slate-600">{pp < pt ? `${fmtInt(pp)}/` : ''}{fmtInt(pt)} pallet</span>}
@@ -755,10 +757,10 @@ function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, onClose, o
           </span>
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-1.5">
-              <span className="truncate text-sm font-semibold text-slate-900">{v.name}</span>
+              <span className="min-w-0 break-words text-sm font-semibold leading-snug text-slate-900">{v.name}</span>
               {v.id === suggestion && <Badge tone="blue"><Sparkles size={11} />Vừa nhất</Badge>}
             </span>
-            <span className="num block truncate text-[12px] text-slate-600">{m(v.l)} × {m(v.w)} × {m(v.h)} m{v.payloadKg != null && ` · ${fmtKgShort(v.payloadKg)}`} · {v.kind === 'pallet' ? 'pallet' : 'thùng rời'}</span>
+            <span className="num block text-[12px] leading-snug text-slate-600"><span className="whitespace-nowrap">{m(v.l)} × {m(v.w)} × {m(v.h)} m</span>{v.payloadKg != null && <> · <span className="whitespace-nowrap">{fmtKgShort(v.payloadKg)}</span></>} · {v.kind === 'pallet' ? 'pallet' : 'thùng rời'}</span>
           </span>
           <span className="shrink-0">{fits ? (fits[v.id] ? FIT[fits[v.id]] : null) : <Loader2 size={14} className="animate-spin text-slate-400" />}</span>
         </button>
@@ -781,7 +783,7 @@ function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, onClose, o
             <div className="rounded-lg border border-slate-300">
               <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
                 <TruckGlyph pallet={vehicle.kind === 'pallet'} small />
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900">{vehicle.name}</span>
+                <span className="min-w-0 flex-1 break-words text-sm font-semibold leading-snug text-slate-900">{vehicle.name}</span>
                 <OwnerTag v={vehicle} />
               </div>
               <div className="space-y-2.5 p-3">
@@ -823,7 +825,7 @@ function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, onClose, o
         )}
         <SectionBand title="Đổi xe khác" meta="· thử hàng chuyến này trên từng xe" />
         <div className="flex items-center gap-2 px-3 py-2">
-          <SearchInput className="min-w-0 flex-1" placeholder="Tìm xe theo tên, biển số" value={q} onChange={e => setQ(e.target.value)} aria-label="Tìm xe" />
+          <SearchInput className="min-w-0 flex-1" placeholder="Tên xe, biển số" value={q} onChange={e => setQ(e.target.value)} aria-label="Tìm xe" />
           <label className="tap flex shrink-0 cursor-pointer items-center gap-1.5 text-[13px] text-slate-700">
             <input type="checkbox" checked={onlyFit} onChange={e => setOnlyFit(e.target.checked)} className="h-4 w-4 accent-brand-500" />Chỉ xe chở hết
           </label>
@@ -894,8 +896,8 @@ function OrderBlock({ o, i, count, t, onPatch, onMove, onOpenPage, onRemove, onA
         className={cx('flex w-full items-stretch text-left transition-colors hover:bg-slate-50', open && 'border-b border-slate-200')}>
         <span className={cx('grid min-w-0 flex-1 divide-x divide-slate-200', where ? 'grid-cols-[0.8fr_1fr_1fr_1.15fr]' : 'grid-cols-3')}>
           <Stat label="Thùng" value={fmtInt(t.cartons)} />
-          <Stat label="Khối lượng" value={fmtKgShort(t.kg)} />
-          <Stat label="Thể tích" value={fmtM3(t.m3)} />
+          <Stat label="Nặng" value={fmtKgShort(t.kg)} />
+          <Stat label="Khối" value={fmtM3(t.m3)} />
           {where && <Stat label={`Giao thứ ${i + 1}`} value={where} />}
         </span>
         <span className="grid w-11 shrink-0 place-items-center border-l border-slate-200 text-slate-600">
@@ -918,8 +920,8 @@ const SumChip = ({ label, value }: { label: string; value: string }) => (
 
 const Stat = ({ label, value }: { label: string; value: string }) => (
   <span className="block min-w-0 px-2.5 py-1.5">
-    <span className="block truncate text-[11px] text-slate-600">{label}</span>
-    <span className="num block truncate text-[13px] font-semibold text-slate-900">{value}</span>
+    <span className="block break-words text-[11px] leading-tight text-slate-600">{label}</span>
+    <span className="num block break-words text-[13px] font-semibold leading-snug text-slate-900">{value}</span>
   </span>
 )
 
@@ -1058,7 +1060,7 @@ function OrderPicker({ open, onClose, inTrip, onAdd, onNew }: { open: boolean; o
                 className={cx('flex w-full items-center gap-3 px-4 py-3 text-left transition-colors', on ? 'bg-brand-50' : 'hover:bg-slate-50')}>
                 <span className={cx('grid h-5 w-5 shrink-0 place-items-center rounded border-2', on ? 'border-brand-500 bg-brand-500 text-white' : 'border-slate-400')}>{on && <Check size={13} strokeWidth={3} />}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold text-slate-900 sm:text-sm">{o.name}{o.place && <span className="font-normal text-slate-600"> · {o.place}</span>}</span>
+                  <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{o.name}{o.place && <span className="font-normal text-slate-600"> · {o.place}</span>}</span>
                   <span className="num block text-[13px] text-slate-600">{fmtInt(t.cartons)} thùng · {fmtKgShort(t.kg)} · {fmtM3(t.m3)}</span>
                 </span>
               </button>

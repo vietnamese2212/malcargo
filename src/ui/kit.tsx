@@ -158,7 +158,7 @@ export function SummaryBand({ tiles, className, square }: { tiles: BandTile[]; c
         // 4 ô xếp 2 × 2: ô 3 sang hàng mới — bỏ vạch trái, thêm vạch trên
         <div key={t.label} className={cx('min-w-0 border-white/10 px-4 py-3', i > 0 && 'border-l',
           four && i === 2 && (square ? 'border-l-0' : 'max-sm:border-l-0'), four && i >= 2 && (square ? 'border-t' : 'max-sm:border-t'))}>
-          <div className="truncate text-[12px] text-slate-300">{t.label}</div>
+          <div className="break-words text-[12px] leading-tight text-slate-300">{t.label}</div>
           <div className={cx('num mt-0.5 truncate text-xl font-semibold leading-tight',
             t.tone === 'bad' ? 'text-red-300' : t.tone === 'warn' ? 'text-amber-300' : 'text-white')}>{t.value}</div>
           {t.pct != null && (
@@ -179,7 +179,7 @@ export function SectionBand({ title, meta, right, className }: { title: ReactNod
   return (
     <div className={cx('flex min-h-[40px] items-center gap-2 border-y border-slate-200 bg-slate-50 py-1 pl-0 pr-2', className)}>
       <span className="h-4 w-[3px] shrink-0 rounded-r bg-brand-500" />
-      <h2 className="min-w-0 flex-1 truncate pl-2.5 text-[13px] font-semibold text-slate-900">
+      <h2 className="min-w-0 flex-1 break-words pl-2.5 text-[13px] font-semibold leading-snug text-slate-900">
         {title}{meta != null && <span className="ml-1.5 font-normal text-slate-600">{meta}</span>}
       </h2>
       {right}
@@ -192,7 +192,7 @@ export function ListFooter({ children, right }: { children: ReactNode; right?: R
   return (
     <div className="flex items-center gap-3 rounded-b-lg border-t border-slate-200 bg-slate-50 px-4 py-2 text-[12px] text-slate-600">
       <span className="num whitespace-nowrap">{children}</span>
-      {right && <span className="min-w-0 flex-1 truncate text-right">{right}</span>}
+      {right && <span className="min-w-0 flex-1 break-words text-right leading-snug">{right}</span>}
     </div>
   )
 }

@@ -58,13 +58,13 @@ export default function OrdersPage() {
               <a key={o.id} href={`#/order/${o.id}`}
                 className={`group flex items-center gap-4 border-b border-slate-100 px-4 py-3 transition-colors last:border-b-0 hover:bg-slate-50 sm:grid sm:min-h-[52px] sm:py-2 ${GRID}`}>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold text-slate-900 sm:text-sm">{o.name}</span>
-                  <span className="num block truncate text-[13px] text-slate-600 sm:hidden">
+                  <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{o.name}</span>
+                  <span className="num block text-[13px] leading-snug text-slate-600 sm:hidden">
                     {[o.place, fmtKgShort(t.kg) + (t.kgKnown ? '' : '*'), fmtM3(t.m3), trip?.name].filter(Boolean).join(' · ')}
                   </span>
                 </span>
-                <span className="hidden truncate text-sm text-slate-700 sm:block">{o.place || <span className="text-slate-500">—</span>}</span>
-                <span className="hidden truncate text-sm sm:block">{trip ? <span className="text-brand-700">{trip.name}</span> : <span className="text-slate-500">Chưa vào chuyến</span>}</span>
+                <span className="hidden break-words text-sm text-slate-700 sm:block">{o.place || <span className="text-slate-500">—</span>}</span>
+                <span className="hidden break-words text-sm sm:block">{trip ? <span className="text-brand-700">{trip.name}</span> : <span className="text-slate-500">Chưa vào chuyến</span>}</span>
                 <span className="num shrink-0 text-right text-sm font-semibold text-slate-900">
                   {fmtInt(t.cartons)}<span className="font-normal text-slate-600 sm:hidden"> thùng</span>
                 </span>

@@ -15,6 +15,7 @@ Ghi chú nội bộ của chủ dự án (không nằm trong repo công khai): @
 - Font Be Vietnam Pro (tự lưu, chạy offline). Ưu tiên điện thoại, điểm chạm ≥ 44 px. MỘT màn làm việc (**Bàn xếp xe**, `TripPage.tsx`): thanh trên navy CỐ ĐỊNH (menu 3 vạch bên trái · chuyến đang mở ▾ + nút `+` · Login bằng chữ · logo bên phải); danh mục Mã hàng / Xe / Đơn / Chuyến / Tài khoản mở thành tấm phủ (`Panel`) ngay trên màn đó.
 - Form thêm/sửa = `Sheet` (trượt từ đáy trên điện thoại, từ lề phải trên máy tính); xác nhận xoá = `Confirm` — cấm `window.confirm/alert`.
 - Nút chỉ có biểu tượng PHẢI có `aria-label` (script kiểm tìm nút theo tên).
+- **Không cắt chữ "…"**: tên, quy cách, ghi chú phải XUỐNG DÒNG (`break-words`; cụm số như `5.700 × 2.000 × 2.000 mm` bọc `whitespace-nowrap` để không bẻ giữa cụm). `truncate` chỉ dùng chỗ buộc một dòng mà vẫn đủ chỗ ở 360 px (tên chuyến trên thanh trên). `scripts/ui-cut.mjs` đo ở 1440 / 390 / 360 px.
 - Số kiểu Việt Nam (`12,5 kg`, `5.700 mm`) — dùng `fmtInt/fmtDec/fmtKgShort/fmtM3` trong `src/ui/kit.tsx`, đừng in số thô.
 - Đơn vị: kích thước luôn **mm**, khối lượng **kg**.
 
@@ -41,6 +42,6 @@ Ghi chú nội bộ của chủ dự án (không nằm trong repo công khai): @
 ## Kiểm trước khi báo xong
 ```bash
 npm test            # thuật toán: bất biến hình học + bảng đếm chân khớp số đã xếp (6 ca)
-npm run check:ui    # build + chụp mọi màn 1440/390 (đo tràn ngang, lỗi trình duyệt) + luồng người mới
+npm run check:ui    # build + chụp mọi màn 1440/390 (đo tràn ngang, lỗi trình duyệt) + luồng người mới + chữ bị cắt / nút đè (1440/390/360)
 ```
 Ảnh ra `scripts/out/` — mở xem bằng mắt, đừng chỉ tin chữ XANH. Script KHÔNG bấm link ra ngoài (Zalo/email/mal.com.vn): `mailto:` từng mở Outlook thật trên máy.

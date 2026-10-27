@@ -76,7 +76,7 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample }: {
         </div>
       </>}>
       <fieldset className="space-y-4">
-        <div className="grid grid-cols-[1fr_2fr] gap-3">
+        <div className="grid gap-3 sm:grid-cols-[1fr_2fr]">
           <Field label="Mã" error={tried ? errs.code : null}><TextInput value={f.code} onChange={e => set('code', e.target.value)} placeholder="SP001" autoFocus={!item} /></Field>
           <Field label="Tên hàng" error={tried ? errs.name : null}><TextInput value={f.name} onChange={e => set('name', e.target.value)} placeholder="Sữa 110ml x48" /></Field>
         </div>

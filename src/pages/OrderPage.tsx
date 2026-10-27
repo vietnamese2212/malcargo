@@ -92,8 +92,8 @@ export default function OrderPage({ id, back }: { id: string; back?: string }) {
                   <div key={l.itemId} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
                     <BoxGlyph w={it.w} h={it.h} light={it.light} />
                     <div className="min-w-0 flex-1 basis-40">
-                      <div className="truncate text-[15px] font-semibold text-slate-900 sm:text-sm">{it.name}</div>
-                      <div className="num truncate text-[13px] text-slate-600">{it.code} · {fmtDims(it.l, it.w, it.h)} mm{it.kg != null && ` · ${fmtDec(it.kg, 2)} kg`}</div>
+                      <div className="break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{it.name}</div>
+                      <div className="num text-[13px] leading-snug text-slate-600">{it.code} · <span className="whitespace-nowrap">{fmtDims(it.l, it.w, it.h)} mm</span>{it.kg != null && <> · <span className="whitespace-nowrap">{fmtDec(it.kg, 2)} kg</span></>}</div>
                     </div>
                     <div className="ml-auto flex items-center gap-1">
                       <IconButton label="Bớt 1" onClick={() => setQty(l.itemId, l.qty - 1)} disabled={l.qty <= 0} className="border border-slate-300"><Minus size={16} /></IconButton>
