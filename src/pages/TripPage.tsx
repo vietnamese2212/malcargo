@@ -4,7 +4,7 @@
 // Sửa mã hàng / xe MẪU CHUNG ⇒ tự thành bản "của tôi" rồi gắn vào chuyến, mẫu giữ nguyên.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  AlertTriangle, ArrowDown, ArrowUp, Camera, Check, ChevronDown, ClipboardCopy, ClipboardList, CloudOff, ExternalLink, Eye, EyeOff,
+  AlertTriangle, ArrowDown, ArrowUp, Camera, Check, ChevronDown, ClipboardCopy, ClipboardList, CloudOff, Crosshair, ExternalLink, Eye, EyeOff,
   FileSpreadsheet, Layers, Loader2, LogOut, MapPin, Menu, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Rotate3d, Ruler,
   SlidersHorizontal, Sparkles, Table2, Trash2, Truck, UserRound, Users, X,
 } from 'lucide-react'
@@ -17,7 +17,7 @@ import type { FitCheck } from '../engine/worker'
 import type { Item, Order, Trip, Vehicle, VehicleKind } from '../data/types'
 import Scene from '../three/LazyScene'
 import type { ViewPreset } from '../three/TruckScene'
-import { colorMap, groupColor, tint } from '../three/colors'
+import { groupColor, itemColors, tint } from '../three/colors'
 import {
   Badge, BoxGlyph, Button, Confirm, Empty, IconButton, LiveNum, MenuItem, Popover, SearchInput, SectionBand, Segmented, Sheet, Switch,
   TextInput, cx, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3,
@@ -81,7 +81,8 @@ export default function TripPage({ id }: { id: string }) {
 
   const [step, setStep] = useState<number | null>(null)
   const [playing, setPlaying] = useState(false)
-  const [focus, setFocus] = useState<Set<number> | null>(null)
+  const [focus, setFocus] = useState<Set<number> | null>(null)   // soi từ bảng đếm chân (chỉ số khối)
+  const [sel, setSel] = useState<{ orderId: string; itemId?: string } | null>(null)   // chọn đơn / mã ở cột trái
   const [view, setView] = useState<{ preset: ViewPreset; n: number }>({ preset: 'overview', n: 0 })
   const [walls, setWalls] = useState<'open' | 'glass'>('open')
   const [open, setOpen] = useState({ cargo: true, count: false })
@@ -106,6 +107,7 @@ export default function TripPage({ id }: { id: string }) {
       const map = fork.orders
       setPickFor(p => (p && map[p]) || p)
       setEditing(e => { if (!e) return e; const i = e.indexOf(':'); return map[e.slice(0, i)] ? map[e.slice(0, i)] + e.slice(i) : e })
+      setSel(s => (s && map[s.orderId] ? { ...s, orderId: map[s.orderId] } : s))
       replaceRoute({ page: 'trip', id: fork.to })
     } else if (fork.to === id) {
       markForkSeen()
@@ -128,7 +130,24 @@ export default function TripPage({ id }: { id: string }) {
     return () => clearInterval(t)
   }, [playing, stepCount])
 
-  const colors = useMemo(() => colorMap(result?.meta ?? []), [result])
+  // Màu theo MÃ, cố định — đổi xe / cách chở / số lượng không làm đổi màu hàng đã có
+  const colors = useMemo(() => itemColors(tripOrders.flatMap(o => o.lines.map(l => l.item))), [tripOrders])
+  // Đang chọn một đơn / một mã ⇒ các khối của nó trên xe (kể cả pallet gộp chứa phần lẻ của mã);
+  // sơ đồ tính lại (bật công tắc, đổi xe…) thì vẫn chỉ đúng nó — xem được hàng dời đi đâu
+  const selFocus = useMemo(() => {
+    if (!sel || !result) return null
+    const s = new Set<number>()
+    result.plan.groups.forEach((g, gi) => {
+      const mt = result.meta[gi]
+      if (g.doKey.endsWith(`|${sel.orderId}`) && (!sel.itemId || mt.itemId === sel.itemId || mt.holds?.includes(sel.itemId))) s.add(gi)
+    })
+    return s
+  }, [sel, result])
+  const shown = sel ? selFocus : focus
+  const pick = (orderId: string, itemId?: string) => {
+    setFocus(null)
+    setSel(s => (s && s.orderId === orderId && s.itemId === itemId ? null : { orderId, itemId }))
+  }
 
   if (!trip) return <><PageHeader title="Không thấy chuyến" /><div className="p-6"><Empty icon={<AlertTriangle size={28} strokeWidth={1.5} />} title="Chuyến này không còn" /></div></>
 
@@ -159,6 +178,7 @@ export default function TripPage({ id }: { id: string }) {
       rawOrders.filter(o => o.lines.some(l => l.itemId === it.id))
         .forEach(o => upsertOrder({ ...o, lines: o.lines.map(l => (l.itemId === it.id ? { ...l, itemId: mine.id } : l)) }))
       setEditing(e => (e?.endsWith(`:${it.id}`) ? e.replace(it.id, mine.id) : e))
+      setSel(s => (s?.itemId === it.id ? { ...s, itemId: mine.id } : s))
       setToast('Đã tạo mã của bạn từ mã mẫu')
     } else upsertItem({ ...it, ...patch })
   }
@@ -185,6 +205,25 @@ export default function TripPage({ id }: { id: string }) {
   const all = orderTotals(tripOrders.flatMap(o => o.lines), pallet)
   const byId = new Map(items.map(i => [i.id, i]))
   const notes = [...(r?.errors ?? []), ...(r?.warnings ?? [])]
+  // nhãn trên 3D cho đơn / mã đang chọn: tên · nằm ở khối nào · đoạn nào của thùng (tính từ đầu thùng, phía cabin)
+  const selName = sel && (sel.itemId ? byId.get(sel.itemId)?.name : rawOrders.find(o => o.id === sel.orderId)?.name)
+  const selWhere = (() => {
+    if (!sel || !r || !selFocus) return null
+    const boxes = r.plan.placed.filter(b => selFocus.has(b.group))
+    if (!boxes.length) return 'chưa lên xe'
+    const rows = r.count.filter(c => selFocus.has(c.group))
+    const pal = rows.filter(c => c.unit === 'pallet')
+    const mine = pal.filter(c => !sel.itemId || r.meta[c.group].itemId === sel.itemId).reduce((s, c) => s + c.placed, 0)
+    const shared = sel.itemId ? pal.filter(c => r.meta[c.group].itemId == null).reduce((s, c) => s + c.placed, 0) : 0
+    const loose = rows.filter(c => c.unit === 'thùng')
+    const n = loose.reduce((s, c) => s + c.placed, 0)
+    const what = [
+      mine ? `${fmtInt(mine)} pallet` : '', shared ? `trong ${fmtInt(shared)} pallet gộp` : '',
+      n ? `${fmtInt(n)} thùng${loose.some(c => c.onTopOfOthers) ? ' (có thùng trên nóc)' : ''}` : '',
+    ].filter(Boolean).join(' + ')
+    const x0 = Math.min(...boxes.map(b => b.x)), x1 = Math.max(...boxes.map(b => b.x + b.l))
+    return `${what} · từ đầu thùng ${m(x0)}–${m(x1)} m`
+  })()
 
   return (
     <div className="flex min-h-[100dvh] flex-col lg:h-[100dvh]">
@@ -215,7 +254,7 @@ export default function TripPage({ id }: { id: string }) {
             onLightIn={v => upsertTrip({ ...trip, lightInPallet: v })} />
           <div className="relative min-h-0 flex-1">
             <Scene className="h-full w-full" truck={vehicle ? { l: vehicle.l, w: vehicle.w, h: vehicle.h, kind: vehicle.kind } : null}
-              plan={plan} meta={result?.meta} colors={colors} step={step} focus={focus} view={view} walls={walls} />
+              plan={plan} meta={result?.meta} colors={colors} step={step} focus={shown} view={view} walls={walls} />
 
             <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between gap-2">
               <TitleBlock r={r} busy={busy} error={error} hasCargo={hasCargo} vehicle={vehicle} tripName={trip.name}
@@ -225,21 +264,31 @@ export default function TripPage({ id }: { id: string }) {
               <ViewMenu view={view.preset} walls={walls} onView={p => setView(v => ({ preset: p, n: v.n + 1 }))} onWalls={() => setWalls(w => (w === 'open' ? 'glass' : 'open'))} />
             </div>
 
-            {plan && stepCount > 0 && (
-              <div className="absolute inset-x-3 bottom-3 flex items-center gap-3 rounded-md border border-slate-300 bg-white px-2 py-1.5 lg:inset-x-6 lg:bottom-5 lg:mx-auto lg:max-w-2xl">
-                <IconButton label={playing ? 'Dừng' : 'Xem xếp từng bước'} className="h-9 w-9 bg-brand-500 text-white hover:bg-brand-600 hover:text-white"
-                  onClick={() => { if (!playing && step == null) setStep(0); setPlaying(p => !p) }}>
-                  {playing ? <Pause size={17} /> : <Play size={17} className="ml-0.5" />}
-                </IconButton>
-                <input type="range" className="steps min-w-0 flex-1" min={1} max={stepCount} value={step ?? stepCount} aria-label="Bước xếp"
-                  style={{ ['--p' as string]: `${(((step ?? stepCount) - 1) / Math.max(1, stepCount - 1)) * 100}%` }}
-                  onChange={e => { setPlaying(false); const v = Number(e.target.value); setStep(v >= stepCount ? null : v) }} />
-                <span className="num w-[92px] shrink-0 pr-1 text-right text-[13px] font-semibold text-slate-700">
-                  {step == null ? `Đủ ${stepCount} bước` : `Bước ${step}/${stepCount}`}
-                </span>
-              </div>
-            )}
-            {toast && <div className="absolute bottom-16 left-1/2 flex w-max max-w-[calc(100%-24px)] -translate-x-1/2 items-center gap-2 rounded-md bg-navy-950 px-4 py-2 text-[13px] font-medium text-white shadow-pop" style={{ animation: 'sheet-up .2s' }}><Check size={16} />{toast}</div>}
+            {/* đáy bản vẽ, xếp chồng không đè nhau: thông báo · nhãn đơn / mã đang chọn · thanh bước xếp */}
+            <div className="pointer-events-none absolute inset-x-3 bottom-3 flex flex-col items-center gap-2 lg:inset-x-6 lg:bottom-5">
+              {toast && <div className="flex max-w-full items-center gap-2 rounded-md bg-navy-950 px-4 py-2 text-[13px] font-medium text-white shadow-pop" style={{ animation: 'sheet-up .2s' }}><Check size={16} className="shrink-0" />{toast}</div>}
+              {sel && selName && (
+                <div className="pointer-events-auto flex max-w-full items-center gap-2 rounded-md border-[1.5px] border-brand-500 bg-white py-0.5 pl-2.5 text-[13px] text-slate-800 lg:max-w-2xl">
+                  <Crosshair size={15} className="shrink-0 text-brand-600" />
+                  <span className="min-w-0 break-words leading-snug"><b className="font-semibold text-slate-900">{selName}</b>{selWhere && <span className="num"> · {selWhere}</span>}</span>
+                  <IconButton label="Bỏ chọn" onClick={() => setSel(null)} className="shrink-0 text-slate-500"><X size={16} /></IconButton>
+                </div>
+              )}
+              {plan && stepCount > 0 && (
+                <div className="pointer-events-auto flex w-full items-center gap-3 rounded-md border border-slate-300 bg-white px-2 py-1.5 lg:max-w-2xl">
+                  <IconButton label={playing ? 'Dừng' : 'Xem xếp từng bước'} className="h-9 w-9 bg-brand-500 text-white hover:bg-brand-600 hover:text-white"
+                    onClick={() => { if (!playing && step == null) setStep(0); setPlaying(p => !p) }}>
+                    {playing ? <Pause size={17} /> : <Play size={17} className="ml-0.5" />}
+                  </IconButton>
+                  <input type="range" className="steps min-w-0 flex-1" min={1} max={stepCount} value={step ?? stepCount} aria-label="Bước xếp"
+                    style={{ ['--p' as string]: `${(((step ?? stepCount) - 1) / Math.max(1, stepCount - 1)) * 100}%` }}
+                    onChange={e => { setPlaying(false); const v = Number(e.target.value); setStep(v >= stepCount ? null : v) }} />
+                  <span className="num w-[92px] shrink-0 pr-1 text-right text-[13px] font-semibold text-slate-700">
+                    {step == null ? `Đủ ${stepCount} bước` : `Bước ${step}/${stepCount}`}
+                  </span>
+                </div>
+              )}
+            </div>
 
             {spec && (
               <SpecPopup vehicle={vehicle} vehicles={vehicles} suggestion={suggestion} fits={hasCargo ? fits : null} sharedWith={vehicleSharedWith}
@@ -273,6 +322,7 @@ export default function TripPage({ id }: { id: string }) {
               <div className="space-y-3 bg-canvas p-3 sm:rounded-b-lg">
                 {rawOrders.map((o, i) => (
                   <OrderBlock key={o.id} o={o} i={i} count={rawOrders.length} t={orderTotals(tripOrders[i].lines, pallet)}
+                    selected={sel?.orderId === o.id && !sel.itemId} onSelect={() => pick(o.id)}
                     onPatch={p => upsertOrder({ ...o, ...p })} onMove={d => moveOrder(i, d)}
                     onOpenPage={() => go({ page: 'order', id: o.id, back: `trip:${trip.id}` })}
                     onRemove={() => setUnlink(o)}
@@ -287,16 +337,21 @@ export default function TripPage({ id }: { id: string }) {
                         </div>
                       )
                       const isOpen = editing === key
+                      const isSel = sel?.orderId === o.id && sel.itemId === l.itemId
                       return (
-                        <div key={key} className={cx('border-t border-slate-100', isOpen && 'bg-brand-50/50')}>
-                          {/* tên hàng chiếm trọn dòng trên (xuống dòng được, không cắt chữ); dòng dưới: quy cách + số thùng */}
-                          <div className="py-1.5 pl-3 pr-2">
-                            <button type="button" onClick={() => setEditing(isOpen ? null : key)} aria-expanded={isOpen}
-                              className="flex w-full items-center gap-2.5 rounded-md py-0.5 pr-1 text-left hover:bg-slate-50">
-                              <BoxGlyph w={it.w} h={it.h} light={it.light} color={itemColor(it.id)} />
-                              <span className="min-w-0 flex-1 break-words text-sm font-semibold leading-snug text-slate-900">{it.name}</span>
-                              <Pencil size={14} className="shrink-0 text-slate-400" />
-                            </button>
+                        <div key={key} className={cx('border-t border-slate-100', isSel ? 'bg-brand-50 shadow-[inset_3px_0_0_#1a66ff]' : isOpen && 'bg-brand-50/50')}>
+                          {/* tên hàng chiếm trọn dòng trên (xuống dòng được, không cắt chữ) — bấm để chỉ mã trên xe;
+                              bút chì = sửa mã. Dòng dưới: quy cách + số thùng */}
+                          <div className="py-1.5 pl-3 pr-1">
+                            <div className="flex items-center gap-1">
+                              <button type="button" onClick={() => pick(o.id, l.itemId)} aria-pressed={isSel} title="Xem mã này nằm đâu trên xe"
+                                className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md py-0.5 pr-1 text-left hover:bg-slate-50">
+                                <BoxGlyph w={it.w} h={it.h} light={it.light} color={itemColor(it.id)} />
+                                <span className="min-w-0 flex-1 break-words text-sm font-semibold leading-snug text-slate-900">{it.name}</span>
+                              </button>
+                              <IconButton label={`Sửa ${it.name}`} aria-expanded={isOpen} onClick={() => setEditing(isOpen ? null : key)}
+                                className={cx('shrink-0', isOpen ? 'text-brand-700' : 'text-slate-500')}><Pencil size={15} /></IconButton>
+                            </div>
                             <div className="flex items-center gap-2 pl-[42px]">
                               <span className="num min-w-0 flex-1 text-[12px] leading-snug text-slate-600">
                                 <span className="whitespace-nowrap">{fmtDims(it.l, it.w, it.h)} mm</span>
@@ -328,11 +383,14 @@ export default function TripPage({ id }: { id: string }) {
 
           <Block title="Bảng đếm chân" open={open.count} onToggle={() => setOpen(o => ({ ...o, count: !o.count }))}
             summary={r ? `${r.count.length} dòng, thứ tự xếp từ cabin ra cửa` : 'Có khi đã xếp hàng lên xe'}>
-            <CountSheet r={r} colors={colors} focus={focus} tripName={trip.name} vehicle={vehicle}
-              onFocus={gi => setFocus(f => {
-                const n = new Set(f ?? []); if (n.has(gi)) n.delete(gi); else n.add(gi)
-                return n.size ? n : null
-              })}
+            <CountSheet r={r} colors={colors} focus={shown} tripName={trip.name} vehicle={vehicle}
+              onFocus={gi => {
+                setSel(null)
+                setFocus(f => {
+                  const n = new Set(sel ? [] : f ?? []); if (n.has(gi)) n.delete(gi); else n.add(gi)
+                  return n.size ? n : null
+                })
+              }}
               onToast={setToast} />
           </Block>
         </aside>
@@ -875,14 +933,14 @@ function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, onClose, o
 
 // ── Một đơn = một THẺ riêng trên cột khai hàng: số thứ tự giao, tên, điểm giao, nút gỡ ngoài cùng,
 //    dải số (thùng · khối lượng · thể tích) dạng ô như bảng, không viết thành câu ─────
-function OrderBlock({ o, i, count, t, onPatch, onMove, onOpenPage, onRemove, onAddItem, children }: {
-  o: Order; i: number; count: number; t: ReturnType<typeof orderTotals>
+function OrderBlock({ o, i, count, t, selected, onSelect, onPatch, onMove, onOpenPage, onRemove, onAddItem, children }: {
+  o: Order; i: number; count: number; t: ReturnType<typeof orderTotals>; selected: boolean; onSelect: () => void
   onPatch: (p: Partial<Order>) => void; onMove: (d: -1 | 1) => void; onOpenPage: () => void; onRemove: () => void; onAddItem: () => void; children: ReactNode
 }) {
   const where = count > 1 ? (i === 0 ? 'Sát cửa' : i === count - 1 ? 'Sâu trong' : 'Giữa thùng') : null
   const [open, setOpen] = useState(true)
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-300 bg-white">
+    <div className={cx('overflow-hidden rounded-lg border bg-white', selected ? 'border-brand-500 ring-1 ring-brand-500' : 'border-slate-300')}>
       <div className="flex items-start gap-2 border-b border-slate-200 bg-slate-50 py-1.5 pl-3 pr-1">
         <span className="num mt-1 grid h-7 min-w-[28px] shrink-0 place-items-center rounded bg-navy-950 px-1 text-[13px] font-bold text-white" title={`Giao thứ ${i + 1}`}>{i + 1}</span>
         <div className="min-w-0 flex-1">
@@ -908,19 +966,21 @@ function OrderBlock({ o, i, count, t, onPatch, onMove, onOpenPage, onRemove, onA
           )}
         </Popover>
       </div>
-      {/* dải số = nút thu gọn / mở rộng phần hàng của đơn (mặc định mở) */}
-      <button type="button" onClick={() => setOpen(v => !v)} aria-expanded={open} aria-label={`${open ? 'Thu gọn' : 'Mở rộng'} ${o.name}`}
-        className={cx('flex w-full items-stretch text-left transition-colors hover:bg-slate-50', open && 'border-b border-slate-200')}>
-        <span className={cx('grid min-w-0 flex-1 divide-x divide-slate-200', where ? 'grid-cols-[0.8fr_1fr_1fr_1.15fr]' : 'grid-cols-3')}>
+      {/* dải số = bấm để chỉ hàng của đơn trên xe; mũi tên bên phải = thu gọn / mở rộng (mặc định mở) */}
+      <div className={cx('flex items-stretch', open && 'border-b border-slate-200')}>
+        <button type="button" onClick={onSelect} aria-pressed={selected} aria-label={`Xem ${o.name} nằm đâu trên xe`} title="Xem đơn này nằm đâu trên xe"
+          className={cx('grid min-w-0 flex-1 divide-x divide-slate-200 text-left transition-colors', where ? 'grid-cols-[0.8fr_1fr_1fr_1.15fr]' : 'grid-cols-3',
+            selected ? 'bg-brand-50' : 'hover:bg-slate-50')}>
           <Stat label="Thùng" value={fmtInt(t.cartons)} />
           <Stat label="Nặng" value={fmtKgShort(t.kg)} />
           <Stat label="Khối" value={fmtM3(t.m3)} />
           {where && <Stat label={`Giao thứ ${i + 1}`} value={where} />}
-        </span>
-        <span className="grid w-11 shrink-0 place-items-center border-l border-slate-200 text-slate-600">
+        </button>
+        <button type="button" onClick={() => setOpen(v => !v)} aria-expanded={open} aria-label={`${open ? 'Thu gọn' : 'Mở rộng'} ${o.name}`}
+          className="grid w-11 shrink-0 place-items-center border-l border-slate-200 text-slate-600 transition-colors hover:bg-slate-50">
           <ChevronDown size={18} className={cx('transition-transform', open && 'rotate-180')} />
-        </span>
-      </button>
+        </button>
+      </div>
       {open && <>
         {children}
         <button onClick={onAddItem} className="tap flex w-full items-center gap-2 border-t border-slate-100 px-4 text-[13px] font-semibold text-brand-700 hover:bg-brand-50">

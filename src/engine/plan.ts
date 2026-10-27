@@ -20,6 +20,7 @@ export interface PlanGroupMeta {
   itemId: string | null      // null = pallet gộp nhiều mã
   isPallet: boolean          // khối là 1 PALLET (xe pallet)
   colorKey: string
+  holds?: string[]           // pallet gộp: id các mã có phần lẻ nằm trong (các) pallet gộp của đơn
 }
 
 export interface CountRow {
@@ -160,6 +161,7 @@ export function computeTrip(input: TripInput): TripResult {
     if (fitErr) errors.push(fitErr)
     floorSlots = fitErr ? null : palletFloorSlots(spec, T)
     const itemOf = (g: G) => allLines.find(l => l.item.id === g.meta.itemId)?.item
+    const hasRem = (g: G) => { const cpp = itemOf(g)?.perPallet; return !!cpp && g.count % cpp > 0 }   // có phần lẻ (vào pallet gộp)
     // Hàng nhẹ: mặc định rải thùng lên nóc pallet ("lên nóc" chỉ có nghĩa khi có pallet làm nền).
     // Chuyến bật "Hàng nhẹ đóng pallet" ⇒ đóng pallet như hàng khác: đủ thùng thì pallet chẵn,
     // phần lẻ dồn chung pallet gộp với phần lẻ các mã khác của đơn (luật pallet gộp của lõi).
@@ -211,6 +213,7 @@ export function computeTrip(input: TripInput): TripResult {
           label: mixed ? pg.label : `${src.label}${ownId || pg.key.endsWith('|plt') ? ' (pallet lẻ)' : ''}`,
           orderName: pg.doLabel, itemId: src?.meta.itemId ?? null, isPallet: true,
           colorKey: src?.meta.itemId ?? `mix|${pg.doKey}`,
+          ...(mixed ? { holds: toPal.filter(g => g.doKey === pg.doKey && !ownLight.has(g) && hasRem(g)).map(g => g.meta.itemId!) } : {}),
         },
       }
     })

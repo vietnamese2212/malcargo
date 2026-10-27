@@ -126,7 +126,8 @@ export function buildCargo(plan: LoadPlan, meta: PlanGroupMeta[], colors: Map<st
       if (!e) return
       const dim = focus != null && focus.size > 0 && !focus.has(gi)
       for (const mat of e.mats) {
-        mat.transparent = dim; mat.opacity = dim ? 0.1 : 1; mat.depthWrite = !dim; mat.needsUpdate = true
+        // mờ vừa đủ thấy khối xung quanh — biết khối đang soi nằm trên / cạnh cái gì
+        mat.transparent = dim; mat.opacity = dim ? 0.2 : 1; mat.depthWrite = !dim; mat.needsUpdate = true
       }
       for (const p of e.perBox) p.mesh.castShadow = !dim
     })

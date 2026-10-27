@@ -15,17 +15,31 @@ export function tint(hex: string, kraft = 0.32): string {
   return '#' + c.map(v => v.toString(16).padStart(2, '0')).join('')
 }
 
-/** colorKey → màu gốc, ổn định theo thứ tự xuất hiện. Pallet gộp nhiều mã luôn màu xám. */
-export function colorMap(meta: PlanGroupMeta[]): Map<string, string> {
-  const m = new Map<string, string>()
-  let i = 0
-  for (const g of meta) {
-    if (m.has(g.colorKey)) continue
-    if (g.colorKey.startsWith('mix|')) { m.set(g.colorKey, '#7d8794'); continue }
-    m.set(g.colorKey, PALETTE[i++ % PALETTE.length])
+const MIXED = '#7d8794'
+// Màu quen của các mã mẫu chung (chỉ số trong PALETTE) — giữ đúng màu người dùng đã thấy trước khi màu
+// thành cố định theo mã (27/10): Sữa chua 180 xanh dương, Thạch túi cam, Sữa 180 xanh ngọc, Sữa 110 tím…
+const SAMPLE_HOME: Record<string, number> = { SCU180: 0, TUI110: 1, ST180: 2, ST110: 3, C100: 4, C85: 5, TH170: 7 }
+const norm = (code: string) => code.trim().toUpperCase().replace(/^MAU-/, '')
+const hash = (s: string) => { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) } return h >>> 0 }
+
+/**
+ * id mã hàng → màu gốc, CỐ ĐỊNH theo MÃ — không theo thứ tự xếp, xe hay cách chở: đổi gì trên chuyến
+ * thì thùng / pallet của mã vẫn giữ màu, mắt theo được nó đi đâu. "Màu nhà" của mã: mã mẫu theo bảng
+ * trên (bản "của tôi" sao từ mã mẫu — bỏ tiền tố MAU- — cùng màu mẫu); mã khác băm từ mã. Hai mã cùng
+ * chuyến trùng màu nhà: mã mẫu giữ màu, mã đến sau trong danh sách hàng của chuyến lấy màu trống kế tiếp.
+ * Pallet gộp nhiều mã luôn màu xám (không có trong map).
+ */
+export function itemColors(tripItems: { id: string; code: string }[]): Map<string, string> {
+  const isSample = (code: string) => SAMPLE_HOME[norm(code)] != null
+  const m = new Map<string, string>(), used = new Set<number>()
+  const list = [...new Map(tripItems.map(it => [it.id, it])).values()]
+  for (const it of [...list.filter(x => isSample(x.code)), ...list.filter(x => !isSample(x.code))]) {
+    let k = SAMPLE_HOME[norm(it.code)] ?? hash(norm(it.code) || it.id) % PALETTE.length
+    for (let n = 0; n < PALETTE.length && used.has(k); n++) k = (k + 1) % PALETTE.length
+    used.add(k); m.set(it.id, PALETTE[k])
   }
   return m
 }
 
 export const groupColor = (meta: PlanGroupMeta, colors: Map<string, string>) =>
-  tint(colors.get(meta.colorKey) ?? '#7d8794')
+  tint(colors.get(meta.colorKey) ?? MIXED)
