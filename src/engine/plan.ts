@@ -2,7 +2,7 @@
 // của SUPPLYC: xe xá xếp thẳng thùng; xe pallet gom hàng lên pallet trước, hàng nhẹ rải lên nóc
 // pallet (hoặc đóng pallet như hàng khác nếu chuyến bật vậy). File này THUẦN (không React) để chạy được trong Web Worker và trong bài kiểm.
 import {
-  computeLoadPlan, palletizeGroups, spreadOnTopOfPallets, palletFitError, palletsTooTall, cartonsPerLayer,
+  computeLoadPlan, palletizeGroups, spreadOnTopOfPallets, palletFitError, palletsTooTall,
   palletFloorSlots, type LoadGroup, type LoadPlan, type PalletSpec, type PalletizeInput,
 } from './loadPlan'
 import type { Item, PalletSettings, VehicleKind } from '../data/types'
@@ -56,69 +56,6 @@ export interface TripResult {
   warnings: string[]
 }
 
-/** Số pallet khi xếp các lớp hàng lẻ first-fit-decreasing dưới trần `budget` — cùng cách lõi gom pallet gộp. */
-function ffdCount(layers: number[], budget: number): number {
-  const pals: number[] = []
-  for (const h of [...layers].sort((a, b) => b - a)) {
-    const i = pals.findIndex(p => p + h <= budget)
-    if (i >= 0) pals[i] += h; else pals.push(h)
-  }
-  return pals.length
-}
-
-type SrcLayer = PalletLayer & { unknown?: boolean; light: boolean; kg: number; full: boolean }
-
-/**
- * Ruột từng khối pallet — lõi (palletizeGroups) chỉ trả CHIỀU CAO, ở đây dựng lại đúng cách lõi chia lớp:
- * pallet chẵn = quy cách chia lớp; phần lẻ mỗi bể của đơn: lớp cao trước, first-fit dưới trần, rồi cân cao
- * (LPT). Khoá = khoá khối của lõi. Lớp không tính được (thùng to hơn chân pallet) ⇒ khối đó không có ruột.
- */
-function palletContents(lines: { g: G; item: Item; pool: string }[], spec: PalletSpec): Map<string, SrcLayer[] | null> {
-  const out = new Map<string, SrcLayer[] | null>()
-  const budget = spec.h - spec.baseH
-  const layersOf = (g: G, item: Item, count: number): SrcLayer[] => {
-    const per = cartonsPerLayer(spec, g)
-    const one = { itemId: item.id, l: g.l, w: g.w, light: item.light, kg: item.kg ?? 0 }
-    if (!(per > 0) || !(g.h > 0)) return [{ ...one, h: budget > 0 ? budget : spec.h, n: count, unknown: true, full: false }]
-    const ls: SrcLayer[] = []
-    for (let left = count; left > 0; left -= per) ls.push({ ...one, h: g.h, n: Math.min(left, per), full: left >= per })
-    return ls
-  }
-  const byDo = new Map<string, typeof lines>()
-  for (const x of lines) { const a = byDo.get(x.g.doKey); if (a) a.push(x); else byDo.set(x.g.doKey, [x]) }
-  for (const [doKey, ls] of byDo) {
-    const pools = new Map<string, SrcLayer[]>()
-    for (const { g, item, pool } of ls) {
-      const cpp = item.perPallet
-      if (!cpp) continue
-      const full = Math.floor(g.count / cpp), rem = g.count - full * cpp
-      if (full > 0) { const fl = layersOf(g, item, cpp); out.set(`${g.key}|full`, fl.some(x => x.unknown) ? null : fl) }
-      if (rem > 0) pools.set(pool, [...(pools.get(pool) ?? []), ...layersOf(g, item, rem)])
-    }
-    for (const [pool, layerList] of pools) {
-      const budgetOk = (x: { h: number }, ly: SrcLayer) => x.h + ly.h <= budget
-      layerList.sort((a, b) => b.h - a.h)
-      let pals: { h: number; ls: SrcLayer[] }[] = []
-      for (const ly of layerList) {
-        const p = pals.find(x => budgetOk(x, ly))
-        if (p) { p.h += ly.h; p.ls.push(ly) } else pals.push({ h: ly.h, ls: [ly] })
-      }
-      if (pals.length > 1) {
-        const bal = pals.map(() => ({ h: 0, ls: [] as SrcLayer[] }))
-        let ok = true
-        for (const ly of layerList) {
-          const p = bal.filter(x => budgetOk(x, ly)).sort((a, b) => a.h - b.h)[0]
-          if (!p) { ok = false; break }
-          p.h += ly.h; p.ls.push(ly)
-        }
-        if (ok) pals = bal.sort((a, b) => b.h - a.h)
-      }
-      pals.forEach((p, i) => out.set(`${doKey}|mixed|${pool}|${i}`, p.ls.some(x => x.unknown) ? null : p.ls))
-    }
-  }
-  return out
-}
-
 const toSpec = (p: PalletSettings): PalletSpec =>
   ({ l: p.l, w: p.w, h: p.maxH, baseH: p.baseH, baseColor: '#a07a4e', weightKg: p.kg })
 
@@ -161,7 +98,7 @@ export function orderTotals(lines: { item: Item; qty: number }[], pallet: Pallet
   if (cartons > 0 && palletKnown) {
     const res = palletizeGroups(lines.filter(l => l.qty > 0).map(({ item, qty }) => ({
       key: item.id, label: item.name, doKey: 'o', doLabel: 'o', cartons: qty,
-      cartonsPerPallet: item.perPallet, isPalletCarrier: false, weightKg: item.kg,
+      cartonsPerPallet: item.perPallet, layers: item.maxLayers, isPalletCarrier: false, weightKg: item.kg,
       carton: { l: item.l, w: item.w, h: item.h }, assumed: false, unitless: false,
     })), toSpec(pallet))
     pallets = res.palletCount
@@ -221,40 +158,16 @@ export function computeTrip(input: TripInput): TripResult {
     if (fitErr) errors.push(fitErr)
     floorSlots = fitErr ? null : palletFloorSlots(spec, T)
     const itemOf = (g: G) => allLines.find(l => l.item.id === g.meta.itemId)?.item
-    const hasRem = (g: G) => { const cpp = itemOf(g)?.perPallet; return !!cpp && g.count % cpp > 0 }   // có phần lẻ (vào pallet gộp)
     // Hàng nhẹ: mặc định rải thùng lên nóc pallet ("lên nóc" chỉ có nghĩa khi có pallet làm nền).
-    // Chuyến bật "Hàng nhẹ đóng pallet" ⇒ đóng pallet như hàng khác: đủ thùng thì pallet chẵn,
-    // phần lẻ dồn chung pallet gộp với phần lẻ các mã khác của đơn (luật pallet gộp của lõi).
+    // Chuyến bật "Hàng nhẹ đóng pallet" ⇒ đóng pallet như hàng khác (luật pallet của lõi: pallet chẵn,
+    // phần lẻ tự đủ pallet thì pallet riêng, còn lại pallet gộp nặng dưới nhẹ trên).
     const hasBase = cartons.some(g => !g.onTop)
     const top = cartons.filter(g => g.onTop && hasBase && !input.lightInPallet)
     const toPal = cartons.filter(g => !top.includes(g))
-    // …nhưng phần lẻ của MỘT mã nhẹ đã tự đủ pallet (tách ra không làm tăng số pallet của đơn — vd 200
-    // túi / 216) thì để pallet RIÊNG của mã đó, không trộn lớp với hàng khác; gộp chỉ khi bớt được pallet.
-    const ownLight = new Set<G>()
-    if (input.lightInPallet) {
-      const budget = spec.h - spec.baseH
-      const layersOf = (g: G): number[] => {   // lớp phần lẻ — cùng cách lõi tính pallet gộp
-        const cpp = itemOf(g)?.perPallet, rem = cpp ? g.count % cpp : 0
-        if (!rem) return []
-        const per = cartonsPerLayer(spec, g)
-        return per > 0 ? Array<number>(Math.ceil(rem / per)).fill(g.h) : [budget]
-      }
-      const height = (g: G) => layersOf(g).reduce((s, h) => s + h, 0)
-      for (const doKey of new Set(toPal.map(g => g.doKey))) {
-        const mine = toPal.filter(g => g.doKey === doKey)
-        const need = ffdCount(mine.flatMap(layersOf), budget)
-        for (const g of mine.filter(x => x.onTop && height(x) > 0).sort((a, b) => height(b) - height(a))) {
-          const sep = mine.filter(x => ownLight.has(x) || x === g)
-          const n = sep.reduce((s, x) => s + ffdCount(layersOf(x), budget), 0) + ffdCount(mine.filter(x => !sep.includes(x)).flatMap(layersOf), budget)
-          if (n <= need) ownLight.add(g)
-        }
-      }
-    }
     const items: PalletizeInput[] = toPal.map(g => ({
       key: g.key, label: g.label, doKey: g.doKey, doLabel: g.doLabel, cartons: g.count,
-      cartonsPerPallet: itemOf(g)?.perPallet ?? null,
+      cartonsPerPallet: itemOf(g)?.perPallet ?? null, layers: itemOf(g)?.maxLayers ?? null,
       isPalletCarrier: false, weightKg: g.weightKg, carton: { l: g.l, w: g.w, h: g.h }, assumed: false, unitless: false,
-      remPool: ownLight.has(g) ? { key: `own:${g.meta.itemId}`, label: g.label } : undefined,
     }))
     const res = palletizeGroups(items, spec)
     palletsUsed = res.palletCount
@@ -262,32 +175,24 @@ export function computeTrip(input: TripInput): TripResult {
     if (missing.length)
       warnings.push(`Chưa khai số thùng/pallet: ${[...new Set(missing.map(g => g.label))].join(', ')} — đang tạm tính mỗi mã 1 pallet.`)
     const srcByKey = new Map(toPal.map(g => [g.key, g]))
-    const contents = palletContents(toPal.flatMap(g => {
-      const item = itemOf(g)
-      return item ? [{ g, item, pool: ownLight.has(g) ? `own:${g.meta.itemId}` : '' }] : []
-    }), spec)
     const palGroups: G[] = res.groups.map(pg => {
-      // pallet lẻ riêng của một mã: khoá `<đơn>|mixed|own:<mã>|<n>` — mang tên + màu của mã
-      const ownId = /\|mixed\|own:(.+)\|\d+$/.exec(pg.key)?.[1]
-      const src = ownId ? toPal.find(g => g.doKey === pg.doKey && g.meta.itemId === ownId) : srcByKey.get(pg.key.replace(/\|(full|plt)$/, ''))
+      // ruột từ lõi (lớp thùng thật, dưới lên) — khoá dòng hàng ⇒ mã hàng
+      const ls: PalletLayer[] | undefined = pg.contents?.map(c => ({ itemId: srcByKey.get(c.key)?.meta.itemId ?? c.key, l: c.l, w: c.w, h: c.h, n: c.n }))
+      const ids = [...new Set((ls ?? []).map(x => x.itemId))]
+      // pallet chẵn `|full` / pallet lẻ riêng `|plt` của 1 mã; khối gộp mà ruột chỉ 1 mã cũng mang tên + màu mã đó
+      const src = srcByKey.get(pg.key.replace(/\|(full|plt)$/, '')) ?? (ids.length === 1 ? toPal.find(g => g.doKey === pg.doKey && g.meta.itemId === ids[0]) : undefined)
       const mixed = !src
-      // ruột chỉ dùng khi khớp đúng chiều cao lõi trả về; lệch (lõi đổi cách chia) ⇒ vẽ khối quấn màng như cũ
-      const src_ = contents.get(pg.key)
-      const ls = src_ && Math.abs(spec.baseH + src_.reduce((s, x) => s + x.h, 0) - pg.h) < 0.5
-        // nặng dưới, nhẹ trên; trong đó lớp đủ trước lớp thiếu, thùng nặng trước
-        ? [...src_].sort((a, b) => Number(a.light) - Number(b.light) || Number(b.full) - Number(a.full) || b.kg - a.kg)
-        : null
-      const mix = mixed && ls ? [...new Set(ls.map(x => x.itemId))].map(id => ({
+      const mix = mixed && ls ? ids.map(id => ({
         itemId: id, label: allLines.find(l => l.item.id === id)?.item.name ?? id, n: ls.filter(x => x.itemId === id).reduce((s, x) => s + x.n, 0),
       })) : undefined
       return {
         ...pg,
         meta: {
-          label: mixed ? pg.label : `${src.label}${ownId || pg.key.endsWith('|plt') ? ' (pallet lẻ)' : ''}`,
+          label: src && srcByKey.has(pg.key.replace(/\|(full|plt)$/, '')) ? `${src.label}${pg.key.endsWith('|plt') ? ' (pallet lẻ)' : ''}` : pg.label,
           orderName: pg.doLabel, itemId: src?.meta.itemId ?? null, isPallet: true,
           colorKey: src?.meta.itemId ?? `mix|${pg.doKey}`,
-          ...(ls ? { layers: ls.map(({ itemId, l, w, h, n }) => ({ itemId, l, w, h, n })) } : {}),
-          ...(mixed ? { holds: mix ? mix.map(x => x.itemId) : toPal.filter(g => g.doKey === pg.doKey && !ownLight.has(g) && hasRem(g)).map(g => g.meta.itemId!), mix } : {}),
+          ...(ls ? { layers: ls } : {}),
+          ...(mixed ? { holds: mix ? mix.map(x => x.itemId) : toPal.filter(g => g.doKey === pg.doKey).map(g => g.meta.itemId!), mix } : {}),
         },
       }
     })

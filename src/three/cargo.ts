@@ -18,21 +18,43 @@ export interface CargoHandle {
 interface Part { mesh: THREE.InstancedMesh; cum: number[]; mats: THREE.Material[]; itemId?: string }
 interface GroupMeshes { steps: number[]; parts: Part[] }
 
-/** Thùng trên mặt pallet: từng lớp lát lưới theo hướng xếp được nhiều thùng nhất, căn giữa chân pallet.
+/** Lưới cho `cap` thùng cl×cw trên chân L×W: bắt đầu từ lưới vừa khít, thiếu thì nới thêm hàng / cột phía
+ *  chờm ÍT nhất (mẫu xếp pallet thật được 10 thùng 420×255/lớp — lưới thẳng chỉ 8 — nhờ chờm mép vài cm). */
+function gridFor(L: number, W: number, cl: number, cw: number, cap: number) {
+  let nx = Math.max(1, Math.floor(L / cl)), ny = Math.max(1, Math.floor(W / cw))
+  while (nx * ny < cap) {
+    if (Math.max(0, (nx + 1) * cl - L) + Math.max(0, ny * cw - W) <= Math.max(0, nx * cl - L) + Math.max(0, (ny + 1) * cw - W)) nx++
+    else ny++
+  }
+  return { nx, ny, cl, cw, over: Math.max(0, nx * cl - L) + Math.max(0, ny * cw - W) }
+}
+
+/** Thùng trên mặt pallet, từng lớp từ dưới lên, căn giữa chân pallet. Mỗi mã một kiểu lưới đủ chứa lớp đủ
+ *  của nó: hướng chờm ít nhất, ngang nhau thì BÁM HƯỚNG LỚP DƯỚI (không lớp ngang lớp dọc vắt chéo nhau).
  *  Lớp thiếu nằm DƯỚI lớp khác thì rải đều ra các ô (làm chân đỡ), lớp thiếu trên cùng thì xếp sát nhau. */
 function palletCartons(b: PlacedBox, baseH: number, layers: PalletLayer[]) {
   const out: { itemId: string; x: number; y: number; z: number; l: number; w: number; h: number }[] = []
+  const capOf = new Map<string, number>()   // thùng / lớp đủ của từng mã trên pallet này
+  for (const ly of layers) capOf.set(ly.itemId, Math.max(capOf.get(ly.itemId) ?? 0, ly.n))
   let z = b.z + baseH
+  let prev: { fx: number; fy: number } | null = null
   layers.forEach((ly, li) => {
-    const a = Math.floor(b.l / ly.l) * Math.floor(b.w / ly.w), r = Math.floor(b.l / ly.w) * Math.floor(b.w / ly.l)
-    const [cl, cw] = a >= r ? [ly.l, ly.w] : [ly.w, ly.l]
-    const nx = Math.max(1, Math.floor(b.l / cl)), ny = Math.max(1, Math.floor(b.w / cw)), per = nx * ny
-    const ox = b.x + (b.l - nx * cl) / 2, oy = b.y + (b.w - ny * cw) / 2
-    const spread = ly.n < per && li < layers.length - 1
+    const cap = capOf.get(ly.itemId)!
+    const g = [gridFor(b.l, b.w, ly.l, ly.w, cap), gridFor(b.l, b.w, ly.w, ly.l, cap)]
+      .map(o => ({ ...o, d: prev ? Math.abs(o.nx * o.cl - prev.fx) + Math.abs(o.ny * o.cw - prev.fy) : 0 }))
+      .sort((a, c) => a.over - c.over || a.d - c.d || a.nx * a.ny - c.nx * c.ny)[0]
+    const { nx, ny, cl, cw } = g
+    const per = nx * ny
+    // lớp thiếu trên cùng: chỉ chiếm số hàng cần, căn giữa — khối gọn, không loe ra mép
+    const top = ly.n < cap && li === layers.length - 1
+    const rows = top ? Math.ceil(ly.n / nx) : ny
+    const ox = b.x + (b.l - nx * cl) / 2, oy = b.y + (b.w - rows * cw) / 2
+    const spread = ly.n < per && !top
     for (let k = 0; k < Math.min(ly.n, per); k++) {
       const c = spread ? Math.floor((k * per) / ly.n) : k
       out.push({ itemId: ly.itemId, x: ox + (c % nx) * cl, y: oy + Math.floor(c / nx) * cw, z, l: cl, w: cw, h: ly.h })
     }
+    prev = { fx: nx * cl, fy: ny * cw }
     z += ly.h
   })
   return out
