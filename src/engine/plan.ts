@@ -1,6 +1,6 @@
 // Ghép dữ liệu của người dùng (xe · mã hàng · đơn) vào thuật toán xếp — cùng trình tự với màn 3D
 // của SUPPLYC: xe xá xếp thẳng thùng; xe pallet gom hàng lên pallet trước, hàng nhẹ rải lên nóc
-// pallet. File này THUẦN (không React) để chạy được trong Web Worker và trong bài kiểm.
+// pallet (hoặc đóng pallet riêng nếu mã khai vậy). File này THUẦN (không React) để chạy được trong Web Worker và trong bài kiểm.
 import {
   computeLoadPlan, palletizeGroups, spreadOnTopOfPallets, palletFitError, palletsTooTall,
   palletFloorSlots, type LoadGroup, type LoadPlan, type PalletSpec, type PalletizeInput,
@@ -90,6 +90,7 @@ export function orderTotals(lines: { item: Item; qty: number }[], pallet: Pallet
       key: item.id, label: item.name, doKey: 'o', doLabel: 'o', cartons: qty,
       cartonsPerPallet: item.perPallet, isPalletCarrier: false, weightKg: item.kg,
       carton: { l: item.l, w: item.w, h: item.h }, assumed: false, unitless: false,
+      remPool: item.light && item.ownPallet ? { key: `own:${item.id}`, label: item.name } : undefined,
     })), toSpec(pallet))
     pallets = res.palletCount
   }
@@ -146,28 +147,34 @@ export function computeTrip(input: TripInput): TripResult {
     const fitErr = palletFitError(spec, T)
     if (fitErr) errors.push(fitErr)
     floorSlots = fitErr ? null : palletFloorSlots(spec, T)
-    // "Hàng nhẹ lên nóc" chỉ có nghĩa khi có hàng khác làm nền
-    const hasBase = cartons.some(g => !g.onTop)
-    const top = cartons.filter(g => g.onTop && hasBase)
-    const toPal = cartons.filter(g => !(g.onTop && hasBase))
+    const itemOf = (g: G) => allLines.find(l => l.item.id === g.meta.itemId)?.item
+    // Hàng nhẹ: mặc định rải thùng lên nóc pallet; mã khai "Pallet riêng" thì đóng pallet của
+    // riêng mã đó (phần lẻ không gộp với mã khác). "Lên nóc" chỉ có nghĩa khi có pallet làm nền.
+    const own = (g: G) => g.onTop && itemOf(g)?.ownPallet === true
+    const hasBase = cartons.some(g => !g.onTop || own(g))
+    const top = cartons.filter(g => g.onTop && !own(g) && hasBase)
+    const toPal = cartons.filter(g => !top.includes(g))
     const items: PalletizeInput[] = toPal.map(g => ({
       key: g.key, label: g.label, doKey: g.doKey, doLabel: g.doLabel, cartons: g.count,
-      cartonsPerPallet: orders.flatMap(o => o.lines).find(l => l.item.id === g.meta.itemId)?.item.perPallet ?? null,
+      cartonsPerPallet: itemOf(g)?.perPallet ?? null,
       isPalletCarrier: false, weightKg: g.weightKg, carton: { l: g.l, w: g.w, h: g.h }, assumed: false, unitless: false,
+      remPool: own(g) ? { key: `own:${g.meta.itemId}`, label: g.label } : undefined,
     }))
     const res = palletizeGroups(items, spec)
     palletsUsed = res.palletCount
-    const missing = toPal.filter(g => !orders.flatMap(o => o.lines).find(l => l.item.id === g.meta.itemId)?.item.perPallet)
+    const missing = toPal.filter(g => !itemOf(g)?.perPallet)
     if (missing.length)
       warnings.push(`Chưa khai số thùng/pallet: ${[...new Set(missing.map(g => g.label))].join(', ')} — đang tạm tính mỗi mã 1 pallet.`)
     const srcByKey = new Map(toPal.map(g => [g.key, g]))
     const palGroups: G[] = res.groups.map(pg => {
-      const src = srcByKey.get(pg.key.replace(/\|(full|plt)$/, ''))
+      // Pallet lẻ của mã "Pallet riêng": khoá `<đơn>|mixed|own:<mã>|<n>` — vẫn mang tên + màu của mã
+      const ownId = /\|mixed\|own:(.+)\|\d+$/.exec(pg.key)?.[1]
+      const src = ownId ? toPal.find(g => g.doKey === pg.doKey && g.meta.itemId === ownId) : srcByKey.get(pg.key.replace(/\|(full|plt)$/, ''))
       const mixed = !src
       return {
         ...pg,
         meta: {
-          label: mixed ? pg.label : `${src.label}${pg.key.endsWith('|plt') ? ' (pallet lẻ)' : ''}`,
+          label: mixed ? pg.label : `${src.label}${ownId || pg.key.endsWith('|plt') ? ' (pallet lẻ)' : ''}`,
           orderName: pg.doLabel, itemId: src?.meta.itemId ?? null, isPallet: true,
           colorKey: src?.meta.itemId ?? `mix|${pg.doKey}`,
         },

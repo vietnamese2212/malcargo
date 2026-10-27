@@ -66,6 +66,27 @@ for (const [name, truck, orders] of cases) {
   invariants('hàng nhẹ thùng to', r)
   ok(r.plan.placedCount === r.plan.totalCount, `hàng nhẹ thùng to: chỉ xếp ${r.plan.placedCount}/${r.plan.totalCount}`)
 }
+// Hàng nhẹ trên xe pallet: "Pallet riêng" ⇒ thành pallet của chính mã đó (không thùng rời nào);
+// "Lên nóc pallet" ⇒ rải thùng lên nóc các pallet khác
+{
+  const tui = items['adm-i-tui110']
+  const os = own => [{ id: 'z', name: 'Đơn Z', place: '', lines: [
+    { item: items['adm-i-scu180'], qty: 110 }, { item: items['adm-i-c100'], qty: 120 }, { item: { ...tui, ownPallet: own }, qty: 200 },
+  ] }]
+  const a = E.computeTrip({ truck: trucks['adm-v-p8t'], orders: os(true), pallet: E.DEFAULT_PALLET_SETTINGS })
+  invariants('nhẹ · pallet riêng', a)
+  const rowA = a.count.filter(c => a.meta[c.group].itemId === tui.id)
+  ok(rowA.length === 1 && rowA[0].unit === 'pallet' && rowA[0].placed === 1 && !rowA[0].onTopOfOthers,
+    `nhẹ · pallet riêng: thạch túi phải là 1 pallet riêng, được ${JSON.stringify(rowA.map(c => [c.label, c.unit, c.placed]))}`)
+  console.log(`• Nhẹ · pallet riêng (xe pallet 8 tấn) — ${a.count.map(c => `${c.label} ${c.placed} ${c.unit}`).join(' · ')}`)
+  const b = E.computeTrip({ truck: trucks['adm-v-p8t'], orders: os(false), pallet: E.DEFAULT_PALLET_SETTINGS })
+  invariants('nhẹ · lên nóc', b)
+  const rowB = b.count.filter(c => b.meta[c.group].itemId === tui.id)
+  // (200 túi trên nóc chỉ 2 pallet nền: chồng ≤ 8 lớp nên còn dư vài thùng — chính là lý do nên chọn "Pallet riêng")
+  ok(rowB.length === 1 && rowB[0].unit === 'thùng' && rowB[0].onTopOfOthers && rowB[0].placed > 0,
+    `nhẹ · lên nóc: thạch túi phải rải thùng lên nóc, được ${JSON.stringify(rowB.map(c => [c.label, c.unit, c.placed]))}`)
+  console.log(`• Nhẹ · lên nóc (xe pallet 8 tấn) — ${b.count.map(c => `${c.label} ${c.placed}/${c.total} ${c.unit}`).join(' · ')}`)
+}
 const t0 = performance.now()
 const sug = E.suggestTruck(sample, E.DEFAULT_PALLET_SETTINGS, E.ADMIN_VEHICLES.filter(v => v.kind === 'loose'))
 console.log(`• Gợi ý xe cho chuyến mẫu: ${sug} (${Math.round(performance.now() - t0)} ms)`)

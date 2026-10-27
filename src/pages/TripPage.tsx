@@ -299,7 +299,7 @@ export default function TripPage({ id }: { id: string }) {
                               <span className="num min-w-0 flex-1 text-[12px] leading-snug text-slate-600">
                                 <span className="whitespace-nowrap">{fmtDims(it.l, it.w, it.h)} mm</span>
                                 {it.kg != null && <> · <span className="whitespace-nowrap">{fmtDec(it.kg, 2)} kg</span></>}
-                                {it.light && <Badge tone="amber" className="ml-1">nhẹ</Badge>}
+                                {it.light && <Badge tone="amber" className="ml-1">{kind !== 'pallet' ? 'nhẹ' : it.ownPallet ? 'nhẹ · pallet riêng' : 'nhẹ · lên nóc'}</Badge>}
                               </span>
                               <div className="flex shrink-0 items-center">
                               <IconButton label="Bớt 1" onClick={() => setQty(o, l.itemId, l.qty - 1)} disabled={l.qty <= 0}><Minus size={15} /></IconButton>
@@ -968,6 +968,13 @@ function ItemEditor({ it, palletMode, onEdit, onRemove }: { it: Item; palletMode
           : <span />}
       </div>
       <Switch checked={it.light} onChange={v => onEdit({ light: v })} label="Hàng nhẹ, cho lên trên hàng khác" />
+      {palletMode && it.light && (
+        <div>
+          <span className="mb-1 block text-[12px] font-medium text-slate-600">Trên xe pallet</span>
+          <Segmented value={it.ownPallet ? 'own' : 'top'} onChange={v => onEdit({ ownPallet: v === 'own' })}
+            options={[{ value: 'top', label: 'Lên nóc pallet' }, { value: 'own', label: 'Pallet riêng' }]} />
+        </div>
+      )}
       <div className="flex items-center justify-between gap-2">
         <span className="text-[12px] text-slate-600">{it.owner === 'admin' ? 'Mã mẫu: sửa số nào app tự tạo mã của bạn.' : `Mã ${it.code}: sửa ở đây là sửa cho mọi đơn dùng mã này.`}</span>
         <Button variant="danger" onClick={onRemove}><X size={15} />Bỏ khỏi đơn</Button>
