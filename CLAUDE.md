@@ -22,7 +22,8 @@ Ghi chú nội bộ của chủ dự án (không nằm trong repo công khai): @
 ## Thuật toán xếp (`src/engine/`)
 - `loadPlan.ts` = bản chép nguyên thuật toán xếp của SUPPLYC. Luật xếp theo quy trình "đếm chân xe xá": xếp bằng mặt (một loại hàng một chiều cao), thùng thừa nổi trên khối, hết loại này mới tới loại khác, khối trong cao thấp dần ra cửa, xe nhiều điểm giao xếp từng đơn.
 - **Không sửa lõi ở đây.** Sửa luật xếp ở bản gốc rồi chép lại file sang → `npm test`. Chỗ nào cần khác thì vá ở lớp ghép `plan.ts`.
-- Lỗ hổng đã biết: hàng nhẹ (`onTop`) có thùng TO hơn thùng nền, nằm ở đơn xếp SAU ⇒ lõi bỏ lại toàn bộ dù xe còn chỗ. `plan.ts` đang dự phòng: xếp lại như hàng thường + dòng nhắc.
+- Luật 8 (27/10): mọi chỗ đặt thùng LÊN MẶT khối khác (hàng nhẹ, hàng lên nóc pallet) đi qua `levelFill` — lát kín kiểu rót nước, không tháp lẻ; pallet gộp chia cho cao đều. Ca "hàng nhẹ thùng to ở đơn xếp sau" lõi đã tự xếp được; lớp dự phòng trong `plan.ts` vẫn giữ cho chắc.
+- Bộ đo hình khối: `node scripts/out/q.mjs` (gitignore — chép lại từ phiên trước nếu mất) — ma trận xe × đơn, đếm tháp / treo / vực / chồng lấn / pallet lùn.
 - Pipeline: xe xá → `computeLoadPlan`; xe pallet → `palletizeGroups` rồi hàng nhẹ `spreadOnTopOfPallets`. Đơn GIAO TRƯỚC xếp SAU CÙNG (sát cửa). Bảng đếm chân = gom thùng theo (x,y) → "n chân × L lớp". Gợi ý xe = xe CÙNG KIỂU nhỏ nhất (thể tích) chở hết + không vượt tải.
 - Tính trong Web Worker (`worker.ts`); three.js chỉ tải khi màn 3D mở (`src/three/LazyScene.tsx`) — **đừng import `three` vào file nằm ngoài `src/three/`** trừ qua LazyScene (sẽ kéo ~550 KB vào gói chính).
 

@@ -57,14 +57,14 @@ for (const [name, truck, orders] of cases) {
   for (const l of lines) console.log('    ' + l)
   for (const w of [...r.errors, ...r.warnings]) console.log('    ! ' + w)
 }
-// Ca dự phòng: hàng nhẹ thùng to ở đơn xếp sau — phải xếp đủ (xe 5 tấn còn rộng)
+// Hàng nhẹ thùng TO hơn thùng nền, ở đơn xếp sau — phải xếp đủ (xe 5 tấn còn rộng). Từ 27/10
+// lõi tự lát phẳng được lên nóc (levelFill) nên không cần lớp dự phòng của plan.ts nữa.
 {
   const big = { ...items['adm-i-tui110'], l: 500, w: 350, h: 300 }
   const os = sample.map(o => ({ ...o, lines: o.lines.map(l => (l.item.id === 'adm-i-tui110' ? { ...l, item: big } : l)) }))
   const r = E.computeTrip({ truck: trucks['adm-v-5t'], orders: os, pallet: E.DEFAULT_PALLET_SETTINGS })
   invariants('hàng nhẹ thùng to', r)
   ok(r.plan.placedCount === r.plan.totalCount, `hàng nhẹ thùng to: chỉ xếp ${r.plan.placedCount}/${r.plan.totalCount}`)
-  ok(r.warnings.some(w => w.includes('Không đặt được lên trên')), 'hàng nhẹ thùng to: thiếu dòng nhắc đã xếp như hàng thường')
 }
 const t0 = performance.now()
 const sug = E.suggestTruck(sample, E.DEFAULT_PALLET_SETTINGS, E.ADMIN_VEHICLES.filter(v => v.kind === 'loose'))
