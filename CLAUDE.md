@@ -29,7 +29,7 @@ Ghi chú nội bộ của chủ dự án (không nằm trong repo công khai): @
 
 ## Đồ hoạ 3D (`src/three/`)
 - Xe dựng bằng code theo lòng thùng khai (`truckModel.ts`): cabin đầu bằng kính ngả, tấm chắn gió khi thùng cao hơn cabin, bánh đôi sau, trục kép khi dài > 7 m, khung nhôm, sàn gỗ, cửa sau mở. Hệ trục: X dọc xe (0 = vách đầu thùng, cabin ở X âm), Y lên, Z ngang. Thuật toán: x dọc · y RỘNG · z CAO (đổi trục khi vẽ).
-- Hàng (`cargo.ts`): thùng carton InstancedMesh mỗi mã (băng keo, nhãn, màu mã pha giấy kraft — `colors.ts`); pallet = ván + 9 chân gỗ + khối quấn màng.
+- Hàng (`cargo.ts`): thùng carton InstancedMesh mỗi mã (băng keo, nhãn, màu mã pha giấy kraft — `colors.ts`); pallet = ván + 9 chân gỗ + **các lớp thùng thật** của từng mã (`PlanGroupMeta.layers`, nặng dưới nhẹ trên). Lõi chỉ trả chiều cao pallet ⇒ `palletContents` trong `plan.ts` dựng lại ruột đúng cách lõi chia lớp, chỉ dùng khi khớp chiều cao lõi (lệch ⇒ vẽ khối quấn màng như cũ). Pallet gộp kể ruột ở bảng đếm chân (`mix`).
 - Màu CỐ ĐỊNH theo MÃ (`itemColors`; mã mẫu có màu ghim sẵn), KHÔNG theo thứ tự xếp — bật công tắc / đổi xe / đổi số không được làm đổi màu hàng. Bấm dòng hàng / dải số của đơn ⇒ chỉ khối của nó trên xe (pallet gộp chứa phần lẻ của mã cũng sáng — `PlanGroupMeta.holds`), vẫn chỉ đúng nó khi sơ đồ tính lại.
 - Góc nhìn căn theo khối cầu bao xe (`goTo` trong `TruckScene.tsx`) — xe nào, màn nào cũng lọt trọn. "Ẩn vách" ẩn cả cột + vòm nóc phía người xem.
 

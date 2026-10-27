@@ -214,11 +214,13 @@ export default function TripPage({ id }: { id: string }) {
     const rows = r.count.filter(c => selFocus.has(c.group))
     const pal = rows.filter(c => c.unit === 'pallet')
     const mine = pal.filter(c => !sel.itemId || r.meta[c.group].itemId === sel.itemId).reduce((s, c) => s + c.placed, 0)
-    const shared = sel.itemId ? pal.filter(c => r.meta[c.group].itemId == null).reduce((s, c) => s + c.placed, 0) : 0
+    const sharedRows = sel.itemId ? pal.filter(c => r.meta[c.group].itemId == null) : []
+    const shared = sharedRows.reduce((s, c) => s + c.placed, 0)
+    const sharedN = sharedRows.reduce((s, c) => s + (r.meta[c.group].mix?.find(x => x.itemId === sel.itemId)?.n ?? 0) * c.placed, 0)
     const loose = rows.filter(c => c.unit === 'thùng')
     const n = loose.reduce((s, c) => s + c.placed, 0)
     const what = [
-      mine ? `${fmtInt(mine)} pallet` : '', shared ? `trong ${fmtInt(shared)} pallet gộp` : '',
+      mine ? `${fmtInt(mine)} pallet` : '', shared ? `${sharedN ? `${fmtInt(sharedN)} thùng ` : ''}trong ${fmtInt(shared)} pallet gộp` : '',
       n ? `${fmtInt(n)} thùng${loose.some(c => c.onTopOfOthers) ? ' (có thùng trên nóc)' : ''}` : '',
     ].filter(Boolean).join(' + ')
     const x0 = Math.min(...boxes.map(b => b.x)), x1 = Math.max(...boxes.map(b => b.x + b.l))
@@ -254,7 +256,7 @@ export default function TripPage({ id }: { id: string }) {
             onLightIn={v => upsertTrip({ ...trip, lightInPallet: v })} />
           <div className="relative min-h-0 flex-1">
             <Scene className="h-full w-full" truck={vehicle ? { l: vehicle.l, w: vehicle.w, h: vehicle.h, kind: vehicle.kind } : null}
-              plan={plan} meta={result?.meta} colors={colors} step={step} focus={shown} view={view} walls={walls} />
+              plan={plan} meta={result?.meta} colors={colors} step={step} focus={shown} focusItem={sel?.itemId ?? null} view={view} walls={walls} />
 
             <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between gap-2">
               <TitleBlock r={r} busy={busy} error={error} hasCargo={hasCargo} vehicle={vehicle} tripName={trip.name}
@@ -1062,11 +1064,13 @@ function CountSheet({ r, colors, focus, onFocus, tripName, vehicle, onToast }: {
   const stackText = (c: TripResult['count'][number]) => c.unit === 'pallet'
     ? `${c.placed} pallet`
     : c.stacks.map(([n, l]) => `${n} chân × ${l} lớp`).join(' + ')
+  // ruột pallet gộp: "gồm 40 thùng Sữa 180ml x48 · 40 thùng Thạch túi 110ml x24"
+  const mixText = (c: TripResult['count'][number]) => c.mix?.map(x => `${fmtInt(x.n)} thùng ${x.label}`).join(' · ')
   const copy = async () => {
     const lines = [
       `${tripName} — ${vehicle.name}${vehicle.plate ? ` (${vehicle.plate})` : ''}, lòng thùng ${fmtDims(vehicle.l, vehicle.w, vehicle.h)} mm`,
       'Thứ tự xếp (từ trong cabin ra cửa):',
-      ...r.count.map((c, i) => `${i + 1}. ${c.label} [${c.orderName}]: ${stackText(c)} = ${c.placed}${c.placed < c.total ? `/${c.total}` : ''} ${c.unit}${c.onTopOfOthers ? ' (trên nóc hàng khác)' : ''}`),
+      ...r.count.map((c, i) => `${i + 1}. ${c.label} [${c.orderName}]: ${stackText(c)} = ${c.placed}${c.placed < c.total ? `/${c.total}` : ''} ${c.unit}${c.onTopOfOthers ? ' (trên nóc hàng khác)' : ''}${c.mix ? ` — mỗi pallet gồm ${mixText(c)}` : ''}`),
       `Tổng: ${fmtInt(r.plan.placedCount)}/${fmtInt(r.plan.totalCount)} · ${fmtKgShort(r.weightKg)} · thể tích ${fmtDec(r.plan.volumePct, 0)}%`,
     ]
     try { await navigator.clipboard.writeText(lines.join('\n')); onToast('Đã chép bảng đếm chân') }
@@ -1099,6 +1103,7 @@ function CountSheet({ r, colors, focus, onFocus, tripName, vehicle, onToast }: {
                 <span className="block text-sm font-semibold leading-snug text-slate-900">{c.label}</span>
                 <span className="block text-[13px] text-slate-600">{c.orderName}{c.onTopOfOthers && <Badge tone="amber" className="ml-1.5">trên nóc</Badge>}</span>
                 <span className="num mt-0.5 block text-[13px] font-medium text-slate-800">{stackText(c) || '—'}</span>
+                {c.mix && <span className="num mt-0.5 block break-words text-[12px] leading-snug text-slate-600">Gồm {mixText(c)}</span>}
               </span>
               <span className={cx('num text-right text-sm font-semibold', short ? 'text-red-700' : 'text-slate-900')}>
                 {fmtInt(c.placed)}{short && <span className="text-[13px]">/{fmtInt(c.total)}</span>}

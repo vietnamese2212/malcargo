@@ -33,6 +33,15 @@ function invariants(name, r) {
   }
   const sheet = r.count.reduce((s, c) => s + c.stacks.reduce((t, [n, l]) => t + n * l, 0), 0)
   ok(sheet === p.placed.length, `${name}: bảng đếm chân ${sheet} ≠ số đã xếp ${p.placed.length}`)
+  // xe pallet: khối pallet nào cũng có ruột (lớp thùng thật) — lõi đổi cách chia lớp mà plan.ts không theo
+  // thì ruột không khớp chiều cao, 3D lùi về khối quấn màng ⇒ phải báo ở đây
+  const pal = r.meta.map((m, gi) => ({ m, g: p.groups[gi] })).filter(x => x.m.isPallet)
+  if (pal.length && !r.errors.length) {
+    const inPal = pal.reduce((s, x) => s + (x.m.layers ?? []).reduce((a, l) => a + l.n, 0) * x.g.count, 0)
+    const loose = r.count.filter(c => c.unit === 'thùng').reduce((s, c) => s + c.total, 0)
+    ok(pal.every(x => x.m.layers?.length) && inPal + loose === r.totals.cartons,
+      `${name}: ruột pallet ${inPal} + thùng rời ${loose} ≠ ${r.totals.cartons} thùng (khối thiếu ruột: ${pal.filter(x => !x.m.layers).map(x => x.m.label).join(', ') || 'không'})`)
+  }
 }
 
 const items = Object.fromEntries(E.ADMIN_ITEMS.map(i => [i.id, i]))

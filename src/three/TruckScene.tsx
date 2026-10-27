@@ -18,6 +18,7 @@ export interface TruckSceneProps {
   colors?: Map<string, string>
   step?: number | null
   focus?: Set<number> | null
+  focusItem?: string | null   // đang soi một MÃ: trong pallet gộp, thùng mã khác cũng mờ
   view?: { preset: ViewPreset; n: number }
   walls?: 'glass' | 'open'
   className?: string
@@ -182,14 +183,14 @@ export default function TruckScene(p: TruckSceneProps) {
       c.cargo = cg
       c.scene.add(cg.group)
       cg.setStep(p.step ?? null)
-      cg.setFocus(p.focus ?? null)
+      cg.setFocus(p.focus ?? null, p.focusItem)
     }
     c.dirty = true
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.plan, tk])
 
   useEffect(() => { const c = ctx.current; if (c?.cargo) { c.cargo.setStep(p.step ?? null); c.dirty = true } }, [p.step])
-  useEffect(() => { const c = ctx.current; if (c?.cargo) { c.cargo.setFocus(p.focus ?? null); c.dirty = true } }, [p.focus])
+  useEffect(() => { const c = ctx.current; if (c?.cargo) { c.cargo.setFocus(p.focus ?? null, p.focusItem); c.dirty = true } }, [p.focus, p.focusItem])
   useEffect(() => { const c = ctx.current; if (c?.truck) { applyWalls(c.truck, p.walls ?? 'open'); c.dirty = true } }, [p.walls])
   useEffect(() => { const c = ctx.current; if (c && p.view) goTo(c, p.view.preset, true) }, [p.view?.n])
 
