@@ -19,8 +19,8 @@ import Scene from '../three/LazyScene'
 import type { ViewPreset } from '../three/TruckScene'
 import { groupColor, itemColors, tint } from '../three/colors'
 import {
-  Badge, BoxGlyph, Button, Confirm, Empty, IconButton, LiveNum, MenuItem, Popover, SearchInput, SectionBand, Segmented, Sheet,
-  cx, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3,
+  Badge, BoxGlyph, Button, Confirm, Empty, Field, IconButton, LiveNum, MenuItem, Popover, SearchInput, SectionBand, Segmented, Sheet,
+  TextInput, cx, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3,
 } from '../ui/kit'
 import { Logo, PageHeader, Panel } from '../ui/Shell'
 import { TruckGlyph } from './VehiclesPage'
@@ -92,6 +92,7 @@ export default function TripPage({ id }: { id: string }) {
   const [pickOrders, setPickOrders] = useState(false)
   const [pickFor, setPickFor] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
+  const [editOrder, setEditOrder] = useState<string | null>(null)
   const [delTrip, setDelTrip] = useState<Trip | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3200); return () => clearTimeout(t) }, [toast])
@@ -212,7 +213,7 @@ export default function TripPage({ id }: { id: string }) {
   const selWhere = (() => {
     if (!sel || !r || !selFocus) return null
     const boxes = r.plan.placed.filter(b => selFocus.has(b.group))
-    if (!boxes.length) return 'chưa lên xe'
+    if (!boxes.length) return { what: 'chưa lên xe', range: '' }
     const rows = r.count.filter(c => selFocus.has(c.group))
     const pal = rows.filter(c => c.unit === 'pallet')
     const mine = pal.filter(c => !sel.itemId || r.meta[c.group].itemId === sel.itemId).reduce((s, c) => s + c.placed, 0)
@@ -226,7 +227,7 @@ export default function TripPage({ id }: { id: string }) {
       n ? `${fmtInt(n)} thùng${loose.some(c => c.onTopOfOthers) ? ' (có thùng trên nóc)' : ''}` : '',
     ].filter(Boolean).join(' + ')
     const x0 = Math.min(...boxes.map(b => b.x)), x1 = Math.max(...boxes.map(b => b.x + b.l))
-    return `${what} · từ đầu thùng ${m(x0)}–${m(x1)} m`
+    return { what, range: `từ đầu thùng ${m(x0)}–${m(x1)} m` }
   })()
 
   return (
@@ -274,7 +275,7 @@ export default function TripPage({ id }: { id: string }) {
               {sel && selName && (
                 <div className="pointer-events-auto flex max-w-full items-center gap-2 rounded-md border-[1.5px] border-brand-500 bg-white py-0.5 pl-2.5 text-[13px] text-slate-800 lg:max-w-2xl">
                   <Crosshair size={15} className="shrink-0 text-brand-600" />
-                  <span className="min-w-0 break-words leading-snug"><b className="font-semibold text-slate-900">{selName}</b>{selWhere && <span className="num"> · {selWhere}</span>}</span>
+                  <span className="min-w-0 break-words leading-snug"><b className="font-semibold text-slate-900">{selName}</b>{selWhere && <span className="num"> · {selWhere.what}{selWhere.range && <> · <span className="whitespace-nowrap">{selWhere.range}</span></>}</span>}</span>
                   <IconButton label="Bỏ chọn" onClick={() => setSel(null)} className="shrink-0 text-slate-500"><X size={16} /></IconButton>
                 </div>
               )}
@@ -327,7 +328,7 @@ export default function TripPage({ id }: { id: string }) {
                 {rawOrders.map((o, i) => (
                   <OrderBlock key={o.id} o={o} i={i} count={rawOrders.length} t={orderTotals(tripOrders[i].lines, pallet)}
                     selected={sel?.orderId === o.id && !sel.itemId} onSelect={() => pick(o.id)}
-                    onPatch={p => upsertOrder({ ...o, ...p })} onMove={d => moveOrder(i, d)}
+                    onEdit={() => setEditOrder(o.id)} onMove={d => moveOrder(i, d)}
                     onOpenPage={() => go({ page: 'order', id: o.id, back: `trip:${trip.id}` })}
                     onRemove={() => setUnlink(o)}
                     onAddItem={() => setPickFor(o.id)}>
@@ -401,6 +402,8 @@ export default function TripPage({ id }: { id: string }) {
 
       <VehicleSheet open={!!editVehicle} vehicle={editVehicle?.v ?? null} onClose={() => setEditVehicle(null)}
         onSaved={nv => { if (!editVehicle?.v || editVehicle.v.id === trip.vehicleId) pickVehicle(nv.id) }} />
+      <OrderSheet order={rawOrders.find(o => o.id === editOrder) ?? null} onClose={() => setEditOrder(null)}
+        onSave={(o, p) => upsertOrder({ ...o, ...p })} />
       {/* sửa mã từ dòng hàng — popup (user 28/10: "để trong hàng nhìn hơi rối") */}
       <ItemSheet open={!!editLine} item={editLine?.it ?? null} onClose={() => setEditing(null)}
         onSaved={saved => { if (editLine) adoptItem(editLine.it, saved) }}
@@ -939,26 +942,32 @@ function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, onClose, o
 }
 
 // ── Một đơn = một THẺ riêng trên cột khai hàng: số thứ tự giao, tên, điểm giao, nút gỡ ngoài cùng,
-//    dải số (thùng · khối lượng · thể tích) dạng ô như bảng, không viết thành câu ─────
-function OrderBlock({ o, i, count, t, selected, onSelect, onPatch, onMove, onOpenPage, onRemove, onAddItem, children }: {
+//    dải số (thùng · khối lượng · thể tích) dạng ô như bảng, không viết thành câu. Bấm tên / dải số = chỉ
+//    hàng của đơn trên xe; sửa tên, điểm giao bằng nút "Sửa" (popup) — user 28/10: "bấm vào đơn thì hiện ra
+//    hàng của đơn đang ở đâu, muốn sửa thì bấm nút sửa" (trước tên đơn là ô nhập, bấm vào là thành sửa chữ) ─────
+function OrderBlock({ o, i, count, t, selected, onSelect, onEdit, onMove, onOpenPage, onRemove, onAddItem, children }: {
   o: Order; i: number; count: number; t: ReturnType<typeof orderTotals>; selected: boolean; onSelect: () => void
-  onPatch: (p: Partial<Order>) => void; onMove: (d: -1 | 1) => void; onOpenPage: () => void; onRemove: () => void; onAddItem: () => void; children: ReactNode
+  onEdit: () => void; onMove: (d: -1 | 1) => void; onOpenPage: () => void; onRemove: () => void; onAddItem: () => void; children: ReactNode
 }) {
   const where = count > 1 ? (i === 0 ? 'Sát cửa' : i === count - 1 ? 'Sâu trong' : 'Giữa thùng') : null
   const [open, setOpen] = useState(true)
   return (
     <div className={cx('overflow-hidden rounded-lg border bg-white', selected ? 'border-brand-500 ring-1 ring-brand-500' : 'border-slate-300')}>
-      <div className="flex items-start gap-2 border-b border-slate-200 bg-slate-50 py-1.5 pl-3 pr-1">
+      <div className={cx('flex items-start gap-2 border-b border-slate-200 py-1.5 pl-3 pr-1', selected ? 'bg-brand-50' : 'bg-slate-50')}>
         <span className="num mt-1 grid h-7 min-w-[28px] shrink-0 place-items-center rounded bg-navy-950 px-1 text-[13px] font-bold text-white" title={`Giao thứ ${i + 1}`}>{i + 1}</span>
-        <div className="min-w-0 flex-1">
-          <input value={o.name} onChange={e => onPatch({ name: e.target.value })} aria-label="Tên đơn"
-            className="w-full truncate rounded bg-transparent px-1 text-[15px] font-semibold text-slate-900 outline-none hover:bg-white focus:bg-white focus:ring-2 focus:ring-brand-100" />
-          <div className="flex items-center gap-1 pl-1 text-slate-500">
-            <MapPin size={13} className="shrink-0" />
-            <input value={o.place} onChange={e => onPatch({ place: e.target.value })} placeholder="Điểm giao (không bắt buộc)" aria-label="Điểm giao"
-              className="w-full min-w-0 truncate rounded bg-transparent px-1 text-[13px] text-slate-700 outline-none placeholder:text-slate-500 hover:bg-white focus:bg-white focus:ring-2 focus:ring-brand-100" />
-          </div>
-        </div>
+        <button type="button" onClick={onSelect} aria-pressed={selected} title="Xem hàng của đơn này nằm đâu trên xe"
+          className="min-h-[44px] min-w-0 flex-1 rounded-md px-1 py-0.5 text-left [@media(hover:hover)]:hover:bg-white">
+          <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900">{o.name || 'Đơn chưa đặt tên'}</span>
+          {o.place && (
+            <span className="flex items-start gap-1 text-[13px] leading-snug text-slate-600">
+              <MapPin size={13} className="mt-[3px] shrink-0 text-slate-500" /><span className="min-w-0 break-words">{o.place}</span>
+            </span>
+          )}
+        </button>
+        <button type="button" aria-label={`Sửa đơn ${o.name}`} aria-haspopup="dialog" onClick={onEdit}
+          className="tap inline-flex shrink-0 items-center gap-1 rounded-md px-2 text-[13px] font-semibold text-slate-600 hover:bg-white">
+          <Pencil size={14} />Sửa
+        </button>
         <IconButton label={`Gỡ ${o.name} khỏi chuyến`} title="Gỡ đơn khỏi chuyến" onClick={onRemove} className="text-slate-500 hover:bg-red-50 hover:text-red-700"><Trash2 size={17} /></IconButton>
         <Popover align="right" panelClass="w-[220px] overflow-hidden py-1"
           trigger={({ toggle }) => <IconButton label={`Tuỳ chọn ${o.name}`} onClick={toggle}><MoreVertical size={17} /></IconButton>}>
@@ -1097,6 +1106,36 @@ function CountSheet({ r, colors, focus, onFocus, tripName, vehicle, onToast }: {
         })}
       </div>
     </section>
+  )
+}
+
+// ── Sửa tên đơn / điểm giao (popup từ nút "Sửa" trên thẻ đơn) ───────────────
+function OrderSheet({ order, onClose, onSave }: { order: Order | null; onClose: () => void; onSave: (o: Order, p: Partial<Order>) => void }) {
+  const [name, setName] = useState('')
+  const [place, setPlace] = useState('')
+  const [tried, setTried] = useState(false)
+  useEffect(() => { if (order) { setName(order.name); setPlace(order.place); setTried(false) } }, [order])
+  const save = () => {
+    setTried(true)
+    if (!order || !name.trim()) return
+    onSave(order, { name: name.trim(), place: place.trim() }); onClose()
+  }
+  return (
+    <Sheet open={!!order} onClose={onClose} title="Sửa đơn" subtitle="Tên đơn và điểm giao hiện trên bảng đếm chân"
+      footer={<div className="flex gap-2">
+        <Button className="flex-1" onClick={onClose}>Huỷ</Button>
+        <Button variant="primary" className="flex-[2]" onClick={save}>Lưu</Button>
+      </div>}>
+      <form className="space-y-4" onSubmit={e => { e.preventDefault(); save() }}>
+        <Field label="Tên đơn" error={tried && !name.trim() ? 'Nhập tên đơn' : null}>
+          <TextInput value={name} onChange={e => setName(e.target.value)} autoFocus />
+        </Field>
+        <Field label="Điểm giao" hint="Không bắt buộc">
+          <TextInput value={place} onChange={e => setPlace(e.target.value)} placeholder="Cửa hàng / khách" />
+        </Field>
+        <button type="submit" hidden />
+      </form>
+    </Sheet>
   )
 }
 
