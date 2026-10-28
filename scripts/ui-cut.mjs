@@ -50,6 +50,7 @@ for (const dev of DEVS) {
   await p.getByRole('button', { name: T('Sửa {name}', { name: TX('Sữa 180ml x48') }) }).first().click().catch(() => {}); await p.waitForTimeout(200); await scan(p, dev.name, 'Popup sửa mã từ dòng hàng'); await p.keyboard.press('Escape'); await p.waitForTimeout(150)
   // bấm dòng hàng = chỉ mã đó trên xe (nhãn "đang chỉ" ở đáy bản vẽ); bấm lại để bỏ chọn
   await p.getByRole('button', { name: TX('Sữa 180ml x48'), exact: true }).first().click().catch(() => {}); await p.waitForTimeout(300); await scan(p, dev.name, 'Chọn mã trên xe'); await p.getByRole('button', { name: TX('Sữa 180ml x48'), exact: true }).first().click().catch(() => {})
+  await p.getByRole('button', { name: new RegExp('^' + esc(T('Diễn giải từng mã'))) }).click(); await p.waitForTimeout(300); await scan(p, dev.name, 'Diễn giải từng mã')
   await p.getByRole('button', { name: new RegExp(esc(T('Bảng đếm chân'))) }).click(); await p.waitForTimeout(300); await scan(p, dev.name, 'Bảng đếm chân')
   await p.evaluate(() => window.scrollTo(0, 0))
   await p.getByRole('button', { name: T('Đổi xe') }).click(); await p.waitForTimeout(500); await scan(p, dev.name, 'Bảng Thùng xe'); await p.keyboard.press('Escape'); await p.waitForTimeout(200)
