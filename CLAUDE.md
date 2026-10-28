@@ -16,7 +16,7 @@ Ghi chú nội bộ của chủ dự án (không nằm trong repo công khai): @
 - Form thêm/sửa = `Sheet` (trượt từ đáy trên điện thoại, từ lề phải trên máy tính); xác nhận xoá = `Confirm` — cấm `window.confirm/alert`.
 - Bàn phím điện thoại (iPhone không thu nhỏ trang khi bàn phím mở): `useVisualView()` trong kit (`kb` = bàn phím mở, chỉ máy cảm ứng). Mọi khung `fixed` bám đáy / tấm phủ (`Sheet`, `Confirm`, `Panel`, bảng Thùng xe) bám phần màn còn thấy (`useViewportBox`) + `KeyboardShield` che dải dưới (sau thanh tự điền của iOS — trang lộ ra, chạm trúng nút của trang); khung cuộn đánh `data-scroll` để ô đang gõ tự kéo vào chỗ thấy; khung 3D Bàn xếp xe thôi dính, dải tổng trang đơn ẩn khi `kb`. Ô nhập trên điện thoại chữ ≥ 16px (nhỏ hơn iPhone tự phóng to trang). Khung `fixed` bám đáy mới ⇒ làm theo cùng cách, thêm vào `scripts/ui-keyboard.mjs`.
 - Chống bấm nhầm: đang gõ mà chạm ra ngoài tấm ⇒ chỉ cất bàn phím, không đóng; `Popover` chạm ra ngoài trên điện thoại ⇒ chỉ đóng bảng, nuốt cú chạm (chuột thì như cũ).
-- Danh mục Mã hàng / Xe (tab "Của tôi") / Đơn hàng (trừ đơn mẫu): ô chọn đầu dòng (`RowCheck`, nằm NGOÀI nút của dòng) + thanh dính đáy `SelectBar` (chọn tất cả · Bỏ chọn · Xoá N) → `Confirm`.
+- Danh mục Mã hàng / Xe (tab "Của tôi") / Đơn hàng (trừ đơn mẫu) / Các chuyến (trừ chuyến mẫu; hỏi kèm ô "Xoá luôn N đơn" — tick sẵn, chỉ đơn không nằm ở chuyến khác): ô chọn đầu dòng (`RowCheck`, nằm NGOÀI nút của dòng) + thanh dính đáy `SelectBar` (chọn tất cả · Bỏ chọn · Xoá N) → `Confirm`.
 - Nút chỉ có biểu tượng PHẢI có `aria-label` (script kiểm tìm nút theo tên).
 - **Không cắt chữ "…"**: tên, quy cách, ghi chú phải XUỐNG DÒNG (`break-words`; cụm số như `5.700 × 2.000 × 2.000 mm` bọc `whitespace-nowrap` để không bẻ giữa cụm). `truncate` chỉ dùng chỗ buộc một dòng mà vẫn đủ chỗ ở 360 px (tên chuyến trên thanh trên). `scripts/ui-cut.mjs` đo ở 1440 / 390 / 360 px.
 - Số theo ngôn ngữ (`12,5 kg` · `5.700 mm` tiếng Việt; `12.5 kg` · `5,700 mm` tiếng Anh) — dùng `fmtInt/fmtDec/fmtKgShort/fmtM3` trong `src/ui/kit.tsx`, đừng in số thô, đừng gõ cứng 'vi-VN' / "tấn".
@@ -50,6 +50,8 @@ Ghi chú nội bộ của chủ dự án (không nằm trong repo công khai): @
 ## Dữ liệu
 - Trên máy: `zustand` + localStorage key `malcargo-data-v1` (`src/data/store.ts`); sao lưu / nạp file JSON (`app: 'malcargo'`); nhập Excel bằng file mẫu 4 trang (`src/data/importer.ts`).
 - **Chuyến mẫu** (`sample-t1` + đơn `sample-o1/o2`) luôn nguyên gốc: không xoá; sửa bất cứ gì ⇒ store tự TÁCH thành chuyến mới mã `ddmmyy-hhmm-stt` (`makeFork` trong store.ts), màn chuyến chuyển sang đó tại chỗ. Chuyến mới nào cũng có mã này (tên mặc định = mã).
+- **Nháp trống không giữ**: "+", "Thêm hàng", "Đơn mới" tạo ngay chuyến / đơn để làm việc; bỏ đó thì tự dọn — đóng bảng chọn mã mà đơn vẫn trống ⇒ bỏ đơn; mở app / đổi màn ⇒ `sweepBlank` (App.tsx) dọn mọi đơn trống (không mã, không điểm giao, tên mặc định "Đơn N") và chuyến trống (không còn đơn, tên = mã / "Chuyến N"), trừ cái đang mở + đơn trong chuyến đang mở. Đặt tên riêng ⇒ giữ.
+- **Dấu đã xoá** (`deleted`: id → lúc xoá, giữ 90 ngày, đi cùng bản sao lưu): mọi lần xoá / dọn / thay cả bộ đều ghi; `mergeBackup` bỏ bản ghi bị xoá SAU lần sửa cuối của nó — thiếu dấu này thì gộp hai máy làm thứ đã xoá sống lại. Thay cả bộ bằng bộ có chứa id đã xoá (nạp file) ⇒ bỏ dấu, sống lại.
 - Tài khoản (`src/data/cloud.ts`): đăng nhập **Google** qua Supabase; chưa đăng nhập vẫn dùng đủ, đăng nhập thì dữ liệu trên máy tự gộp lên tài khoản rồi đồng bộ. Chưa khai `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` (`.env.local`, xem `.env.example`) ⇒ app chạy chỉ-trên-máy.
 - Supabase (`supabase/schema.sql`, chạy lại được): `catalog` (mẫu chung xe + mã hàng: ai cũng đọc, chỉ admin ghi), `user_data` (một JSON / người), `admins` (email được sửa mẫu chung) — tất cả bật RLS theo `auth.uid()` / email.
 - Mẫu chung: admin sửa trên giao diện (form Xe / Mã hàng có nút "Lưu mẫu chung"); `src/data/catalog.ts` chỉ là bản mặc định khi chưa nối máy chủ + dữ liệu nạp đầu trong `schema.sql` (giữ hai nơi khớp nhau). Người thường sửa mẫu ⇒ thành bản "của tôi".
@@ -57,7 +59,7 @@ Ghi chú nội bộ của chủ dự án (không nằm trong repo công khai): @
 
 ## Kiểm trước khi báo xong
 ```bash
-npm test            # thuật toán: bất biến hình học + bảng đếm chân khớp số đã xếp (6 ca)
-npm run check:ui    # build + chụp mọi màn 1440/390 (đo tràn ngang, lỗi trình duyệt) + luồng người mới + chọn nhiều để xoá / chạm ra ngoài (ui-bulk) + bàn phím giả lập (ui-keyboard) + chữ bị cắt / nút đè (1440/390/360)
+npm test            # thuật toán: bất biến hình học + bảng đếm chân khớp số đã xếp (6 ca) + kho dữ liệu (dọn nháp, dấu đã xoá, gộp hai máy) + bản dịch
+npm run check:ui    # build + chụp mọi màn 1440/390 (đo tràn ngang, lỗi trình duyệt) + luồng người mới + chọn nhiều để xoá / nháp trống tự dọn / chạm ra ngoài (ui-bulk) + bàn phím giả lập (ui-keyboard) + chữ bị cắt / nút đè (1440/390/360)
 ```
 Ảnh ra `scripts/out/` — mở xem bằng mắt, đừng chỉ tin chữ XANH. Script KHÔNG bấm link ra ngoài (Zalo/email/mal.com.vn): `mailto:` từng mở Outlook thật trên máy.

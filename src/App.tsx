@@ -41,6 +41,14 @@ export default function App() {
     if (!(f && f.from === prev.current && f.to === rid)) tripKey.current = rid
     prev.current = rid
   }
+  // mở app / đổi màn ⇒ dọn chuyến / đơn nháp trống, trừ cái đang mở (Home chuyển thẳng vào một chuyến — dọn khi tới đó)
+  const open = route.page === 'trips' ? null
+    : route.page === 'trip' ? [route.id] : route.page === 'order' ? [route.id, route.back?.replace(/^trip:/, '') ?? ''] : []
+  const openKey = open?.join('|')
+  useEffect(() => {
+    if (open) useData.getState().sweepBlank(open)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openKey])
   return (
     <Shell key={lang}>
       {route.page === 'trips' && <Home />}

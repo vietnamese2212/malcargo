@@ -154,7 +154,7 @@ export const PAGES: Record<string, string> = {
   'Mã hàng, xe, đơn, chuyến của bạn trên máy này sẽ mất. Nên tải file sao lưu trước.':
     'Your items, trucks, orders and trips on this device will be lost. Download a backup first.',
 
-  // chọn nhiều để xoá (Mã hàng / Xe / Đơn hàng)
+  // chọn nhiều để xoá (Mã hàng / Xe / Đơn hàng / Các chuyến)
   'Chọn tất cả': 'Select all',
   'Chọn {name}': 'Select {name}',
   'Đã chọn {n}/{total}': '{n}/{total} selected',
@@ -165,4 +165,6 @@ export const PAGES: Record<string, string> = {
   '{n} chuyến đang dùng các xe này sẽ phải chọn xe khác.': '{n} {n:trip uses|trips use} these trucks and will need another truck.',
   'Xoá {n} đơn?': 'Delete {n} {n:order|orders}?',
   '{n} đơn đang trong chuyến sẽ được gỡ khỏi chuyến.': '{n} {n:order is|orders are} in a trip and will be removed from it.',
+  'Xoá {n} chuyến?': 'Delete {n} {n:trip|trips}?',
+  'Xoá luôn {n} đơn của các chuyến này': 'Also delete the {n} {n:order|orders} in these trips',
 }

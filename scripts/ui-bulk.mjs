@@ -1,4 +1,5 @@
-﻿// Chọn nhiều để xoá ở Mã hàng / Xe / Đơn hàng: tick 2 dòng → thanh "Đã chọn 2/3" → Xoá → xác nhận → còn 1.
+// Chọn nhiều để xoá ở Mã hàng / Xe / Đơn hàng / Các chuyến: tick 2 dòng → thanh "Đã chọn 2/3" → Xoá → xác nhận → còn 1.
+// + chuyến / đơn nháp trống (bấm "+" / "Thêm hàng" rồi bỏ đó) tự dọn khi rời màn.
 // + điện thoại: chạm ra ngoài menu chỉ đóng menu (không bấm xuyên); đang gõ mà chạm ra ngoài tấm sửa thì chỉ cất bàn phím.
 // Chạy sau `npm run build`: node scripts/ui-bulk.mjs
 import { DEVICES, OUT, T, launch, startPreview, watchErrors } from './ui-lib.mjs'
@@ -75,6 +76,62 @@ for (const dev of [DEVICES[0], { ...DEVICES[1], name: 'small', viewport: { width
     await p.getByRole('button', { name: T('Chuyến mới'), exact: true }).tap(); await p.waitForTimeout(400)
     const trips2 = await tripCount(p)
     ok(trips2 === trips0 + 1, `chạm lần nữa (menu đã đóng) ⇒ tạo chuyến như thường (${trips0} → ${trips2})`)
+  }
+  ok(!errs.length, 'không lỗi trình duyệt' + (errs.length ? ': ' + errs.join(' | ') : ''))
+  await ctx.close()
+}
+
+// Chuyến / đơn nháp trống tự dọn khi rời màn + chọn nhiều để xoá chuyến (xoá luôn đơn hay giữ)
+const trip = (id, name, orderIds) => ({ id, code: '281026-0900-01', name, vehicleId: null, orderIds, updatedAt: now })
+const seed2 = { state: { ...seed.state,
+  orders: [ord('t-o4', 'Đơn chuyến 1', 't-i1'), ord('t-o5', 'Đơn chuyến 2', 't-i1'), ord('t-o6', 'Đơn chuyến 3', 't-i1')],
+  trips: [trip('t-t1', 'Chuyến thử 1', ['t-o4']), trip('t-t2', 'Chuyến thử 2', ['t-o5']), trip('t-t3', 'Chuyến thử 3', ['t-o6'])],
+}, version: 0 }
+const data = p => p.evaluate(() => JSON.parse(localStorage.getItem('malcargo-data-v1')).state)
+for (const dev of [DEVICES[0], { ...DEVICES[1], name: 'small', viewport: { width: 360, height: 760 } }]) {
+  console.log(dev.name + ' — nháp trống / xoá chuyến')
+  const ctx = await b.newContext(dev)
+  await ctx.addInitScript(s => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('malcargo-data-v1', JSON.stringify(s)); sessionStorage.setItem('seeded', '1') } }, seed2)
+  const p = await ctx.newPage()
+  const errs = watchErrors(p)
+  await p.goto(srv.base + '#/trip/t-t3', { waitUntil: 'networkidle' }); await p.waitForTimeout(1200)
+  const d0 = await data(p)
+  const plus = p.getByRole('button', { name: T('Chuyến mới'), exact: true })
+  await plus.click(); await p.waitForTimeout(400)
+  await p.getByRole('button', { name: T('Thêm hàng') }).click(); await p.waitForTimeout(400)
+  ok((await data(p)).orders.length === d0.orders.length + 1, 'chuyến trống, bấm "Thêm hàng" ⇒ có đơn để chọn mã')
+  await p.locator('[data-sheet]').getByRole('button', { name: new RegExp('^' + T('Xong')) }).click(); await p.waitForTimeout(400)
+  let d = await data(p)
+  ok(d.orders.length === d0.orders.length && d.trips.length === d0.trips.length + 1, `đóng bảng chọn mã mà chưa chọn gì ⇒ bỏ đơn trống (đơn ${d0.orders.length} → ${d.orders.length}), chuyến đang mở vẫn còn`)
+  await plus.click(); await p.waitForTimeout(400)
+  d = await data(p)
+  ok(d.trips.length === d0.trips.length + 1, `bấm "+" lần nữa ⇒ chuyến trống trước tự dọn (chuyến ${d0.trips.length} → ${d.trips.length})`)
+  await p.evaluate(() => { location.hash = '#/trip/t-t3' }); await p.waitForTimeout(600)
+  d = await data(p)
+  ok(d.trips.length === d0.trips.length && Object.keys(d.deleted).length === 3, `rời chuyến trống ⇒ tự dọn (chuyến ${d.trips.length}; dấu đã xoá ${Object.keys(d.deleted).length} = 2 chuyến + 1 đơn)`)
+
+  const keep = dev.hasTouch   // điện thoại: bỏ tick "xoá luôn đơn" ⇒ đơn giữ lại
+  const dlg = await openPanel(p, 'Các chuyến')
+  for (const n of ['Chuyến thử 1', 'Chuyến thử 2']) await dlg.getByRole('checkbox', { name: T('Chọn {name}', { name: n }) }).check()
+  ok(await dlg.getByText(T('Đã chọn {n}/{total}', { n: 2, total: 3 })).isVisible(), 'Các chuyến: tick 2 dòng ⇒ thanh "Đã chọn 2/3" (chuyến mẫu không có ô chọn)')
+  await p.screenshot({ path: `${OUT}/bulk-trips-${dev.name}.png` })
+  await dlg.getByRole('button', { name: T('Xoá {n}', { n: 2 }) }).click(); await p.waitForTimeout(200)
+  const conf = p.getByRole('alertdialog')
+  const also = conf.getByRole('checkbox', { name: T('Xoá luôn {n} đơn của các chuyến này', { n: 2 }) })
+  ok(await also.isChecked(), 'hỏi xoá chuyến: có ô "Xoá luôn 2 đơn của các chuyến này", tick sẵn')
+  await p.screenshot({ path: `${OUT}/bulk-trips-confirm-${dev.name}.png` })
+  if (keep) await also.uncheck()
+  await conf.getByRole('button', { name: T('Xoá'), exact: true }).click(); await p.waitForTimeout(300)
+  d = await data(p)
+  const has = id => d.orders.some(o => o.id === id)
+  ok(!d.trips.some(t => ['t-t1', 't-t2'].includes(t.id)) && d.trips.some(t => t.id === 't-t3'), 'xoá xong còn đúng chuyến 3')
+  ok(keep ? has('t-o4') && has('t-o5') : !has('t-o4') && !has('t-o5') && has('t-o6'), keep ? 'bỏ tick ⇒ đơn của chuyến đã xoá vẫn còn' : 'tick ⇒ đơn của chuyến đã xoá đi theo, đơn chuyến 3 còn')
+  if (!keep) {
+    await dlg.getByRole('checkbox', { name: T('Chọn {name}', { name: 'Chuyến thử 3' }) }).check()
+    await dlg.getByRole('button', { name: T('Xoá {n}', { n: 1 }) }).click(); await p.waitForTimeout(200)
+    await p.getByRole('alertdialog').getByRole('button', { name: T('Xoá'), exact: true }).click(); await p.waitForTimeout(800)
+    const h = await p.evaluate(() => location.hash)
+    ok(h.startsWith('#/trip/') && h !== '#/trip/t-t3' && !(await p.getByText(T('Chuyến này không còn')).count()), `xoá chuyến đang mở ⇒ về chuyến sửa gần nhất (${h})`)
   }
   ok(!errs.length, 'không lỗi trình duyệt' + (errs.length ? ': ' + errs.join(' | ') : ''))
   await ctx.close()

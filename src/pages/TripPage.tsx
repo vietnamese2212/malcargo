@@ -8,7 +8,7 @@ import {
   FileSpreadsheet, Layers, Loader2, LogOut, MapPin, Menu, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Rotate3d, Ruler,
   SlidersHorizontal, Sparkles, Table2, Trash2, Truck, UserRound, Users, X,
 } from 'lucide-react'
-import { findVehicle, isSample, newId, newTripLabel, nextName, useAllItems, useAllVehicles, useData } from '../data/store'
+import { findVehicle, isBlankOrder, isSample, newId, newTripLabel, nextName, useAllItems, useAllVehicles, useData } from '../data/store'
 import { signInGoogle, signOut, useAuth } from '../data/cloud'
 import { pickPool, resolveOrder, truckOf } from '../data/resolve'
 import { orderTotals, type TripInput, type TripResult } from '../engine/plan'
@@ -56,6 +56,7 @@ export default function TripPage({ id }: { id: string }) {
   const removeTrip = useData(s => s.removeTrip)
   const upsertVehicle = useData(s => s.upsertVehicle)
   const upsertOrder = useData(s => s.upsertOrder)
+  const removeOrder = useData(s => s.removeOrder)
   const items = useAllItems()
   const vehicles = useAllVehicles()
   // bảng Thùng xe: null = đóng; more = phần thông số đang mở (bấm chip Lòng / Tải / nút chỉnh ⇒ mở sẵn, bấm tên xe ⇒ gấp — để đổi xe)
@@ -197,6 +198,12 @@ export default function TripPage({ id }: { id: string }) {
     return oid
   }
   const addCargo = () => setPickFor(rawOrders[0]?.id ?? newOrderInTrip())
+  // đóng bảng chọn mã mà đơn vẫn trống (vừa bấm "Thêm hàng" / "Đơn mới" rồi thôi) ⇒ bỏ đơn đó, không để lại đơn rỗng
+  const closePicker = () => {
+    const o = useData.getState().orders.find(x => x.id === pickFor)
+    if (o && isBlankOrder(o)) removeOrder(o.id)
+    setPickFor(null)
+  }
   const moveOrder = (i: number, d: -1 | 1) => {
     const ids = [...trip.orderIds]; const j = i + d
     if (j < 0 || j >= ids.length) return
@@ -434,7 +441,7 @@ export default function TripPage({ id }: { id: string }) {
         onAdd={ids => upsertTrip({ ...trip, orderIds: [...trip.orderIds, ...ids] })}
         onNew={() => { setPickOrders(false); setPickFor(newOrderInTrip()) }} />
       {pickOrder && (
-        <ItemPicker open onClose={() => setPickFor(null)} picked={new Set(pickOrder.lines.map(l => l.itemId))}
+        <ItemPicker open onClose={closePicker} picked={new Set(pickOrder.lines.map(l => l.itemId))}
           onToggle={it => toggleLine(useData.getState().orders.find(o => o.id === pickOrder.id) ?? pickOrder, it.id)} />
       )}
       <Confirm open={!!delTrip} onClose={() => setDelTrip(null)} title={t('Xoá {name}?', { name: tx(delTrip?.name ?? '') })} body={t('Các đơn trong chuyến vẫn giữ nguyên, xem lại ở Đơn hàng.')}

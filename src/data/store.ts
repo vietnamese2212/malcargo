@@ -26,6 +26,7 @@ export interface DataState {
   orders: Order[]
   trips: Trip[]
   pallet: PalletSettings
+  deleted: Deleted       // id đã xoá → lúc xoá: đồng bộ nhiều máy không làm thứ đã xoá sống lại
   fork: ForkInfo | null  // không lưu — chỉ để màn chuyến biết vừa tách chuyến mẫu
   markForkSeen: () => void
   upsertItem: (it: Item) => void
@@ -36,6 +37,7 @@ export interface DataState {
   removeOrder: (id: string) => void
   upsertTrip: (t: Trip) => void
   removeTrip: (id: string) => void
+  sweepBlank: (keep: string[]) => void
   setPallet: (p: PalletSettings) => void
   replaceAll: (d: BackupData) => void
   importBatch: (d: ImportBatch) => void
@@ -47,6 +49,7 @@ export interface ImportBatch { items: Item[]; vehicles: Vehicle[]; orders: Order
 export interface BackupData {
   app: 'malcargo'; version: 1
   items: Item[]; vehicles: Vehicle[]; orders: Order[]; trips: Trip[]; pallet: PalletSettings
+  deleted?: Deleted      // bản cũ (trước khi có) không có
 }
 
 const upsert = <T extends { id: string }>(list: T[], x: T) => {
@@ -54,6 +57,25 @@ const upsert = <T extends { id: string }>(list: T[], x: T) => {
   if (i < 0) return [x, ...list]
   const next = list.slice(); next[i] = x; return next
 }
+
+// ── Dấu ĐÃ XOÁ (id → lúc xoá). Gộp dữ liệu hai máy thì bản ghi nào bị xoá SAU lần sửa cuối của nó sẽ bị bỏ —
+//    trước đây gộp kiểu hợp, xoá ở máy này thì máy kia đẩy lại. Giữ 90 ngày cho gọn.
+export type Deleted = Record<string, number>
+const KEEP_DELETED = 90 * 864e5
+function marks(...parts: (Deleted | undefined)[]): Deleted {
+  const out: Deleted = {}, old = Date.now() - KEEP_DELETED
+  for (const p of parts) for (const [id, at] of Object.entries(p ?? {})) if (at > old && !(out[id] >= at)) out[id] = at
+  return out
+}
+const mark = (d: Deleted, ids: string[]) => { const now = Date.now(); return marks(d, Object.fromEntries(ids.filter(id => !isSample(id)).map(id => [id, now]))) }
+const deadIn = (d: Deleted) => (x: { id: string; updatedAt: number }) => d[x.id] >= x.updatedAt
+
+// ── BẢN NHÁP TRỐNG: bấm "+" / "Thêm hàng" / "Đơn mới" là có ngay chuyến / đơn để làm việc; bỏ đó không thêm gì
+//    thì rời màn là app tự dọn (sweepBlank). Đã đặt tên riêng, khai điểm giao hay chọn mã hàng ⇒ giữ.
+const DEFAULT_ORDER = /^Đơn \d+$/, DEFAULT_TRIP = /^Chuyến \d+$/ // i18n-ok tên mặc định lưu trong dữ liệu
+export const isBlankOrder = (o: Order) => !isSample(o.id) && !o.lines.length && !o.place?.trim() && DEFAULT_ORDER.test(o.name)
+const isBlankTrip = (t: Trip, orders: Set<string>) =>
+  !isSample(t.id) && (t.name === t.code || DEFAULT_TRIP.test(t.name)) && !t.orderIds.some(id => orders.has(id))
 
 // ── CHUYẾN MẪU (+ 2 đơn của nó) luôn giữ nguyên: không xoá được, và sửa bất cứ gì trên nó thì app tự TÁCH
 //    thành một chuyến mới (mã ddmmyy-hhmm-stt) mang thay đổi đó; chọn lại chuyến mẫu là thấy bản gốc.
@@ -136,12 +158,14 @@ export const useData = create<DataState>()(
       orders: SAMPLE_ORDERS,
       trips: SAMPLE_TRIPS,
       pallet: DEFAULT_PALLET_SETTINGS,
+      deleted: {},
       upsertItem: it => set(s => ({ items: upsert(s.items, { ...it, owner: 'me', updatedAt: Date.now() }) })),
-      removeItem: id => set(s => ({ items: s.items.filter(x => x.id !== id) })),
+      removeItem: id => set(s => ({ items: s.items.filter(x => x.id !== id), deleted: mark(s.deleted, [id]) })),
       upsertVehicle: v => set(s => ({ vehicles: upsert(s.vehicles, { ...v, owner: 'me', updatedAt: Date.now() }) })),
       removeVehicle: id => set(s => ({
         vehicles: s.vehicles.filter(x => x.id !== id),
         trips: s.trips.map(t => (t.vehicleId === id ? { ...t, vehicleId: null } : t)),
+        deleted: mark(s.deleted, [id]),
       })),
       fork: null,
       upsertOrder: o => set(s => {
@@ -156,6 +180,7 @@ export const useData = create<DataState>()(
       removeOrder: id => set(s => (isSample(id) ? {} : {
         orders: s.orders.filter(x => x.id !== id),
         trips: s.trips.map(t => ({ ...t, orderIds: t.orderIds.filter(o => o !== id) })),
+        deleted: mark(s.deleted, [id]),
       })),
       upsertTrip: t => set(s => {
         const now = Date.now()
@@ -174,10 +199,32 @@ export const useData = create<DataState>()(
         const k = makeFork(s, t)
         return { trips: [k.trip, ...s.trips], orders: [...k.orders, ...s.orders], fork: k.fork }
       }),
-      removeTrip: id => set(s => (isSample(id) ? {} : { trips: s.trips.filter(x => x.id !== id) })),
+      removeTrip: id => set(s => (isSample(id) ? {} : { trips: s.trips.filter(x => x.id !== id), deleted: mark(s.deleted, [id]) })),
+      // dọn đơn / chuyến nháp trống, trừ những cái đang mở (`keep`) và đơn nằm trong chuyến đang mở
+      sweepBlank: keep => set(s => {
+        const k = new Set(keep)
+        s.trips.forEach(t => { if (k.has(t.id)) t.orderIds.forEach(o => k.add(o)) })
+        const dropO = s.orders.filter(o => !k.has(o.id) && isBlankOrder(o)).map(o => o.id)
+        const orders = s.orders.filter(o => !dropO.includes(o.id))
+        const alive = new Set(orders.map(o => o.id))
+        const dropT = s.trips.filter(t => !k.has(t.id) && isBlankTrip(t, alive)).map(t => t.id)
+        if (!dropO.length && !dropT.length) return s   // y nguyên ⇒ không báo đổi, không đẩy lên tài khoản
+        return {
+          orders, deleted: mark(s.deleted, [...dropO, ...dropT]),
+          trips: s.trips.filter(t => !dropT.includes(t.id)).map(t => (t.orderIds.some(o => dropO.includes(o)) ? { ...t, orderIds: t.orderIds.filter(o => !dropO.includes(o)) } : t)),
+        }
+      }),
       markForkSeen: () => set(s => (s.fork ? { fork: { ...s.fork, seen: true } } : {})),
       setPallet: pallet => set({ pallet }),
-      replaceAll: d => set({ items: d.items, vehicles: d.vehicles, pallet: d.pallet, ...resetSamples(d) }),
+      // thay cả bộ (nạp file, xoá hết, bản từ tài khoản): thứ biến mất ⇒ đánh dấu đã xoá; thứ có trong bộ mới ⇒ bỏ dấu
+      replaceAll: d => set(s => {
+        const next = resetSamples(d)
+        const alive = new Set([...d.items, ...d.vehicles, ...next.orders, ...next.trips].map(x => x.id))
+        const gone = [...s.items, ...s.vehicles, ...s.orders, ...s.trips].map(x => x.id).filter(id => !alive.has(id))
+        const deleted = mark(marks(s.deleted, d.deleted), gone)
+        alive.forEach(id => delete deleted[id])
+        return { items: d.items, vehicles: d.vehicles, pallet: d.pallet, ...next, deleted }
+      }),
       importBatch: d => set(s => {
         const now = Date.now()
         const put = <T extends { id: string }>(list: T[], add: T[], extra: Partial<T>) => add.reduce((l, x) => upsert(l, { ...x, ...extra, updatedAt: now }), list)
@@ -191,7 +238,7 @@ export const useData = create<DataState>()(
     }),
     {
       name: 'malcargo-data-v1', storage: createJSONStorage(() => safeStorage),
-      partialize: s => ({ items: s.items, vehicles: s.vehicles, orders: s.orders, trips: s.trips, pallet: s.pallet }),
+      partialize: s => ({ items: s.items, vehicles: s.vehicles, orders: s.orders, trips: s.trips, pallet: s.pallet, deleted: s.deleted }),
       // máy đã lỡ xoá / sửa chuyến mẫu ở bản trước ⇒ mở app là chuyến mẫu về gốc (bản đã sửa thành chuyến mới)
       merge: (saved, cur) => {
         const s = { ...cur, ...(saved as Partial<DataState>) }
@@ -221,7 +268,7 @@ export const findVehicle = (vs: Vehicle[], id: string | null) => (id ? vs.find(x
 
 export function exportBackup(): BackupData {
   const s = useData.getState()
-  return { app: 'malcargo', version: 1, items: s.items, vehicles: s.vehicles, orders: s.orders, trips: s.trips, pallet: s.pallet }
+  return { app: 'malcargo', version: 1, items: s.items, vehicles: s.vehicles, orders: s.orders, trips: s.trips, pallet: s.pallet, deleted: s.deleted }
 }
 
 export function parseBackup(text: string): BackupData | string {
@@ -234,17 +281,22 @@ export function parseBackup(text: string): BackupData | string {
   return b as BackupData
 }
 
-/** Gộp dữ liệu trên máy vào dữ liệu tài khoản khi đăng nhập: cùng id thì giữ bản sửa sau cùng. */
+/** Gộp dữ liệu trên máy vào dữ liệu tài khoản khi đăng nhập: cùng id thì giữ bản sửa sau cùng;
+ *  bị xoá (ở máy nào cũng vậy) sau lần sửa cuối ⇒ bỏ. */
 export function mergeBackup(a: BackupData, b: BackupData): BackupData {
+  const deleted = marks(a.deleted, b.deleted), dead = deadIn(deleted)
   const mergeList = <T extends { id: string; updatedAt: number }>(x: T[], y: T[]) => {
     const m = new Map(y.map(v => [v.id, v]))
     for (const v of x) { const o = m.get(v.id); if (!o || v.updatedAt > o.updatedAt) m.set(v.id, v) }
-    return [...m.values()]
+    return [...m.values()].filter(v => !dead(v))
   }
+  const orders = mergeList(a.orders, b.orders), alive = new Set(orders.map(o => o.id))
+  const gone = (o: string) => o in deleted && !alive.has(o)
   return {
-    app: 'malcargo', version: 1, pallet: b.pallet ?? a.pallet,
-    items: mergeList(a.items, b.items), vehicles: mergeList(a.vehicles, b.vehicles),
-    orders: mergeList(a.orders, b.orders), trips: mergeList(a.trips, b.trips),
+    app: 'malcargo', version: 1, pallet: b.pallet ?? a.pallet, deleted,
+    items: mergeList(a.items, b.items), vehicles: mergeList(a.vehicles, b.vehicles), orders,
+    // chuyến bản máy kia còn trỏ tới đơn đã xoá ⇒ gỡ ra
+    trips: mergeList(a.trips, b.trips).map(t => (t.orderIds.some(gone) ? { ...t, orderIds: t.orderIds.filter(o => !gone(o)) } : t)),
   }
 }
 
