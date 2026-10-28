@@ -153,4 +153,16 @@ export const PAGES: Record<string, string> = {
   'Xoá toàn bộ dữ liệu?': 'Delete all data?',
   'Mã hàng, xe, đơn, chuyến của bạn trên máy này sẽ mất. Nên tải file sao lưu trước.':
     'Your items, trucks, orders and trips on this device will be lost. Download a backup first.',
+
+  // chọn nhiều để xoá (Mã hàng / Xe / Đơn hàng)
+  'Chọn tất cả': 'Select all',
+  'Chọn {name}': 'Select {name}',
+  'Đã chọn {n}/{total}': '{n}/{total} selected',
+  'Xoá {n}': 'Delete {n}',
+  'Xoá {n} mã hàng?': 'Delete {n} {n:item|items}?',
+  '{n} mã đang có trong đơn — các dòng đó sẽ báo thiếu mã.': '{n} of them {n:is|are} used in orders — those lines will show a missing item.',
+  'Xoá {n} xe?': 'Delete {n} {n:truck|trucks}?',
+  '{n} chuyến đang dùng các xe này sẽ phải chọn xe khác.': '{n} {n:trip uses|trips use} these trucks and will need another truck.',
+  'Xoá {n} đơn?': 'Delete {n} {n:order|orders}?',
+  '{n} đơn đang trong chuyến sẽ được gỡ khỏi chuyến.': '{n} {n:order is|orders are} in a trip and will be removed from it.',
 }

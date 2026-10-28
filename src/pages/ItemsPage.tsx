@@ -1,9 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { ClipboardPaste, Package, Plus } from 'lucide-react'
-import { useAllItems } from '../data/store'
+import { useAllItems, useData } from '../data/store'
 import { useAuth } from '../data/cloud'
 import type { Item } from '../data/types'
-import { Badge, BoxGlyph, Button, Empty, ListFooter, ListHead, SearchInput, SummaryBand, Tabs, fmtDec, fmtDims, fmtInt } from '../ui/kit'
+import { Badge, BoxGlyph, Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SearchInput, SelectBar, SummaryBand, Tabs, cx, fmtDec, fmtDims, fmtInt, useSelection } from '../ui/kit'
 import { ListCard, Page, PageHeader } from '../ui/Shell'
 import { ItemSheet } from '../ui/ItemSheet'
 import { ImportSheet } from '../ui/ImportSheet'
@@ -25,6 +25,13 @@ export default function ItemsPage() {
     // tìm cả tên đang hiện (tên mẫu đã dịch) lẫn tên gốc
     return inTab.filter(i => !k || i.code.toLowerCase().includes(k) || i.name.toLowerCase().includes(k) || tx(i.name).toLowerCase().includes(k))
   }, [inTab, q])
+  // chọn nhiều để xoá: chỉ mã của tôi (mẫu chung người dùng không xoá được); chọn theo danh sách đang lọc
+  const canSel = tab === 'me'
+  const sel = useSelection(canSel ? list.map(i => i.id) : [])
+  const [askDel, setAskDel] = useState(false)
+  const remove = useData(s => s.removeItem)
+  const orders = useData(s => s.orders)
+  const usedIn = sel.ids.filter(id => orders.some(o => o.lines.some(l => l.itemId === id))).length
 
   return (
     <>
@@ -62,35 +69,42 @@ export default function ItemsPage() {
               <p className="px-4 py-8 text-sm text-slate-600">{t('Không có mã nào khớp “{q}”.', { q })}</p>
             ) : (
               <>
-                <ListHead grid={GRID}>
+                <ListHead grid={GRID} check={canSel ? <RowCheck checked={sel.all} mixed={sel.some} onChange={sel.toggleAll} label={t('Chọn tất cả')} /> : undefined}>
                   <span /><span>{t('Mã')}</span><span>{t('Tên hàng')}</span><span className="text-right">{t('Thùng (mm)')}</span><span className="text-right">{t('kg/thùng')}</span>
                   <span className="text-right">{t('Thùng/pallet')}</span><span className="text-right">{t('Chồng')}</span><span />
                 </ListHead>
                 {list.map(i => (
-                  <button key={i.id} type="button" onClick={() => setEdit({ item: i })}
-                    className={`flex w-full items-center gap-3 border-b border-slate-100 px-4 py-2.5 text-left transition-colors last:border-b-0 hover:bg-slate-50 sm:grid sm:min-h-[52px] sm:gap-4 sm:py-2 ${GRID}`}>
-                    <BoxGlyph w={i.w} h={i.h} light={i.light} />
-                    <span className="hidden break-words text-sm font-medium text-slate-700 sm:block">{i.code}</span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{tx(i.name)}</span>
-                      <span className="num block text-[13px] leading-snug text-slate-600 sm:hidden">
-                        {i.code} · <span className="whitespace-nowrap">{fmtDims(i.l, i.w, i.h)} mm</span>
-                        {i.kg != null && <> · <span className="whitespace-nowrap">{fmtDec(i.kg, 2)} kg</span></>}
+                  <div key={i.id} className={cx('flex border-b border-slate-100 last:border-b-0', sel.has(i.id) && 'bg-brand-50')}>
+                    {canSel && <RowCheck checked={sel.has(i.id)} onChange={() => sel.toggle(i.id)} label={t('Chọn {name}', { name: tx(i.name) })} />}
+                    <button type="button" onClick={() => setEdit({ item: i })}
+                      className={cx('flex min-w-0 flex-1 items-center gap-3 py-2.5 pr-4 text-left transition-colors hover:bg-slate-50 sm:grid sm:min-h-[52px] sm:gap-4 sm:py-2', !canSel && 'pl-4', GRID)}>
+                      <BoxGlyph w={i.w} h={i.h} light={i.light} />
+                      <span className="hidden break-words text-sm font-medium text-slate-700 sm:block">{i.code}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{tx(i.name)}</span>
+                        <span className="num block text-[13px] leading-snug text-slate-600 sm:hidden">
+                          {i.code} · <span className="whitespace-nowrap">{fmtDims(i.l, i.w, i.h)} mm</span>
+                          {i.kg != null && <> · <span className="whitespace-nowrap">{fmtDec(i.kg, 2)} kg</span></>}
+                        </span>
                       </span>
-                    </span>
-                    <span className="num hidden text-right text-sm text-slate-700 sm:block">{fmtDims(i.l, i.w, i.h)}</span>
-                    <Num v={i.kg == null ? null : fmtDec(i.kg, 2)} />
-                    <Num v={i.perPallet == null ? null : fmtInt(i.perPallet)} />
-                    <Num v={i.maxLayers == null ? null : `≤ ${i.maxLayers}`} />
-                    <span className="shrink-0 text-right">{i.light && <Badge tone="amber">{t('Hàng nhẹ')}</Badge>}</span>
-                  </button>
+                      <span className="num hidden text-right text-sm text-slate-700 sm:block">{fmtDims(i.l, i.w, i.h)}</span>
+                      <Num v={i.kg == null ? null : fmtDec(i.kg, 2)} />
+                      <Num v={i.perPallet == null ? null : fmtInt(i.perPallet)} />
+                      <Num v={i.maxLayers == null ? null : `≤ ${i.maxLayers}`} />
+                      <span className="shrink-0 text-right">{i.light && <Badge tone="amber">{t('Hàng nhẹ')}</Badge>}</span>
+                    </button>
+                  </div>
                 ))}
               </>
             )}
             <ListFooter right={tab === 'admin' ? (isAdmin ? t('Bạn là admin: sửa mẫu chung, mọi người dùng thấy ngay') : t('Mẫu chung: bấm một mã để sửa, lưu lại thành mã của bạn')) : undefined}>{t('{n} / {total} mã', { n: list.length, total: inTab.length })}</ListFooter>
+            <SelectBar n={sel.ids.length} total={list.length} all={sel.all} onAll={sel.toggleAll} onClear={sel.clear} onDelete={() => setAskDel(true)} />
           </ListCard>
         )}
       </Page>
+      <Confirm open={askDel} onClose={() => setAskDel(false)} title={t('Xoá {n} mã hàng?', { n: fmtInt(sel.ids.length) })}
+        body={usedIn ? t('{n} mã đang có trong đơn — các dòng đó sẽ báo thiếu mã.', { n: fmtInt(usedIn) }) : t('Không thể hoàn tác.')}
+        onOk={() => { sel.ids.forEach(remove); sel.clear() }} />
       <ItemSheet open={!!edit} item={edit?.item ?? null} asSample={edit?.sample} onClose={() => setEdit(null)} onSaved={() => setTab('me')} />
       <ImportSheet open={paste} start="items" onClose={() => { setPaste(false); setTab('me') }} />
     </>

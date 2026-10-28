@@ -1,9 +1,9 @@
 // Bộ thành phần dùng chung — một kiểu nút, một kiểu ô nhập, một kiểu tấm trượt cho cả app.
 // Khuôn Manhattan (thẻ trắng trên canvas xám, dải tổng hợp navy, section band) + luật dễ đọc:
 // chữ phụ tối thiểu slate-500 trên nền trắng, không bóng trên thứ nằm yên, góc bo 6–8 px.
-import { useEffect, useRef, useState, type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, X } from 'lucide-react'
+import { Search, Trash2, X } from 'lucide-react'
 import { numLocale, t } from '../i18n'
 
 export const cx = (...a: (string | false | null | undefined)[]) => a.filter(Boolean).join(' ')
@@ -200,9 +200,57 @@ export function ListFooter({ children, right }: { children: ReactNode; right?: R
   )
 }
 
-/** Hàng tiêu đề cột của danh sách (chỉ máy tính) — cùng lưới với từng dòng. */
-export function ListHead({ grid, children }: { grid: string; children: ReactNode }) {
-  return <div className={cx('hidden h-9 items-center gap-4 border-b border-slate-200 px-4 text-[12px] font-medium text-slate-600 sm:grid', grid)}>{children}</div>
+/** Hàng tiêu đề cột của danh sách (chỉ máy tính) — cùng lưới với từng dòng. `check`: cột ô chọn đầu dòng (chọn tất cả). */
+export function ListHead({ grid, children, check }: { grid: string; children: ReactNode; check?: ReactNode }) {
+  const head = cx('h-9 items-center gap-4 text-[12px] font-medium text-slate-600 sm:grid', grid)
+  if (check === undefined) return <div className={cx('hidden border-b border-slate-200 px-4', head)}>{children}</div>
+  return (
+    <div className="hidden border-b border-slate-200 sm:flex">
+      {check}
+      <div className={cx('min-w-0 flex-1 pr-4', head)}>{children}</div>
+    </div>
+  )
+}
+
+// ── Chọn nhiều dòng để xoá một lần ───────────────────────────────────────────
+/** Ô chọn đầu dòng — nằm NGOÀI nút / link của dòng: bấm ô chọn không mở dòng. Cả cột 44 px là vùng chạm. */
+export function RowCheck({ checked, onChange, label, mixed }: { checked: boolean; onChange: () => void; label: string; mixed?: boolean }) {
+  return (
+    <label className="grid w-11 shrink-0 cursor-pointer place-items-center self-stretch hover:bg-slate-100" title={label}>
+      <input type="checkbox" checked={checked} onChange={onChange} aria-label={label}
+        ref={el => { if (el) el.indeterminate = !!mixed }} className="h-[18px] w-[18px] cursor-pointer accent-brand-500" />
+    </label>
+  )
+}
+
+/** Các dòng đang chọn: bỏ id đã biến mất (xoá ở chỗ khác, đổi tab) để số đếm luôn đúng. */
+export function useSelection(ids: string[]) {
+  const [sel, setSel] = useState<Set<string>>(() => new Set())
+  const live = ids.filter(id => sel.has(id))
+  const all = ids.length > 0 && live.length === ids.length
+  return {
+    ids: live,
+    has: (id: string) => sel.has(id),
+    toggle: (id: string) => setSel(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n }),
+    all, some: live.length > 0 && !all,
+    toggleAll: () => setSel(all ? new Set() : new Set(ids)),
+    clear: () => setSel(new Set()),
+  }
+}
+
+/** Thanh dính đáy khi đang chọn: ô chọn tất cả (thẳng cột ô chọn của dòng) · số đã chọn · bỏ chọn · Xoá. */
+export function SelectBar({ n, total, all, onAll, onClear, onDelete }: {
+  n: number; total: number; all: boolean; onAll: () => void; onClear: () => void; onDelete: () => void
+}) {
+  if (!n) return null
+  return (
+    <div className="pb-safe sticky bottom-0 z-10 flex items-stretch gap-2 border-t-2 border-brand-500 bg-white pr-3 shadow-pop sm:rounded-b-lg sm:pr-4">
+      <RowCheck checked={all} mixed={!all} onChange={onAll} label={t('Chọn tất cả')} />
+      <span className="num flex min-w-0 flex-1 items-center text-sm font-semibold text-slate-900">{t('Đã chọn {n}/{total}', { n: fmtInt(n), total: fmtInt(total) })}</span>
+      <button type="button" onClick={onClear} className="tap shrink-0 px-1 text-sm font-medium text-slate-600 hover:text-slate-900">{t('Bỏ chọn')}</button>
+      <Button variant="danger" className="my-2 shrink-0" onClick={onDelete}><Trash2 size={16} />{t('Xoá {n}', { n: fmtInt(n) })}</Button>
+    </div>
+  )
 }
 
 /** Thùng carton vẽ ĐÚNG TỈ LỆ mặt trước (rộng × cao) — nhìn là biết thùng dẹt hay cao.
@@ -262,6 +310,36 @@ export function LiveNum({ value, onCommit, valid = n => n > 0, suffix, label, cl
   )
 }
 
+/** Khung tấm phủ bám theo phần màn CÒN THẤY. iPhone: bàn phím không thu nhỏ trang — tấm `fixed inset-0` giữ
+ *  nguyên cỡ cũ, đáy chìm dưới bàn phím và hở một dải lộ trang phía sau (chạm vào đó là bấm nhầm nút của trang).
+ *  Theo visualViewport thì đáy tấm nằm sát trên bàn phím, phủ kín đúng phần đang thấy. iPhone còn có thanh gợi ý
+ *  tự điền + nút cất bàn phím NỔI trên mép bàn phím, đè lên nút Huỷ / Lưu ⇒ bàn phím mở thì chừa thêm khoảng đó. */
+const IOS = typeof navigator !== 'undefined' && (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
+export function useViewportBox(on: boolean): CSSProperties | undefined {
+  const [box, setBox] = useState<CSSProperties>()
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!on || !vv) return
+    let full = vv.height
+    // đang phóng to bằng hai ngón thì thôi — bám theo khung phóng to làm tấm nhảy lung tung
+    const fit = () => {
+      full = Math.max(full, vv.height)
+      const kb = full - vv.height > 150
+      setBox(vv.scale > 1.01 ? undefined : { top: vv.offsetTop, height: vv.height, bottom: 'auto', paddingBottom: kb && IOS ? 72 : undefined })
+    }
+    fit()
+    vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit)
+    return () => { vv.removeEventListener('resize', fit); vv.removeEventListener('scroll', fit); setBox(undefined) }
+  }, [on])
+  return box
+}
+
+// ô đang gõ (bàn phím đang mở) nằm trong `el`
+const typingIn = (el: HTMLElement | null) => {
+  const a = document.activeElement
+  return !!el && !!a && el.contains(a) && (a instanceof HTMLTextAreaElement || (a instanceof HTMLInputElement && !['checkbox', 'radio', 'button'].includes(a.type)))
+}
+
 /** Tấm trượt: điện thoại trượt từ đáy, máy tính trượt từ lề phải. Header + thân cuộn + chân dính đáy. */
 export function Sheet({ open, onClose, title, subtitle, children, footer, wide }: {
   open: boolean; onClose: () => void; title: ReactNode; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode; wide?: boolean | 'table'
@@ -274,12 +352,18 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, wide }
     document.body.style.overflow = 'hidden'
     return () => { window.removeEventListener('keydown', k); document.body.style.overflow = prev }
   }, [open, onClose])
+  const box = useViewportBox(open)
+  const sheet = useRef<HTMLDivElement>(null)
+  // điện thoại đang gõ mà chạm ra ngoài tấm: chỉ cất bàn phím, KHÔNG đóng tấm — khỏi mất chữ vừa gõ
+  const keepOpen = useRef(false)
   if (!open) return null
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-stretch sm:justify-end">
-      <div className="absolute inset-0 bg-navy-950/45" style={{ animation: 'fade .15s' }} onClick={onClose} />
-      <div role="dialog" aria-modal="true" data-sheet
-        className={cx('relative flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-white shadow-pop sm:h-full sm:max-h-none sm:rounded-none sm:border-l sm:border-slate-200',
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-stretch sm:justify-end" style={box}>
+      <div className="absolute inset-0 bg-navy-950/45" style={{ animation: 'fade .15s' }}
+        onPointerDown={e => { keepOpen.current = e.pointerType !== 'mouse' && typingIn(sheet.current) }}
+        onClick={() => { if (keepOpen.current) (document.activeElement as HTMLElement).blur(); else onClose() }} />
+      <div ref={sheet} role="dialog" aria-modal="true" data-sheet
+        className={cx('relative flex max-h-[92%] w-full flex-col rounded-t-2xl bg-white shadow-pop sm:h-full sm:max-h-none sm:rounded-none sm:border-l sm:border-slate-200',
           wide === 'table' ? 'sm:max-w-[780px]' : wide ? 'sm:max-w-[560px]' : 'sm:max-w-[460px]')}
         style={{ animation: `${window.innerWidth < 640 ? 'sheet-up' : 'sheet-left'} .2s ease-out` }}>
         <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-slate-300 sm:hidden" />
@@ -309,7 +393,16 @@ export function Popover({ trigger, children, align = 'left', up, hover, classNam
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return
-    const down = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false) }
+    const down = (e: PointerEvent) => {
+      if (ref.current?.contains(e.target as Node)) return
+      setOpen(false)
+      // điện thoại: chạm ra ngoài là để ĐÓNG bảng — nuốt luôn cú chạm đó, đừng để nó bấm trúng nút nằm dưới ngón tay
+      // (chuột thì bấm chính xác: đóng bảng và bấm luôn nút được trỏ, như cũ)
+      if (e.pointerType === 'mouse') return
+      const eat = (c: MouseEvent) => { c.preventDefault(); c.stopPropagation() }
+      window.addEventListener('click', eat, { capture: true, once: true })
+      setTimeout(() => window.removeEventListener('click', eat, true), 500)
+    }
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
     document.addEventListener('pointerdown', down)
     window.addEventListener('keydown', key)
@@ -348,9 +441,10 @@ export function MenuItem({ icon, children, onClick, danger, disabled }: { icon?:
 export function Confirm({ open, title, body, okText = t('Xoá'), danger = true, onOk, onClose }: {
   open: boolean; title: string; body?: ReactNode; okText?: string; danger?: boolean; onOk: () => void; onClose: () => void
 }) {
+  const box = useViewportBox(open)
   if (!open) return null
   return createPortal(
-    <div className="fixed inset-0 z-[60] grid place-items-center p-5">
+    <div className="fixed inset-0 z-[60] grid place-items-center p-5" style={box}>
       <div className="absolute inset-0 bg-navy-950/45" onClick={onClose} />
       <div role="alertdialog" aria-modal="true" className="relative w-full max-w-sm rounded-lg bg-white p-5 shadow-pop" style={{ animation: 'sheet-up .15s ease-out' }}>
         <h3 className="text-base font-semibold text-slate-900">{title}</h3>

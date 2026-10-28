@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Plus, Truck } from 'lucide-react'
-import { useAllVehicles } from '../data/store'
+import { useAllVehicles, useData } from '../data/store'
 import { useAuth } from '../data/cloud'
 import type { Vehicle } from '../data/types'
-import { Badge, Button, Empty, ListFooter, ListHead, SummaryBand, Tabs, fmtDims, fmtInt, fmtKgShort, fmtM3 } from '../ui/kit'
+import { Badge, Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SelectBar, SummaryBand, Tabs, cx, fmtDims, fmtInt, fmtKgShort, fmtM3, useSelection } from '../ui/kit'
 import { ListCard, Page, PageHeader } from '../ui/Shell'
 import { VehicleSheet } from '../ui/VehicleSheet'
 import { t, tx } from '../i18n'
@@ -18,6 +18,13 @@ export default function VehiclesPage() {
   const [edit, setEdit] = useState<{ v: Vehicle | null; sample?: boolean } | null>(null)
   const isAdmin = useAuth(s => s.isAdmin)
   const list = all.filter(v => v.owner === tab)
+  // chọn nhiều để xoá: chỉ xe của tôi (mẫu chung người dùng không xoá được)
+  const canSel = tab === 'me'
+  const sel = useSelection(canSel ? list.map(v => v.id) : [])
+  const [askDel, setAskDel] = useState(false)
+  const remove = useData(s => s.removeVehicle)
+  const trips = useData(s => s.trips)
+  const usedBy = trips.filter(tr => tr.vehicleId && sel.ids.includes(tr.vehicleId)).length
   return (
     <>
       <PageHeader title={t('Xe')} subtitle={t('Lòng thùng, tải trọng, cách chở')}
@@ -39,32 +46,39 @@ export default function VehiclesPage() {
               { label: t('Thùng rời'), value: fmtInt(list.filter(v => v.kind === 'loose').length) },
               { label: t('Xếp pallet'), value: fmtInt(list.filter(v => v.kind === 'pallet').length) },
             ]} />
-            <ListHead grid={GRID}>
+            <ListHead grid={GRID} check={canSel ? <RowCheck checked={sel.all} mixed={sel.some} onChange={sel.toggleAll} label={t('Chọn tất cả')} /> : undefined}>
               <span /><span>{t('Xe')}</span><span>{t('Biển số')}</span><span>{t('Cách chở')}</span><span className="text-right">{t('Lòng thùng (mm)')}</span>
               <span className="text-right">{t('Thể tích')}</span><span className="text-right">{t('Tải trọng')}</span>
             </ListHead>
             {list.map(v => (
-              <button key={v.id} type="button" onClick={() => setEdit({ v })}
-                className={`flex w-full items-center gap-3 border-b border-slate-100 px-4 py-2.5 text-left transition-colors last:border-b-0 hover:bg-slate-50 sm:grid sm:min-h-[56px] sm:gap-4 sm:py-2 ${GRID}`}>
-                <TruckGlyph pallet={v.kind === 'pallet'} />
-                <span className="min-w-0 flex-1">
-                  <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{tx(v.name)}</span>
-                  <span className="num block text-[13px] leading-snug text-slate-600 sm:hidden">
-                    {v.plate && `${v.plate} · `}<span className="whitespace-nowrap">{fmtDims(v.l, v.w, v.h)} mm</span>
-                    {v.payloadKg != null && <> · <span className="whitespace-nowrap">{fmtKgShort(v.payloadKg)}</span></>}
+              <div key={v.id} className={cx('flex border-b border-slate-100 last:border-b-0', sel.has(v.id) && 'bg-brand-50')}>
+                {canSel && <RowCheck checked={sel.has(v.id)} onChange={() => sel.toggle(v.id)} label={t('Chọn {name}', { name: tx(v.name) })} />}
+                <button type="button" onClick={() => setEdit({ v })}
+                  className={cx('flex min-w-0 flex-1 items-center gap-3 py-2.5 pr-4 text-left transition-colors hover:bg-slate-50 sm:grid sm:min-h-[56px] sm:gap-4 sm:py-2', !canSel && 'pl-4', GRID)}>
+                  <TruckGlyph pallet={v.kind === 'pallet'} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{tx(v.name)}</span>
+                    <span className="num block text-[13px] leading-snug text-slate-600 sm:hidden">
+                      {v.plate && `${v.plate} · `}<span className="whitespace-nowrap">{fmtDims(v.l, v.w, v.h)} mm</span>
+                      {v.payloadKg != null && <> · <span className="whitespace-nowrap">{fmtKgShort(v.payloadKg)}</span></>}
+                    </span>
                   </span>
-                </span>
-                <span className="hidden break-words text-sm text-slate-700 sm:block">{v.plate || <span className="text-slate-500">—</span>}</span>
-                <span className="shrink-0"><KindBadge v={v} /></span>
-                <span className="num hidden text-right text-sm text-slate-700 sm:block">{fmtDims(v.l, v.w, v.h)}</span>
-                <span className="num hidden text-right text-sm text-slate-700 sm:block">{fmtM3(m3Of(v))}</span>
-                <span className="num hidden text-right text-sm text-slate-700 sm:block">{v.payloadKg != null ? fmtKgShort(v.payloadKg) : <span className="text-slate-500">—</span>}</span>
-              </button>
+                  <span className="hidden break-words text-sm text-slate-700 sm:block">{v.plate || <span className="text-slate-500">—</span>}</span>
+                  <span className="shrink-0"><KindBadge v={v} /></span>
+                  <span className="num hidden text-right text-sm text-slate-700 sm:block">{fmtDims(v.l, v.w, v.h)}</span>
+                  <span className="num hidden text-right text-sm text-slate-700 sm:block">{fmtM3(m3Of(v))}</span>
+                  <span className="num hidden text-right text-sm text-slate-700 sm:block">{v.payloadKg != null ? fmtKgShort(v.payloadKg) : <span className="text-slate-500">—</span>}</span>
+                </button>
+              </div>
             ))}
             <ListFooter right={tab === 'admin' ? (isAdmin ? t('Bạn là admin: sửa mẫu chung, mọi người dùng thấy ngay') : t('Mẫu chung: bấm một xe để sửa, lưu lại thành xe của bạn')) : undefined}>{t('{n} xe', { n: list.length })}</ListFooter>
+            <SelectBar n={sel.ids.length} total={list.length} all={sel.all} onAll={sel.toggleAll} onClear={sel.clear} onDelete={() => setAskDel(true)} />
           </ListCard>
         )}
       </Page>
+      <Confirm open={askDel} onClose={() => setAskDel(false)} title={t('Xoá {n} xe?', { n: fmtInt(sel.ids.length) })}
+        body={usedBy ? t('{n} chuyến đang dùng các xe này sẽ phải chọn xe khác.', { n: fmtInt(usedBy) }) : t('Không thể hoàn tác.')}
+        onOk={() => { sel.ids.forEach(remove); sel.clear() }} />
       <VehicleSheet open={!!edit} vehicle={edit?.v ?? null} asSample={edit?.sample} onClose={() => setEdit(null)} onSaved={() => setTab('me')} />
     </>
   )

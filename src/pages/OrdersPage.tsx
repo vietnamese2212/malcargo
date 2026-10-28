@@ -1,9 +1,9 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { ChevronRight, ClipboardList, Plus } from 'lucide-react'
-import { newId, nextName, useAllItems, useData } from '../data/store'
+import { isSample, newId, nextName, useAllItems, useData } from '../data/store'
 import { resolveOrder } from '../data/resolve'
 import { orderTotals } from '../engine/plan'
-import { Button, Empty, ListFooter, ListHead, SummaryBand, fmtInt, fmtKgShort, fmtM3 } from '../ui/kit'
+import { Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SelectBar, SummaryBand, cx, fmtInt, fmtKgShort, fmtM3, useSelection } from '../ui/kit'
 import { ListCard, Page, PageHeader } from '../ui/Shell'
 import { go } from '../ui/route'
 import { t, tx } from '../i18n'
@@ -33,6 +33,12 @@ export default function OrdersPage() {
   }), [orders, items, pallet, trips])
   const sum = rows.reduce((s, r) => ({ cartons: s.cartons + r.t.cartons, kg: s.kg + r.t.kg }), { cartons: 0, kg: 0 })
   const loose = rows.filter(r => !r.trip).length
+  // chọn nhiều để xoá (đơn mẫu không xoá được)
+  const ids = rows.map(r => r.o.id).filter(id => !isSample(id))
+  const sel = useSelection(ids)
+  const [askDel, setAskDel] = useState(false)
+  const remove = useData(s => s.removeOrder)
+  const inTrip = rows.filter(r => r.trip && sel.has(r.o.id)).length
 
   return (
     <>
@@ -51,34 +57,42 @@ export default function OrdersPage() {
               { label: t('Tổng thùng'), value: fmtInt(sum.cartons) },
               { label: t('Tổng khối lượng'), value: fmtKgShort(sum.kg) },
             ]} />
-            <ListHead grid={GRID}>
+            <ListHead grid={GRID} check={ids.length ? <RowCheck checked={sel.all} mixed={sel.some} onChange={sel.toggleAll} label={t('Chọn tất cả')} /> : <span className="w-11 shrink-0" />}>
               <span>{t('Đơn')}</span><span>{t('Điểm giao')}</span><span>{t('Chuyến')}</span><span className="text-right">{t('Thùng')}</span>
               <span className="text-right">{t('Khối lượng')}</span><span className="text-right">{t('Thể tích')}</span><span className="text-right">Pallet</span><span />
             </ListHead>
             {rows.map(({ o, t: tot, trip }) => (
-              <a key={o.id} href={`#/order/${o.id}`}
-                className={`group flex items-center gap-4 border-b border-slate-100 px-4 py-3 transition-colors last:border-b-0 hover:bg-slate-50 sm:grid sm:min-h-[52px] sm:py-2 ${GRID}`}>
-                <span className="min-w-0 flex-1">
-                  <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{tx(o.name)}</span>
-                  <span className="num block text-[13px] leading-snug text-slate-600 sm:hidden">
-                    {[tx(o.place), fmtKgShort(tot.kg) + (tot.kgKnown ? '' : '*'), fmtM3(tot.m3), trip && tx(trip.name)].filter(Boolean).join(' · ')}
+              <div key={o.id} className={cx('flex border-b border-slate-100 last:border-b-0', sel.has(o.id) && 'bg-brand-50')}>
+                {/* đơn mẫu không xoá được — chừa chỗ cho thẳng cột */}
+                {isSample(o.id) ? <span className="w-11 shrink-0" /> : <RowCheck checked={sel.has(o.id)} onChange={() => sel.toggle(o.id)} label={t('Chọn {name}', { name: tx(o.name) })} />}
+                <a href={`#/order/${o.id}`}
+                  className={`group flex min-w-0 flex-1 items-center gap-4 py-3 pr-4 transition-colors hover:bg-slate-50 sm:grid sm:min-h-[52px] sm:py-2 ${GRID}`}>
+                  <span className="min-w-0 flex-1">
+                    <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{tx(o.name)}</span>
+                    <span className="num block text-[13px] leading-snug text-slate-600 sm:hidden">
+                      {[tx(o.place), fmtKgShort(tot.kg) + (tot.kgKnown ? '' : '*'), fmtM3(tot.m3), trip && tx(trip.name)].filter(Boolean).join(' · ')}
+                    </span>
                   </span>
-                </span>
-                <span className="hidden break-words text-sm text-slate-700 sm:block">{tx(o.place) || <span className="text-slate-500">—</span>}</span>
-                <span className="hidden break-words text-sm sm:block">{trip ? <span className="text-brand-700">{tx(trip.name)}</span> : <span className="text-slate-500">{t('Chưa vào chuyến')}</span>}</span>
-                <span className="num shrink-0 text-right text-sm font-semibold text-slate-900">
-                  {fmtInt(tot.cartons)}<span className="font-normal text-slate-600 sm:hidden"> {t('{n:thùng|thùng}', { n: tot.cartons })}</span>
-                </span>
-                <span className="num hidden text-right text-sm text-slate-700 sm:block" title={tot.kgKnown ? undefined : t('Có mã chưa khai kg')}>{fmtKgShort(tot.kg)}{!tot.kgKnown && '*'}</span>
-                <span className="num hidden text-right text-sm text-slate-700 sm:block">{fmtM3(tot.m3)}</span>
-                <span className="num hidden text-right text-sm text-slate-700 sm:block">{tot.pallets != null ? `~${tot.pallets}` : <span className="text-slate-500">—</span>}</span>
-                <ChevronRight size={16} className="shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
-              </a>
+                  <span className="hidden break-words text-sm text-slate-700 sm:block">{tx(o.place) || <span className="text-slate-500">—</span>}</span>
+                  <span className="hidden break-words text-sm sm:block">{trip ? <span className="text-brand-700">{tx(trip.name)}</span> : <span className="text-slate-500">{t('Chưa vào chuyến')}</span>}</span>
+                  <span className="num shrink-0 text-right text-sm font-semibold text-slate-900">
+                    {fmtInt(tot.cartons)}<span className="font-normal text-slate-600 sm:hidden"> {t('{n:thùng|thùng}', { n: tot.cartons })}</span>
+                  </span>
+                  <span className="num hidden text-right text-sm text-slate-700 sm:block" title={tot.kgKnown ? undefined : t('Có mã chưa khai kg')}>{fmtKgShort(tot.kg)}{!tot.kgKnown && '*'}</span>
+                  <span className="num hidden text-right text-sm text-slate-700 sm:block">{fmtM3(tot.m3)}</span>
+                  <span className="num hidden text-right text-sm text-slate-700 sm:block">{tot.pallets != null ? `~${tot.pallets}` : <span className="text-slate-500">—</span>}</span>
+                  <ChevronRight size={16} className="shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
+                </a>
+              </div>
             ))}
             <ListFooter right={rows.some(r => !r.t.kgKnown) ? t('* có mã chưa khai kg — khối lượng thiếu') : undefined}>{t('{n} đơn', { n: rows.length })}</ListFooter>
+            <SelectBar n={sel.ids.length} total={ids.length} all={sel.all} onAll={sel.toggleAll} onClear={sel.clear} onDelete={() => setAskDel(true)} />
           </ListCard>
         )}
       </Page>
+      <Confirm open={askDel} onClose={() => setAskDel(false)} title={t('Xoá {n} đơn?', { n: fmtInt(sel.ids.length) })}
+        body={inTrip ? t('{n} đơn đang trong chuyến sẽ được gỡ khỏi chuyến.', { n: fmtInt(inTrip) }) : t('Không thể hoàn tác.')}
+        onOk={() => { sel.ids.forEach(remove); sel.clear() }} />
     </>
   )
 }
