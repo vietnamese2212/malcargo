@@ -96,6 +96,15 @@ for (const [name, truck, orders] of cases) {
       // thùng trong khối; khối = chân + phần chờm, chờm mỗi bên ≤ 60mm
       ok(d && cs.every(c => c.x >= -0.5 && c.y >= -0.5 && c.x + c.l <= g.l + 0.5 && c.y + c.w <= g.w + 0.5)
         && Math.max(d.x, d.y, g.l - d.x - d.l, g.w - d.y - d.w) <= 60, `${name}: ${m.label} có thùng ra ngoài khối pallet / chờm quá 60mm`)
+      // đủ thùng (không rơi thùng nào khi xếp lớp) + CHỖ ĐỠ: thùng không nằm sát mặt pallet phải được đỡ ≥ 60% đáy
+      // (thùng dưới thấp hơn ≤ 35mm vẫn tính — lớp trộn thùng cao 130 / 100); user 28/10: "phía dưới phải phủ hết"
+      ok(cs.length === (m.layers ?? []).reduce((s, l) => s + l.n, 0), `${name}: ${m.label} xếp ${cs.length} thùng ≠ ruột ${(m.layers ?? []).reduce((s, l) => s + l.n, 0)}`)
+      const weak = cs.filter(c => c.z >= 1).map(c => {
+        let s = 0
+        for (const d of cs) if (d.z < c.z && d.z + d.h <= c.z + 1 && d.z + d.h >= c.z - 36) s += Math.max(0, Math.min(c.x + c.l, d.x + d.l) - Math.max(c.x, d.x)) * Math.max(0, Math.min(c.y + c.w, d.y + d.w) - Math.max(c.y, d.y))
+        return { c, s: s / (c.l * c.w) }
+      }).filter(x => x.s < 0.6)
+      ok(!weak.length, `${name}: ${m.label} có ${weak.length} thùng đỡ dưới 60% đáy (vd ${weak[0] && `${weak[0].c.itemId} z${weak[0].c.z} ${Math.round(weak[0].s * 100)}%`})`)
       const it = m.itemId ? items[m.itemId] : null
       if (it && cs.length === it.perPallet) {
         const per = Math.ceil(it.perPallet / it.maxLayers), top = Math.max(...cs.map(c => c.z + c.h))
@@ -116,7 +125,9 @@ for (const [name, truck, orders] of cases) {
     }
     for (const [k, n] of remOn) ok(n === 1, `${name}: phần lẻ ${k} vắt qua ${n} pallet`)
     const ps = r.plan.placed
-    ok(ps.some(a => ps.some(b => b !== a && b.x >= a.x + a.l + 1 && Math.abs(b.y - a.y) < 1)), `${name}: các pallet trong làn phải có khe`)
+    // làn nào có từ 2 pallet thì giữa chúng phải có khe
+    const sameLane = ps.some(a => ps.some(b => b !== a && b.x > a.x && Math.abs(b.y - a.y) < 1))
+    if (sameLane) ok(ps.some(a => ps.some(b => b !== a && b.x >= a.x + a.l + 1 && Math.abs(b.y - a.y) < 1)), `${name}: các pallet trong làn phải có khe`)
   }
   const show = r => r.count.map(c => `${c.label}${c.mix ? ' [' + c.mix.map(x => x.n + ' ' + x.label).join(' + ') + ']' : ''}`).join(' · ')
   // Ca ảnh chủ dự án 28/10: chuyến mẫu, xe 5 tấn đổi sang chở pallet
@@ -135,6 +146,17 @@ for (const [name, truck, orders] of cases) {
     ok(c && d.x === 0 && d.y === 0 && c.x >= d.x && c.x + c.l <= d.x + d.l && c.y >= d.y && c.y + c.w <= d.y + d.w
       && Math.abs(c.x + c.l / 2 - (d.x + d.l / 2)) < 60 && Math.abs(c.y + c.w / 2 - (d.y + d.w / 2)) < 60,
       `pallet · thùng thừa 144: thùng thừa phải nằm giữa mặt pallet lẻ, gọn trong chân — được ${JSON.stringify({ c, d })}`)
+  }
+  // Ảnh chủ dự án 28/10: phần lẻ nhỏ của 2 mã nặng + nhiều thạch túi — lớp dưới phải phủ kín (lớp hỗn hợp nhiều mã),
+  // thạch túi không chồng lên ô trống / bậc so le
+  for (const [nm, ls] of [['5 Sữa 180 + 7 Sữa 110 + 150 túi', [['adm-i-st180', 115], ['adm-i-st110', 147], ['adm-i-tui110', 150]]],
+    ['13 Sữa 180 + 20 Sữa chua chai + 60 túi', [['adm-i-st180', 13], ['adm-i-c100', 20], ['adm-i-tui110', 60]]],
+    ['9 Sữa thạch + 17 Sữa chai + 100 túi', [['adm-i-th170', 9], ['adm-i-c85', 17], ['adm-i-tui110', 100]]]]) {
+    const r = E.computeTrip({ truck: trucks['adm-v-p8t'], orders: [{ id: 'm', name: 'Đơn M', place: '', lines: ls.map(([id, qty]) => ({ item: items[id], qty })) }], pallet: P })
+    palletChecks(`pallet · lớp phủ kín · ${nm}`, r)
+    const mx = r.meta.find(m => m.mix)
+    const bottom = mx ? mx.cartons.filter(c => c.z < 1).reduce((s, c) => s + c.l * c.w, 0) / (P.l * P.w) : 0
+    ok(bottom >= 0.85, `pallet · lớp phủ kín · ${nm}: lớp đáy pallet gộp chỉ phủ ${Math.round(bottom * 100)}% mặt pallet`)
   }
   const a = E.computeTrip({ truck: trucks['adm-v-p8t'], orders: os, pallet: P })
   palletChecks('pallet · phần lẻ dồn', a)

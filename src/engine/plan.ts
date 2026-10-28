@@ -1,6 +1,7 @@
 // Ghép dữ liệu của người dùng (xe · mã hàng · đơn) vào thuật toán xếp — cùng trình tự với màn 3D
 // của SUPPLYC: xe xá xếp thẳng thùng; xe pallet gom mọi hàng lên pallet trước rồi xếp các pallet.
-// File này THUẦN (không React) để chạy được trong Web Worker và trong bài kiểm.
+// File này THUẦN (không React) để chạy được trong Web Worker và trong bài kiểm. Chữ sinh ra ở đây (nhãn pallet,
+// cảnh báo) là tiếng Việt gốc — Worker không biết ngôn ngữ; màn hình dịch bằng `tx()` (luật trong src/i18n/en.ts).
 import {
   computeLoadPlan, palletizeGroups, palletFitError, palletsTooTall, runPattern,
   palletFloorSlots, type LoadGroup, type LoadPlan, type PalletSpec, type PalletizeInput, type PlacedBox,
@@ -36,7 +37,7 @@ export interface CountRow {
   group: number
   label: string
   orderName: string
-  unit: 'thùng' | 'pallet'
+  unit: 'thùng' | 'pallet' // i18n-ok
   placed: number
   total: number
   // Chân hàng: [số chân, số lớp] — vd [[36, 11], [4, 12]] = 36 chân cao 11 + 4 chân cao 12
@@ -60,52 +61,120 @@ export interface TripResult {
   warnings: string[]
 }
 
-/** Thùng thật trên MẶT pallet, z tính từ mặt đế. Mỗi mã lần lượt theo ruột (nặng dưới, nhẹ trên); mỗi thùng
- *  vào vị trí mẫu của mã (`runPattern` — có lớp đầy: mẫu đúng số thùng/lớp, căn giữa chân, chân không chứa nổi
- *  thì chờm mép; chưa đủ một lớp: mẫu gọn cho đúng số thùng đó) có mặt đỡ THẤP nhất (đặt trên điểm cao nhất của
- *  mặt đỡ; bằng nhau thì chỗ phẳng hơn, rồi chỗ GẦN GIỮA chân hơn) ⇒ chỗ trống của lớp thiếu được mã sau lấp
- *  nốt, cả mặt dâng đều — liền khối, không lỗ, không cột (user 28/10: "xếp liền khối trên pallet"); thùng lẻ
- *  nằm giữa mặt, không ra góc ("thừa 1 thùng lại xếp lên nóc pallet nguyên?" — thùng ở góc sát pallet bên cạnh).
+type Rect = { x: number; y: number; l: number; w: number }
+const overlap = (a: Rect, b: Rect) => Math.max(0, Math.min(a.x + a.l, b.x + b.l) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.w, b.y + b.w) - Math.max(a.y, b.y))
+/** Một chỗ đặt vừa thùng l×w (thử 2 hướng) mà `ok` nhận (đủ chỗ đỡ): thử góc các ô trống và các góc của thùng lớp
+ *  dưới (chồng thẳng cột lên thùng dưới); chỗ phải nằm trọn trong một ô trống; sát đáy rồi sát trái trước. */
+function fitIn(free: Rect[], l: number, w: number, ok: (p: Rect) => boolean, below: Rect[] = []): Rect | null {
+  const cand: Rect[] = []
+  for (const [a, b] of [[l, w], [w, l]]) {
+    for (const f of free) cand.push({ x: f.x, y: f.y, l: a, w: b })
+    for (const d of below) for (const x of [d.x, d.x + d.l - a]) for (const y of [d.y, d.y + d.w - b]) cand.push({ x, y, l: a, w: b })
+  }
+  const inFree = (p: Rect) => free.some(f => p.x >= f.x - 1e-6 && p.y >= f.y - 1e-6 && p.x + p.l <= f.x + f.l + 1e-6 && p.y + p.w <= f.y + f.w + 1e-6)
+  return cand.sort((p, q) => p.y - q.y || p.x - q.x).find(p => inFree(p) && ok(p)) ?? null
+}
+/** Cắt ô `p` khỏi danh sách chỗ trống (maxrects: mỗi chỗ trống bị chạm tách thành tối đa 4 dải), bỏ dải nằm trong dải khác. */
+function cutFree(free: Rect[], p: Rect): Rect[] {
+  const out: Rect[] = []
+  for (const f of free) {
+    if (p.x >= f.x + f.l || p.x + p.l <= f.x || p.y >= f.y + f.w || p.y + p.w <= f.y) { out.push(f); continue }
+    if (p.x > f.x) out.push({ x: f.x, y: f.y, l: p.x - f.x, w: f.w })
+    if (p.x + p.l < f.x + f.l) out.push({ x: p.x + p.l, y: f.y, l: f.x + f.l - p.x - p.l, w: f.w })
+    if (p.y > f.y) out.push({ x: f.x, y: f.y, l: f.l, w: p.y - f.y })
+    if (p.y + p.w < f.y + f.w) out.push({ x: f.x, y: p.y + p.w, l: f.l, w: f.y + f.w - p.y - p.w })
+  }
+  const inside = (a: Rect, b: Rect) => a.x >= b.x && a.y >= b.y && a.x + a.l <= b.x + b.l && a.y + a.w <= b.y + b.w
+  return out.filter((a, i) => !out.some((b, j) => j !== i && inside(a, b) && (!inside(b, a) || j < i)))
+}
+
+/** Thùng thật trên MẶT pallet, xếp theo LỚP PHẲNG, z tính từ mặt đế (user 28/10: "phía dưới phải phủ hết, kể cả 1 lớp
+ *  có nhiều hơn 1 mặt hàng vẫn phải phủ — ở dưới không chắc chắn thì đâu xếp được ở trên"; bản trước đặt từng thùng
+ *  vào chỗ thấp nhất theo mẫu riêng của từng mã ⇒ lớp thiếu của mã này lệch khuôn mã kia, thành lỗ và bậc so le):
+ *   1. dưới cùng: các LỚP ĐỦ của từng mã hàng thường, nặng trước (mẫu đúng số thùng/lớp, căn giữa chân — `runPattern`);
+ *   2. phần lẻ hàng thường ghép thành LỚP HỖN HỢP phủ kín mặt pallet: mã đầu dồn một góc, chỗ còn lại lấp bằng mã
+ *      khác (ưu tiên CÙNG chiều cao thùng); hàng thường hết mà lớp chưa kín ⇒ lấy HÀNG NHẸ lấp nốt;
+ *   3. trên cùng: hàng nhẹ — lớp đủ rồi phần lẻ. Chỉ LỚP TRÊN CÙNG được thiếu.
+ *  Lớp cao bằng thùng cao nhất trong lớp. Thùng lớp hỗn hợp nằm gọn trong chân, cụm thùng căn giữa.
  *  Toạ độ theo góc KHỐI (chân + phần chờm — khớp `palletFoot` của lõi); `deck` = chỗ tấm gỗ trong khối. */
-function packPallet(spec: PalletSpec, layers: PalletLayer[]): { cartons: PalletCarton[]; deck: { x: number; y: number; l: number; w: number } } {
+function packPallet(spec: PalletSpec, layers: PalletLayer[], light: Set<string>): { cartons: PalletCarton[]; deck: { x: number; y: number; l: number; w: number } } {
   const L = spec.l, W = spec.w
-  const runs: PalletLayer[] = []
+  type Run = PalletLayer & { left: number }
+  const runs: Run[] = []
   for (const ly of layers) {
     const last = runs[runs.length - 1]
-    if (last && last.itemId === ly.itemId && last.l === ly.l && last.w === ly.w && last.h === ly.h && last.per === ly.per) last.n += ly.n
-    else runs.push({ ...ly })
+    if (last && last.itemId === ly.itemId && last.l === ly.l && last.w === ly.w && last.h === ly.h && last.per === ly.per) { last.n += ly.n; last.left += ly.n }
+    else runs.push({ ...ly, left: ly.n })
   }
-  const pats = runs.map(run => runPattern(spec, run) ?? [])
+  type Box = Omit<PalletCarton, 'z'>
+  const levels: Box[][] = []
+  const heavy = runs.filter(r => !light.has(r.itemId)), lite = runs.filter(r => light.has(r.itemId))
+  // CHỖ ĐỠ: thùng chỉ đặt nơi ≥ 70% đáy nằm trên lớp dưới (thùng lớp dưới thấp hơn mặt lớp ≤ 35mm vẫn tính — lớp
+  // trộn thùng cao 130 với 100); lớp đầu tiên đỡ bằng mặt pallet. Không thùng nào treo trên ô trống của lớp dưới.
+  const MIN_SUP = 0.7, PIT = 35
+  const supportOf = (p: Rect) => {
+    const below = levels[levels.length - 1]
+    if (!below) return overlap(p, { x: 0, y: 0, l: L, w: W }) / (p.l * p.w)
+    const top = Math.max(...below.map(b => b.h))
+    return below.filter(b => b.h >= top - PIT).reduce((s, b) => s + overlap(p, b), 0) / (p.l * p.w)
+  }
+  const full = (r: Run) => {
+    const pat = runPattern(spec, { n: r.per, per: r.per, l: r.l, w: r.w }) ?? []
+    while (pat.length && r.left >= r.per && pat.every(p => supportOf(p) >= MIN_SUP)) {
+      levels.push(pat.map(p => ({ itemId: r.itemId, ...p, h: r.h }))); r.left -= r.per
+    }
+  }
+  // một lớp hỗn hợp: `group` theo thứ tự — mã đầu trước, rồi mã cùng chiều cao, rồi mã thấp / cao dần.
+  // `min` = ngưỡng chỗ đỡ (lớp nào không đặt nổi thùng nào thì hạ về 0 để không bỏ sót thùng)
+  const mixed = (group: Run[], fillers: () => Run[], min = MIN_SUP) => {
+    let free: Rect[] = [{ x: 0, y: 0, l: L, w: W }]
+    const lv: Box[] = []
+    const ok = (p: Rect) => supportOf(p) >= min
+    const below = levels[levels.length - 1] ?? []
+    const put = (r: Run) => {
+      while (r.left > 0) {
+        const p = fitIn(free, r.l, r.w, ok, below)
+        if (!p) break
+        lv.push({ itemId: r.itemId, ...p, h: r.h }); free = cutFree(free, p); r.left--
+      }
+    }
+    const lead = group.find(r => r.left > 0)!
+    const near = (rs: Run[]) => rs.filter(r => r.left > 0).sort((a, b) => Math.abs(a.h - lead.h) - Math.abs(b.h - lead.h))
+    // ô của MẪU LỚP ĐỦ của mã đầu (trong chân): mã đầu + các mã CÙNG CỠ ĐÁY thùng chia nhau các ô này — lớp ghép
+    // vẫn đủ 10 thùng 420×255 như lớp một mã (xếp tự do chỉ được 8)
+    const same = (r: Run) => (r.l === lead.l && r.w === lead.w) || (r.l === lead.w && r.w === lead.l)
+    const slots = (runPattern(spec, { n: lead.per, per: lead.per, l: lead.l, w: lead.w }) ?? [])
+      .filter(s => s.x >= 0 && s.y >= 0 && s.x + s.l <= L && s.y + s.w <= W && ok(s)).sort((a, b) => a.y - b.y || a.x - b.x)
+    for (const r of [lead, ...near(group).filter(same)]) {
+      while (r.left > 0 && slots.length) { const s = slots.shift()!; lv.push({ itemId: r.itemId, ...s, h: r.h }); free = cutFree(free, s); r.left-- }
+    }
+    for (const r of near(group)) put(r)
+    for (const r of near(fillers())) put(r)
+    if (!lv.length) return false
+    // cụm thùng dời về GIỮA chân (thùng thừa không nằm mép) — xa nhất mà mọi thùng vẫn đủ chỗ đỡ
+    const cx = Math.floor((L - Math.min(...lv.map(b => b.x)) - Math.max(...lv.map(b => b.x + b.l))) / 2)
+    const cy = Math.floor((W - Math.min(...lv.map(b => b.y)) - Math.max(...lv.map(b => b.y + b.w))) / 2)
+    const shift = (f: number) => lv.map(b => ({ ...b, x: b.x + Math.round(cx * f), y: b.y + Math.round(cy * f) }))
+    const base = lv.map(supportOf)
+    const f = [1, 0.75, 0.5, 0.25].find(k => shift(k).every((b, i) => supportOf(b) >= Math.min(min, base[i]))) ?? 0
+    levels.push(shift(f))
+    return true
+  }
+  for (const r of heavy) full(r)
+  // hàng thường hết trong lớp này thì hàng nhẹ mới được lấp (không để hàng thường đè lên hàng nhẹ)
+  const liteIfDone = () => (heavy.some(r => r.left > 0) ? [] : lite)
+  while (heavy.some(r => r.left > 0) && (mixed(heavy, liteIfDone) || mixed(heavy, liteIfDone, 0))) { /* lớp kế */ }
+  for (const r of lite) full(r)
+  while (lite.some(r => r.left > 0) && (mixed(lite, () => []) || mixed(lite, () => [], 0))) { /* lớp kế */ }
+
   let x0 = 0, y0 = 0, x1 = L, y1 = W
-  for (const p of pats.flat()) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x + p.l); y1 = Math.max(y1, p.y + p.w) }
-  const R = 10, nx = Math.ceil((x1 - x0) / R), ny = Math.ceil((y1 - y0) / R)
-  const H = new Float32Array(nx * ny)
+  for (const b of levels.flat()) { x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); x1 = Math.max(x1, b.x + b.l); y1 = Math.max(y1, b.y + b.w) }
   const out: PalletCarton[] = []
-  runs.forEach((run, ri) => {
-    const pat = pats[ri]
-    if (!pat.length) return
-    // ô lưới NẰM TRỌN trong thùng (thùng 255mm cạnh nhau không dùng chung ô mép)
-    const spots = pat.map(p => ({ x: p.x - x0, y: p.y - y0, l: p.l, w: p.w,
-      i0: Math.ceil((p.x - x0) / R), i1: Math.floor((p.x - x0 + p.l) / R), j0: Math.ceil((p.y - y0) / R), j1: Math.floor((p.y - y0 + p.w) / R) }))
-    const span = (s: typeof spots[number]) => {
-      let mn = Infinity, mx = -Infinity
-      for (let i = s.i0; i < s.i1; i++) for (let j = s.j0; j < s.j1; j++) { const v = H[i * ny + j]; if (v < mn) mn = v; if (v > mx) mx = v }
-      return { mn, mx }
-    }
-    // khoảng cách tới tâm chân pallet — chỗ đặt ngang nhau thì gần giữa trước
-    const cx = L / 2 - x0, cy = W / 2 - y0
-    const far = spots.map(s => (s.x + s.l / 2 - cx) ** 2 + (s.y + s.w / 2 - cy) ** 2)
-    for (let k = 0; k < run.n; k++) {
-      let pick = 0, pz = Infinity, pd = Infinity
-      spots.forEach((s, q) => {
-        const { mn, mx } = span(s)
-        if (mx < pz - 1e-6 || (Math.abs(mx - pz) <= 1e-6 && (mx - mn < pd - 1e-6 || (Math.abs(mx - mn - pd) <= 1e-6 && far[q] < far[pick])))) { pz = mx; pd = mx - mn; pick = q }
-      })
-      const s = spots[pick]
-      out.push({ itemId: run.itemId, x: s.x, y: s.y, z: pz, l: s.l, w: s.w, h: run.h })
-      for (let i = s.i0; i < s.i1; i++) for (let j = s.j0; j < s.j1; j++) H[i * ny + j] = pz + run.h
-    }
-  })
+  let z = 0
+  for (const lv of levels) {
+    for (const b of lv) out.push({ ...b, x: b.x - x0, y: b.y - y0, z })
+    z += Math.max(...lv.map(b => b.h))
+  }
   return { cartons: out, deck: { x: -x0, y: -y0, l: L, w: W } }
 }
 
@@ -138,7 +207,7 @@ function spacePallets(plan: LoadPlan): LoadPlan {
 }
 
 // Bể phần lẻ hàng nhẹ khi chuyến bật "Hàng nhẹ: pallet riêng" — không dồn chung pallet gộp với hàng thường
-const LIGHT_POOL = { key: 'light', label: 'hàng nhẹ' }
+const LIGHT_POOL = { key: 'light', label: 'hàng nhẹ' } // i18n-ok
 
 const toSpec = (p: PalletSettings): PalletSpec =>
   ({ l: p.l, w: p.w, h: p.maxH, baseH: p.baseH, baseColor: '#a07a4e', weightKg: p.kg })
@@ -215,7 +284,7 @@ function countSheet(plan: LoadPlan, meta: PlanGroupMeta[]): CountRow[] {
     const stacks = [...hist.entries()].sort((a, b) => b[1] - a[1]).map(([layers, n]) => [n, layers] as [number, number])
     rows.push({
       group: gi, label: meta[gi].label, orderName: meta[gi].orderName,
-      unit: meta[gi].isPallet ? 'pallet' : 'thùng',
+      unit: meta[gi].isPallet ? 'pallet' : 'thùng', // i18n-ok
       placed: boxes.length, total: boxes.length + left, stacks, onTopOfOthers: lifted,
       firstStep: boxes.length ? Math.min(...boxes.map(b => b.step)) : Infinity,
       ...(meta[gi].mix ? { mix: meta[gi].mix!.map(({ label, n }) => ({ label, n })) } : {}),
@@ -257,12 +326,13 @@ export function computeTrip(input: TripInput): TripResult {
     palletsUsed = res.palletCount
     const missing = toPal.filter(g => !itemOf(g)?.perPallet)
     if (missing.length)
-      warnings.push(`Chưa khai số thùng/pallet: ${[...new Set(missing.map(g => g.label))].join(', ')} — đang tạm tính mỗi mã 1 pallet.`)
+      warnings.push(`Chưa khai số thùng/pallet: ${[...new Set(missing.map(g => g.label))].join(', ')} — đang tạm tính mỗi mã 1 pallet.`) // i18n-ok
     const srcByKey = new Map(toPal.map(g => [g.key, g]))
+    const lightIds = new Set(allLines.filter(l => l.item.light).map(l => l.item.id))
     const palGroups: G[] = res.groups.map(pg => {
       // ruột từ lõi (lớp thùng thật, dưới lên) — khoá dòng hàng ⇒ mã hàng
       const ls: PalletLayer[] | undefined = pg.contents?.map(c => ({ itemId: srcByKey.get(c.key)?.meta.itemId ?? c.key, l: c.l, w: c.w, h: c.h, n: c.n, per: c.per }))
-      const packed = ls ? packPallet(spec, ls) : null
+      const packed = ls ? packPallet(spec, ls, lightIds) : null
       const ids = [...new Set((ls ?? []).map(x => x.itemId))]
       // pallet chẵn `|full` / pallet lẻ riêng `|plt` của 1 mã; khối gộp mà ruột chỉ 1 mã cũng mang tên + màu mã đó
       const src = srcByKey.get(pg.key.replace(/\|(full|plt)$/, '')) ?? (ids.length === 1 ? toPal.find(g => g.doKey === pg.doKey && g.meta.itemId === ids[0]) : undefined)
@@ -274,8 +344,8 @@ export function computeTrip(input: TripInput): TripResult {
         ...pg,
         meta: {
           label: !src ? pg.label
-            : srcByKey.has(pg.key.replace(/\|(full|plt)$/, '')) ? `${src.label}${pg.key.endsWith('|plt') ? ' (pallet lẻ)' : ''}`
-            : `${src.label} (pallet lẻ)`,   // khối của bể gộp mà ruột chỉ một mã
+            : srcByKey.has(pg.key.replace(/\|(full|plt)$/, '')) ? `${src.label}${pg.key.endsWith('|plt') ? ' (pallet lẻ)' : ''}` // i18n-ok
+            : `${src.label} (pallet lẻ)`,   // khối của bể gộp mà ruột chỉ một mã // i18n-ok
           orderName: pg.doLabel, itemId: src?.meta.itemId ?? null, isPallet: true,
           colorKey: src?.meta.itemId ?? `mix|${pg.doKey}`,
           ...(ls && packed ? { layers: ls, cartons: packed.cartons, deck: packed.deck } : {}),
@@ -286,7 +356,7 @@ export function computeTrip(input: TripInput): TripResult {
     groups = palGroups
     if (!fitErr) {
       const tall = palletsTooTall(palGroups, T)
-      if (tall.length) errors.push(`Pallet cao hơn lòng thùng xe: ${tall.join(', ')}.`)
+      if (tall.length) errors.push(`Pallet cao hơn lòng thùng xe: ${tall.join(', ')}.`) // i18n-ok
     }
   }
 
@@ -307,7 +377,7 @@ export function computeTrip(input: TripInput): TripResult {
         const leftOf = (p: LoadPlan) => p.leftover.reduce((s, x) => s + x.count, 0)
         if (leftOf(retry) < leftOf(plan)) {
           plan = retry
-          warnings.push(`Không đặt được lên trên hàng khác: ${[...stuck].map(i => groups[i].label).join(', ')} — đã xếp như hàng thường.`)
+          warnings.push(`Không đặt được lên trên hàng khác: ${[...stuck].map(i => groups[i].label).join(', ')} — đã xếp như hàng thường.`) // i18n-ok
         }
       }
     }
@@ -319,8 +389,8 @@ export function computeTrip(input: TripInput): TripResult {
   if (palletsUsed != null) totals.pallets = palletsUsed
   const payloadPct = truck.payloadKg ? (weightKg / truck.payloadKg) * 100 : null
   const overweight = payloadPct != null && payloadPct > 100
-  if (!totals.kgKnown) warnings.push('Có mã chưa khai kg/thùng — tổng khối lượng chưa đủ.')
-  if (overweight) warnings.push(`Vượt tải trọng: ${fmtKg(weightKg)} / ${fmtKg(truck.payloadKg!)}.`)
+  if (!totals.kgKnown) warnings.push('Có mã chưa khai kg/thùng — tổng khối lượng chưa đủ.') // i18n-ok
+  if (overweight) warnings.push(`Vượt tải trọng: ${fmtKg(weightKg)} / ${fmtKg(truck.payloadKg!)}.`) // i18n-ok
   const leftCount = plan.leftover.reduce((s, x) => s + x.count, 0)
   return {
     plan, meta, count: countSheet(plan, meta), totals, weightKg, payloadPct, overweight,
@@ -345,4 +415,4 @@ export function suggestTruck(orders: OrderInput[], pallet: PalletSettings, candi
 }
 
 export const fmtKg = (kg: number) =>
-  kg >= 1000 ? `${(kg / 1000).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tấn` : `${Math.round(kg).toLocaleString('vi-VN')} kg`
+  kg >= 1000 ? `${(kg / 1000).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} tấn` : `${Math.round(kg).toLocaleString('vi-VN')} kg` // i18n-ok
