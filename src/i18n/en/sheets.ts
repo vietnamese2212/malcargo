@@ -152,4 +152,9 @@ export const SHEETS: Record<string, string> = {
   'Đơn 101': 'Order 101',
   'Đơn 102': 'Order 102',
   'Chuyến sáng 28/10': 'Morning trip 28/10',
+  // Diễn giải từng mã (28/10)
+  'Dòng xe': 'Vehicle type',
+  'Container không được tự chọn — chỉ dùng khi bạn chọn': 'Containers are never picked automatically — only when you choose one',
+  'Xe tải': 'Truck',
+  'Container': 'Container',
 }

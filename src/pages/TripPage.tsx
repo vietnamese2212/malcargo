@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { findVehicle, isSample, newId, newTripLabel, nextName, useAllItems, useAllVehicles, useData } from '../data/store'
 import { signInGoogle, signOut, useAuth } from '../data/cloud'
-import { resolveOrder, truckOf } from '../data/resolve'
+import { pickPool, resolveOrder, truckOf } from '../data/resolve'
 import { orderTotals, type TripInput, type TripResult } from '../engine/plan'
 import { useTripPlan } from '../engine/useTripPlan'
 import type { FitCheck } from '../engine/worker'
@@ -26,6 +26,7 @@ import { Logo, PageHeader, Panel } from '../ui/Shell'
 import { TruckGlyph } from './VehiclesPage'
 import { VehicleSheet } from '../ui/VehicleSheet'
 import { ItemSheet } from '../ui/ItemSheet'
+import { ExplainSheet } from './TripExplain'
 import { LangSwitch } from '../ui/LangSwitch'
 import { t, tx } from '../i18n'
 import { ItemPicker } from '../ui/ItemPicker'
@@ -60,8 +61,7 @@ export default function TripPage({ id }: { id: string }) {
   const [spec, setSpec] = useState(false)
 
   const vehicle = findVehicle(vehicles, trip?.vehicleId ?? null)
-  const kind = vehicle?.kind ?? 'loose'
-  const candidates = useMemo(() => vehicles.filter(v => v.kind === kind).map(truckOf), [vehicles, kind])
+  const candidates = useMemo(() => pickPool(vehicles, vehicle).map(truckOf), [vehicles, vehicle])
   const allTrucks = useMemo(() => vehicles.map(truckOf), [vehicles])
   const rawOrders = useMemo(() => (trip?.orderIds ?? []).map(oid => orders.find(o => o.id === oid)).filter((o): o is Order => !!o), [trip?.orderIds, orders])
   const tripOrders = useMemo(() => rawOrders.map(o => resolveOrder(o, items)), [rawOrders, items])
@@ -86,7 +86,7 @@ export default function TripPage({ id }: { id: string }) {
   const [sel, setSel] = useState<{ orderId: string; itemId?: string } | null>(null)   // chọn đơn / mã ở cột trái
   const [view, setView] = useState<{ preset: ViewPreset; n: number }>({ preset: 'overview', n: 0 })
   const [walls, setWalls] = useState<'open' | 'glass'>('open')
-  const [open, setOpen] = useState({ cargo: true, count: false })
+  const [open, setOpen] = useState({ cargo: true, explain: false, count: false })
   const [panel, setPanel] = useState<PanelName | null>(null)
   const [importing, setImporting] = useState(false)
   const [unlink, setUnlink] = useState<Order | null>(null)
@@ -389,6 +389,15 @@ export default function TripPage({ id }: { id: string }) {
                 </button>
               </div>
             )}
+          </Block>
+
+          <Block title={t('Diễn giải từng mã')} open={open.explain} onToggle={() => setOpen(o => ({ ...o, explain: !o.explain }))}
+            summary={t('Cao bao nhiêu, lẻ bao nhiêu — tính trước khi lên hàng')}>
+            <ExplainSheet r={r} vehicle={vehicle} items={items} colors={colors} tripName={trip.name} focus={shown} onToast={setToast}
+              onFocus={gs => {
+                setSel(null)
+                setFocus(f => (gs.length && f && f.size === gs.length && gs.every(g => f.has(g)) ? null : gs.length ? new Set(gs) : null))
+              }} />
           </Block>
 
           <Block title={t('Bảng đếm chân')} open={open.count} onToggle={() => setOpen(o => ({ ...o, count: !o.count }))}

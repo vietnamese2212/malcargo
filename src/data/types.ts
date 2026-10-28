@@ -26,6 +26,7 @@ export interface Vehicle {
   kind: VehicleKind
   l: number; w: number; h: number   // LÒNG THÙNG (mm)
   payloadKg: number | null          // tải trọng cho phép
+  container?: boolean               // dòng CONTAINER — không tự chọn / gợi ý khi chuyến đang dùng xe tải
   updatedAt: number
 }
 

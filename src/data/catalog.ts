@@ -17,8 +17,8 @@ export const ADMIN_VEHICLES: Vehicle[] = [
   { id: 'adm-v-p8t', owner: 'admin', name: 'Xe pallet 8 tấn', plate: '', kind: 'pallet', l: 7400, w: 2350, h: 2300, payloadKg: 8000, updatedAt: T0 },
   { id: 'adm-v-p15t', owner: 'admin', name: 'Xe pallet 15 tấn', plate: '', kind: 'pallet', l: 9600, w: 2500, h: 2600, payloadKg: 15000, updatedAt: T0 },
   // container khô tiêu chuẩn (lòng thùng ISO; tải = tải hàng tối đa của vỏ — đường bộ thường thấp hơn, người dùng sửa)
-  { id: 'adm-v-c20', owner: 'admin', name: 'Container 20ft', plate: '', kind: 'loose', l: 5898, w: 2352, h: 2393, payloadKg: 28200, updatedAt: T0 },
-  { id: 'adm-v-c40', owner: 'admin', name: 'Container 40ft', plate: '', kind: 'loose', l: 12032, w: 2352, h: 2393, payloadKg: 26700, updatedAt: T0 },
+  { id: 'adm-v-c20', owner: 'admin', name: 'Container 20ft', plate: '', kind: 'loose', l: 5898, w: 2352, h: 2393, payloadKg: 28200, container: true, updatedAt: T0 },
+  { id: 'adm-v-c40', owner: 'admin', name: 'Container 40ft', plate: '', kind: 'loose', l: 12032, w: 2352, h: 2393, payloadKg: 26700, container: true, updatedAt: T0 },
 ]
 
 // Cỡ thùng hàng sữa & đồ uống đóng hộp phổ biến (thùng 48 hộp / chai, thùng 24 túi) — số đo, kg, số thùng / pallet

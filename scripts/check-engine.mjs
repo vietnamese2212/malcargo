@@ -42,6 +42,19 @@ function invariants(name, r) {
     ok(pal.every(x => x.m.layers?.length) && inPal + loose === r.totals.cartons,
       `${name}: ruột pallet ${inPal} + thùng rời ${loose} ≠ ${r.totals.cartons} thùng (khối thiếu ruột: ${pal.filter(x => !x.m.layers).map(x => x.m.label).join(', ') || 'không'})`)
   }
+  // DIỄN GIẢI TỪNG MÃ phải cộng đúng: thùng rời — phần đủ lớp + lẻ (chân thấp + nổi) = đã xếp; pallet — pallet chẵn + lẻ = tổng mã
+  if (!r.errors.length && !pal.length) for (const n of E.explainLoose(r)) {
+    const low = n.low.reduce((s, [k, l]) => s + k * l, 0)
+    ok(n.fullCols * n.layers + n.rest === n.placed && n.rest === low + n.above && n.cols === n.fullCols + n.low.reduce((s, [k]) => s + k, 0),
+      `${name}: diễn giải ${n.label} lệch — ${JSON.stringify(n)}`)
+  }
+  if (!r.errors.length && pal.length) {
+    const ex = E.explainPallets(r)
+    const sum = ex.items.reduce((s, n) => s + (n.full ? n.full.pallets * n.full.perPallet : 0) + n.rest.reduce((a, x) => a + x.n, 0), 0)
+    ok(sum === r.totals.cartons && ex.items.every(n => n.total === (n.full ? n.full.pallets * n.full.perPallet : 0) + n.rest.reduce((a, x) => a + x.n, 0)),
+      `${name}: diễn giải pallet cộng ${sum} ≠ ${r.totals.cartons} thùng`)
+    ok(ex.mixes.every(x => x.levels.reduce((s, l) => s + l.times * l.parts.reduce((a, p) => a + p.n, 0), 0) === r.meta[x.group].cartons.length), `${name}: ruột pallet gộp diễn giải lệch`)
+  }
 }
 
 const items = Object.fromEntries(E.ADMIN_ITEMS.map(i => [i.id, i]))
@@ -192,8 +205,20 @@ for (const [name, truck, orders] of cases) {
   console.log(`• Pallet · nhẹ pallet riêng — ${b.count.map(c => c.label).join(' · ')}`)
   ok(E.suggestTruck(os, P, E.ADMIN_VEHICLES.filter(v => v.kind === 'pallet'), true) === 'adm-v-p8t', 'pallet: gợi ý xe phải là xe pallet 8 tấn')
 }
+// Xe tự chọn / gợi ý (chủ dự án 28/10: Container 20ft nhỏ hơn xe 8 tấn nên bị tự chọn): chưa có xe / đang xe tải ⇒
+// chỉ xe tải; đang container ⇒ chỉ container
+{
+  const V = E.ADMIN_VEHICLES, big = sample.map(o => ({ ...o, lines: o.lines.map(l => ({ ...l, qty: l.qty * 2 })) }))
+  for (const cur of [undefined, trucks['adm-v-5t'], trucks['adm-v-c40']]) {
+    const pool = E.pickPool(V, cur)
+    ok(pool.length && pool.every(v => !!v.container === !!cur?.container && v.kind === (cur?.kind ?? 'loose')), `xe tự chọn khi đang ${cur?.name ?? 'chưa có xe'}: ${pool.map(v => v.name).join(', ')}`)
+  }
+  const s = E.suggestTruck(big, E.DEFAULT_PALLET_SETTINGS, E.pickPool(V, undefined))
+  ok(s && !trucks[s].container, `gợi ý xe cho hàng gấp đôi chuyến mẫu phải là xe tải, được ${s}`)
+  console.log(`• Gợi ý xe cho hàng gấp đôi chuyến mẫu: ${s} (mọi xe: ${E.suggestTruck(big, E.DEFAULT_PALLET_SETTINGS, V.filter(v => v.kind === 'loose'))})`)
+}
 const t0 = performance.now()
-const sug = E.suggestTruck(sample, E.DEFAULT_PALLET_SETTINGS, E.ADMIN_VEHICLES.filter(v => v.kind === 'loose'))
+const sug = E.suggestTruck(sample, E.DEFAULT_PALLET_SETTINGS, E.pickPool(E.ADMIN_VEHICLES, undefined))
 console.log(`• Gợi ý xe cho chuyến mẫu: ${sug} (${Math.round(performance.now() - t0)} ms)`)
 console.log(fail ? `\n${fail} lỗi` : '\nXANH')
 process.exit(fail ? 1 : 0)

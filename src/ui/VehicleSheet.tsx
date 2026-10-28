@@ -98,6 +98,11 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
             { value: 'loose', label: t('Thùng rời (xe xá)') }, { value: 'pallet', label: t('Xếp pallet') },
           ]} />
         </Field>
+        <Field label={t('Dòng xe')} hint={t('Container không được tự chọn — chỉ dùng khi bạn chọn')} group>
+          <Segmented value={f.container ? 'container' : 'truck'} onChange={v => set('container', v === 'container')} options={[
+            { value: 'truck', label: t('Xe tải') }, { value: 'container', label: t('Container') },
+          ]} />
+        </Field>
         <Field label={t('Lòng thùng (mm) — dài × rộng × cao')} error={tried ? errs.dims : null}>
           <div className="grid grid-cols-3 gap-2">
             <NumInput value={f.l || null} onChange={v => set('l', v ?? 0)} placeholder={t('Dài')} />
