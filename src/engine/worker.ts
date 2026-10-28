@@ -12,7 +12,7 @@ self.onmessage = (e: MessageEvent<WorkerReq>) => {
   try {
     const result = computeTrip(input)
     // Xe hiện tại đã vừa thì vẫn tìm xe NHỎ hơn mà vẫn vừa (tiết kiệm cước)
-    const suggestion = suggestTruck(input.orders, input.pallet, candidates, input.lightInPallet)
+    const suggestion = suggestTruck(input.orders, input.pallet, candidates, input.lightOwnPallet)
     // Bảng đổi xe đang mở: thử hàng trên từng xe để đánh dấu ✓ / ✗ ngay trong danh sách.
     // Lọc nhanh bằng thể tích + tải trước, chỉ xe qua được mới chạy thuật toán xếp.
     let fits: Record<string, FitCheck> | null = null

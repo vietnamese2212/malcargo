@@ -2,8 +2,8 @@
 // của SUPPLYC: xe xá xếp thẳng thùng; xe pallet gom hàng lên pallet trước, hàng nhẹ rải lên nóc
 // pallet (hoặc đóng pallet như hàng khác nếu chuyến bật vậy). File này THUẦN (không React) để chạy được trong Web Worker và trong bài kiểm.
 import {
-  computeLoadPlan, palletizeGroups, spreadOnTopOfPallets, palletFitError, palletsTooTall,
-  palletFloorSlots, type LoadGroup, type LoadPlan, type PalletSpec, type PalletizeInput,
+  computeLoadPlan, palletizeGroups, palletFitError, palletsTooTall, palletPattern,
+  palletFloorSlots, type LoadGroup, type LoadPlan, type PalletSpec, type PalletizeInput, type PlacedBox,
 } from './loadPlan'
 import type { Item, PalletSettings, VehicleKind } from '../data/types'
 
@@ -11,7 +11,7 @@ export interface TruckInput { id: string; name: string; kind: VehicleKind; l: nu
 export interface OrderInput { id: string; name: string; place: string; lines: { item: Item; qty: number }[] }
 export interface TripInput {
   truck: TruckInput; orders: OrderInput[]; pallet: PalletSettings
-  lightInPallet?: boolean   // xe pallet: hàng nhẹ đóng pallet như hàng khác thay vì rải thùng lên nóc pallet
+  lightOwnPallet?: boolean   // xe pallet: phần lẻ hàng nhẹ đứng pallet riêng (mặc định dồn lên trên cùng pallet gộp)
 }
 
 export interface PlanGroupMeta {
@@ -21,12 +21,15 @@ export interface PlanGroupMeta {
   isPallet: boolean          // khối là 1 PALLET (xe pallet)
   colorKey: string
   holds?: string[]           // pallet gộp: id các mã nằm trong khối này
-  layers?: PalletLayer[]     // pallet: các lớp thùng THẬT từ dưới lên — vẽ 3D đúng cỡ thùng, đúng màu mã
+  layers?: PalletLayer[]     // pallet: các lớp thùng THẬT từ dưới lên (nặng dưới, nhẹ trên)
+  cartons?: PalletCarton[]   // pallet: từng thùng đã xếp trên mặt pallet — vẽ 3D đúng cỡ, đúng màu mã
   mix?: { itemId: string; label: string; n: number }[]   // pallet gộp: gồm mã nào, bao nhiêu thùng
 }
 
 /** Một lớp thùng trên pallet: `n` thùng cỡ l × w × h của một mã. */
 export interface PalletLayer { itemId: string; l: number; w: number; h: number; n: number }
+/** Một thùng trên mặt pallet: gốc = góc chân pallet đặt theo chiều dài × rộng của cỡ pallet, z từ mặt đế. */
+export interface PalletCarton { itemId: string; x: number; y: number; z: number; l: number; w: number; h: number }
 
 export interface CountRow {
   group: number
@@ -56,10 +59,77 @@ export interface TripResult {
   warnings: string[]
 }
 
+/** Thùng thật trên MẶT một pallet L×W (gốc góc chân, z tính từ mặt đế). Mỗi mã lần lượt theo ruột (nặng
+ *  dưới, nhẹ trên); mỗi thùng vào vị trí của mẫu xếp gọn (`palletPattern`, căn giữa chân) có mặt đỡ THẤP
+ *  nhất (đặt trên điểm cao nhất của mặt đỡ; bằng nhau thì chỗ phẳng hơn trước) ⇒ chỗ trống của lớp thiếu
+ *  được mã sau lấp nốt, cả mặt dâng đều — liền khối, không lỗ, không cột (user 28/10: "xếp liền khối trên
+ *  pallet, không có khoảng hở"; bản đầu chỉ nhận chỗ phẳng tuyệt đối ⇒ thạch túi chồng thành cột 2,3m). */
+function packPallet(L: number, W: number, layers: PalletLayer[]): PalletCarton[] {
+  const R = 10, nx = Math.ceil(L / R), ny = Math.ceil(W / R)
+  const H = new Float32Array(nx * ny)
+  const out: PalletCarton[] = []
+  const runs: PalletLayer[] = []
+  for (const ly of layers) {
+    const last = runs[runs.length - 1]
+    if (last && last.itemId === ly.itemId && last.l === ly.l && last.w === ly.w && last.h === ly.h) last.n += ly.n
+    else runs.push({ ...ly })
+  }
+  for (const run of runs) {
+    const pat = palletPattern(L, W, run.l, run.w)
+    if (!pat.length) continue
+    const ox = Math.floor((L - Math.max(...pat.map(p => p.x + p.l))) / 2), oy = Math.floor((W - Math.max(...pat.map(p => p.y + p.w))) / 2)
+    // ô lưới NẰM TRỌN trong thùng (thùng 255mm cạnh nhau không dùng chung ô mép)
+    const spots = pat.map(p => ({ x: p.x + ox, y: p.y + oy, l: p.l, w: p.w,
+      i0: Math.ceil((p.x + ox) / R), i1: Math.floor((p.x + ox + p.l) / R), j0: Math.ceil((p.y + oy) / R), j1: Math.floor((p.y + oy + p.w) / R) }))
+    const span = (s: typeof spots[number]) => {
+      let mn = Infinity, mx = -Infinity
+      for (let i = s.i0; i < s.i1; i++) for (let j = s.j0; j < s.j1; j++) { const v = H[i * ny + j]; if (v < mn) mn = v; if (v > mx) mx = v }
+      return { mn, mx }
+    }
+    for (let k = 0; k < run.n; k++) {
+      let pick = 0, pz = Infinity, pd = Infinity
+      spots.forEach((s, q) => {
+        const { mn, mx } = span(s)
+        if (mx < pz - 1e-6 || (Math.abs(mx - pz) <= 1e-6 && mx - mn < pd)) { pz = mx; pd = mx - mn; pick = q }
+      })
+      const s = spots[pick]
+      out.push({ itemId: run.itemId, x: s.x, y: s.y, z: pz, l: s.l, w: s.w, h: run.h })
+      for (let i = s.i0; i < s.i1; i++) for (let j = s.j0; j < s.j1; j++) H[i * ny + j] = pz + run.h
+    }
+  }
+  return out
+}
+
+/** KHE GIỮA CÁC PALLET (user 28/10: "tạo khoảng hở giữa các pallet"): dàn phần sàn còn THỪA của từng làn
+ *  dọc / của bề ngang thành khe đều giữa các pallet (≤ 80mm) — không bớt chỗ pallet nào. */
+function spacePallets(plan: LoadPlan): LoadPlan {
+  const T = plan.truck
+  const placed = plan.placed.map(b => ({ ...b }))
+  const laneKey = (b: PlacedBox) => `${b.y}|${b.w}`
+  const lanes = new Map<string, PlacedBox[]>()
+  for (const b of placed) lanes.set(laneKey(b), [...(lanes.get(laneKey(b)) ?? []), b])
+  for (const lane of lanes.values()) {
+    lane.sort((a, b) => a.x - b.x)
+    const gap = Math.min(80, (T.length - Math.max(...lane.map(b => b.x + b.l))) / Math.max(1, lane.length))
+    if (gap > 0) lane.forEach((b, i) => { b.x += i * gap })
+  }
+  const ys = [...lanes.keys()].map(k => k.split('|').map(Number)).sort((a, b) => a[0] - b[0])
+  const apart = ys.every((v, i) => i === 0 || ys[i - 1][0] + ys[i - 1][1] <= v[0] + 1e-6)
+  if (apart && ys.length > 1) {
+    const gy = Math.min(80, (T.width - (ys[ys.length - 1][0] + ys[ys.length - 1][1])) / (ys.length - 1))
+    if (gy > 0) ys.forEach(([y, w], i) => { for (const b of lanes.get(`${y}|${w}`)!) b.y += i * gy })
+  }
+  const maxX = placed.reduce((m, b) => Math.max(m, b.x + b.l), 0)
+  return { ...plan, placed, lengthUsedPct: T.length > 0 ? Math.round((maxX / T.length) * 100) : 0 }
+}
+
+// Bể phần lẻ hàng nhẹ khi chuyến bật "Hàng nhẹ: pallet riêng" — không dồn chung pallet gộp với hàng thường
+const LIGHT_POOL = { key: 'light', label: 'hàng nhẹ' }
+
 const toSpec = (p: PalletSettings): PalletSpec =>
   ({ l: p.l, w: p.w, h: p.maxH, baseH: p.baseH, baseColor: '#a07a4e', weightKg: p.kg })
 
-type G = LoadGroup & { meta: PlanGroupMeta; topCarton?: boolean }
+type G = LoadGroup & { meta: PlanGroupMeta }
 
 /** Gom đơn thành nhóm (đơn × mã). Đơn GIAO SAU xếp TRƯỚC (vào sâu trong, sát cabin). */
 function cartonGroupsOf(orders: OrderInput[]): G[] {
@@ -158,16 +228,16 @@ export function computeTrip(input: TripInput): TripResult {
     if (fitErr) errors.push(fitErr)
     floorSlots = fitErr ? null : palletFloorSlots(spec, T)
     const itemOf = (g: G) => allLines.find(l => l.item.id === g.meta.itemId)?.item
-    // Hàng nhẹ: mặc định rải thùng lên nóc pallet ("lên nóc" chỉ có nghĩa khi có pallet làm nền).
-    // Chuyến bật "Hàng nhẹ đóng pallet" ⇒ đóng pallet như hàng khác (luật pallet của lõi: pallet chẵn,
-    // phần lẻ tự đủ pallet thì pallet riêng, còn lại pallet gộp nặng dưới nhẹ trên).
-    const hasBase = cartons.some(g => !g.onTop)
-    const top = cartons.filter(g => g.onTop && hasBase && !input.lightInPallet)
-    const toPal = cartons.filter(g => !top.includes(g))
+    // Xe pallet: MỌI hàng nằm gọn trên pallet của nó (user 28/10: "hàng trên pallet phải tách biệt với
+    // pallet khác" — bỏ kiểu rải thùng rời lên nóc nhiều pallet). Đủ quy cách ⇒ pallet chẵn; phần lẻ:
+    // mặc định dồn pallet gộp (≤ 1,65m) với hàng nhẹ TRÊN CÙNG; chuyến bật "Hàng nhẹ: pallet riêng"
+    // ⇒ phần lẻ hàng nhẹ đứng pallet riêng (bể riêng của lõi).
+    const toPal = cartons
     const items: PalletizeInput[] = toPal.map(g => ({
       key: g.key, label: g.label, doKey: g.doKey, doLabel: g.doLabel, cartons: g.count,
       cartonsPerPallet: itemOf(g)?.perPallet ?? null, layers: itemOf(g)?.maxLayers ?? null,
       isPalletCarrier: false, weightKg: g.weightKg, carton: { l: g.l, w: g.w, h: g.h }, assumed: false, unitless: false,
+      onTop: g.onTop, remPool: input.lightOwnPallet && g.onTop ? LIGHT_POOL : undefined,
     }))
     const res = palletizeGroups(items, spec)
     palletsUsed = res.palletCount
@@ -188,15 +258,17 @@ export function computeTrip(input: TripInput): TripResult {
       return {
         ...pg,
         meta: {
-          label: src && srcByKey.has(pg.key.replace(/\|(full|plt)$/, '')) ? `${src.label}${pg.key.endsWith('|plt') ? ' (pallet lẻ)' : ''}` : pg.label,
+          label: !src ? pg.label
+            : srcByKey.has(pg.key.replace(/\|(full|plt)$/, '')) ? `${src.label}${pg.key.endsWith('|plt') ? ' (pallet lẻ)' : ''}`
+            : `${src.label} (pallet lẻ)`,   // khối của bể gộp mà ruột chỉ một mã
           orderName: pg.doLabel, itemId: src?.meta.itemId ?? null, isPallet: true,
           colorKey: src?.meta.itemId ?? `mix|${pg.doKey}`,
-          ...(ls ? { layers: ls } : {}),
+          ...(ls ? { layers: ls, cartons: packPallet(spec.l, spec.w, ls) } : {}),
           ...(mixed ? { holds: mix ? mix.map(x => x.itemId) : toPal.filter(g => g.doKey === pg.doKey).map(g => g.meta.itemId!), mix } : {}),
         },
       }
     })
-    groups = [...palGroups, ...top.map(g => ({ ...g, onTop: true, topCarton: true }))]
+    groups = palGroups
     if (!fitErr) {
       const tall = palletsTooTall(palGroups, T)
       if (tall.length) errors.push(`Pallet cao hơn lòng thùng xe: ${tall.join(', ')}.`)
@@ -208,9 +280,8 @@ export function computeTrip(input: TripInput): TripResult {
     plan = { truck: T, groups, placed: [], leftover: groups.map((g, i) => ({ group: i, count: g.count })).filter(x => x.count > 0),
       stepCount: 0, volumePct: 0, placedCount: 0, totalCount: groups.reduce((s, g) => s + g.count, 0), weightKg: 0, lengthUsedPct: 0 }
   } else {
-    const topIdx = groups.map((g, i) => (g.topCarton ? i : -1)).filter(i => i >= 0)
-    if (!topIdx.length) plan = computeLoadPlan(T, groups)
-    else plan = spreadOnTopOfPallets(computeLoadPlan(T, groups.map(g => (g.topCarton ? { ...g, count: 0 } : g))), topIdx, groups)
+    plan = computeLoadPlan(T, groups)
+    if (truck.kind === 'pallet') plan = spacePallets(plan)
     // Dự phòng (đo 26/10): hàng nhẹ thùng TO hơn thùng nền nằm ở đơn xếp SAU bị thuật toán bỏ lại
     // toàn bộ dù xe còn chỗ — ca hiếm vì hàng nhẹ thường là túi / hộp nhỏ hơn thùng nền.
     // Không vá lõi (giữ bản chép khớp SUPPLYC): xếp lại các mã đó như hàng thường và NÓI RA.
@@ -243,7 +314,7 @@ export function computeTrip(input: TripInput): TripResult {
 }
 
 /** Xe nhỏ nhất (theo thể tích lòng thùng) chở hết hàng và không vượt tải — cùng kiểu xe. */
-export function suggestTruck(orders: OrderInput[], pallet: PalletSettings, candidates: TruckInput[], lightInPallet?: boolean): string | null {
+export function suggestTruck(orders: OrderInput[], pallet: PalletSettings, candidates: TruckInput[], lightOwnPallet?: boolean): string | null {
   const t = orderTotals(orders.flatMap(o => o.lines), pallet)
   if (!t.cartons) return null
   const list = candidates
@@ -252,7 +323,7 @@ export function suggestTruck(orders: OrderInput[], pallet: PalletSettings, candi
     .filter(c => !(c.payloadKg && t.kgKnown && t.kg > c.payloadKg))
     .sort((a, b) => a.l * a.w * a.h - b.l * b.w * b.h)
   for (const c of list) {
-    const r = computeTrip({ truck: c, orders, pallet, lightInPallet })
+    const r = computeTrip({ truck: c, orders, pallet, lightOwnPallet })
     if (r.fits) return c.id
   }
   return null

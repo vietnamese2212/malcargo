@@ -68,7 +68,7 @@ export default function TripPage({ id }: { id: string }) {
   const fallback = useMemo(() => [...candidates].sort((a, b) => b.l * b.w * b.h - a.l * a.w * a.h)[0], [candidates])
   const truck = vehicle ? truckOf(vehicle) : fallback
   const hasCargo = tripOrders.some(o => o.lines.some(l => l.qty > 0))
-  const input: TripInput | null = trip && truck && hasCargo ? { truck, orders: tripOrders, pallet, lightInPallet: trip.lightInPallet } : null
+  const input: TripInput | null = trip && truck && hasCargo ? { truck, orders: tripOrders, pallet, lightOwnPallet: trip.lightOwnPallet } : null
   // bảng đổi xe đang mở ⇒ thử hàng trên MỌI xe để đánh dấu ✓ / ✗ trong danh sách
   const { result, suggestion, fits, busy, error } = useTripPlan(input, candidates, spec ? allTrucks : undefined)
 
@@ -252,8 +252,8 @@ export default function TripPage({ id }: { id: string }) {
         {/* ── BẢN VẼ: dải thông số xe + 3D + khung tên ── */}
         <section data-scene className="sticky top-12 z-10 flex h-[50vh] min-h-[320px] flex-col bg-[#e7ecf2] sm:top-14 lg:relative lg:top-0 lg:order-2 lg:h-full">
           <SpecStrip vehicle={vehicle} pallet={pallet} onOpen={() => setSpec(true)} onKind={k => patchVehicle({ kind: k })}
-            lightIn={tripOrders.some(o => o.lines.some(l => l.qty > 0 && l.item.light)) ? !!trip.lightInPallet : null}
-            onLightIn={v => upsertTrip({ ...trip, lightInPallet: v })} />
+            lightOwn={tripOrders.some(o => o.lines.some(l => l.qty > 0 && l.item.light)) ? !!trip.lightOwnPallet : null}
+            onLightOwn={v => upsertTrip({ ...trip, lightOwnPallet: v })} />
           <div className="relative min-h-0 flex-1">
             <Scene className="h-full w-full" truck={vehicle ? { l: vehicle.l, w: vehicle.w, h: vehicle.h, kind: vehicle.kind } : null}
               plan={plan} meta={result?.meta} colors={colors} step={step} focus={shown} focusItem={sel?.itemId ?? null} view={view} walls={walls} />
@@ -606,11 +606,11 @@ function AccountButton({ onData }: { onData: () => void }) {
 }
 
 // ── Dải thông số xe ở đầu bản vẽ: đọc một dòng là biết đang cấu hình gì; xá/pallet một chạm ──────
-// Không đủ chỗ thì XUỐNG DÒNG (không cắt chữ, không đẩy nút ra ngoài mép). `lightIn` null = không hiện
+// Không đủ chỗ thì XUỐNG DÒNG (không cắt chữ, không đẩy nút ra ngoài mép). `lightOwn` null = không hiện
 // công tắc hàng nhẹ (chuyến không có hàng nhẹ).
-function SpecStrip({ vehicle, pallet, lightIn, onOpen, onKind, onLightIn }: {
-  vehicle?: Vehicle; pallet: { l: number; w: number }; lightIn: boolean | null
-  onOpen: () => void; onKind: (k: VehicleKind) => void; onLightIn: (v: boolean) => void
+function SpecStrip({ vehicle, pallet, lightOwn, onOpen, onKind, onLightOwn }: {
+  vehicle?: Vehicle; pallet: { l: number; w: number }; lightOwn: boolean | null
+  onOpen: () => void; onKind: (k: VehicleKind) => void; onLightOwn: (v: boolean) => void
 }) {
   const chip = 'flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[13px] text-slate-900 transition-colors hover:border-slate-400 hover:bg-slate-50'
   return (
@@ -641,13 +641,13 @@ function SpecStrip({ vehicle, pallet, lightIn, onOpen, onKind, onLightIn }: {
               </button>
             ))}
           </div>
-          {vehicle.kind === 'pallet' && lightIn != null && (
-            <button role="switch" aria-checked={lightIn} onClick={() => onLightIn(!lightIn)}
-              title={lightIn ? 'Hàng nhẹ đóng pallet: phần lẻ dồn chung pallet gộp' : 'Hàng nhẹ đang rải thùng lên nóc pallet'}
+          {vehicle.kind === 'pallet' && lightOwn != null && (
+            <button role="switch" aria-checked={lightOwn} onClick={() => onLightOwn(!lightOwn)}
+              title={lightOwn ? 'Phần lẻ hàng nhẹ đứng pallet riêng' : 'Phần lẻ hàng nhẹ dồn lên trên cùng pallet gộp'}
               className={cx(chip, 'gap-2 font-semibold max-sm:w-full max-sm:justify-between')}>
-              Hàng nhẹ đóng pallet
-              <span className={cx('relative h-5 w-9 shrink-0 rounded-full transition-colors', lightIn ? 'bg-brand-500' : 'bg-slate-300')}>
-                <span className={cx('absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform', lightIn && 'translate-x-4')} />
+              Hàng nhẹ: pallet riêng
+              <span className={cx('relative h-5 w-9 shrink-0 rounded-full transition-colors', lightOwn ? 'bg-brand-500' : 'bg-slate-300')}>
+                <span className={cx('absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform', lightOwn && 'translate-x-4')} />
               </span>
             </button>
           )}

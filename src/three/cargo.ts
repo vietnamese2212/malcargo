@@ -1,8 +1,9 @@
-// Hàng trên xe: thùng carton (InstancedMesh mỗi mã) và pallet (đế gỗ + các LỚP THÙNG THẬT của từng mã;
-// khối quấn màng chỉ còn cho pallet không rõ ruột — thùng to hơn chân pallet / chưa khai quy cách).
+// Hàng trên xe: thùng carton (InstancedMesh mỗi mã) và pallet (đế gỗ + từng THÙNG THẬT đã xếp trên mặt
+// pallet — `PlanGroupMeta.cartons`; khối quấn màng chỉ còn cho pallet không rõ ruột — thùng to hơn chân
+// pallet / chưa khai quy cách).
 import * as THREE from 'three'
 import type { LoadPlan, PlacedBox } from '../engine/loadPlan'
-import type { PalletLayer, PlanGroupMeta } from '../engine/plan'
+import type { PalletCarton, PlanGroupMeta } from '../engine/plan'
 import { cartonSideTexture, cartonTopTexture, woodTexture, wrappedTexture } from './textures'
 import { groupColor } from './colors'
 
@@ -18,46 +19,13 @@ export interface CargoHandle {
 interface Part { mesh: THREE.InstancedMesh; cum: number[]; mats: THREE.Material[]; itemId?: string }
 interface GroupMeshes { steps: number[]; parts: Part[] }
 
-/** Lưới cho `cap` thùng cl×cw trên chân L×W: bắt đầu từ lưới vừa khít, thiếu thì nới thêm hàng / cột phía
- *  chờm ÍT nhất (mẫu xếp pallet thật được 10 thùng 420×255/lớp — lưới thẳng chỉ 8 — nhờ chờm mép vài cm). */
-function gridFor(L: number, W: number, cl: number, cw: number, cap: number) {
-  let nx = Math.max(1, Math.floor(L / cl)), ny = Math.max(1, Math.floor(W / cw))
-  while (nx * ny < cap) {
-    if (Math.max(0, (nx + 1) * cl - L) + Math.max(0, ny * cw - W) <= Math.max(0, nx * cl - L) + Math.max(0, (ny + 1) * cw - W)) nx++
-    else ny++
-  }
-  return { nx, ny, cl, cw, over: Math.max(0, nx * cl - L) + Math.max(0, ny * cw - W) }
-}
-
-/** Thùng trên mặt pallet, từng lớp từ dưới lên, căn giữa chân pallet. Mỗi mã một kiểu lưới đủ chứa lớp đủ
- *  của nó: hướng chờm ít nhất, ngang nhau thì BÁM HƯỚNG LỚP DƯỚI (không lớp ngang lớp dọc vắt chéo nhau).
- *  Lớp thiếu nằm DƯỚI lớp khác thì rải đều ra các ô (làm chân đỡ), lớp thiếu trên cùng thì xếp sát nhau. */
-function palletCartons(b: PlacedBox, baseH: number, layers: PalletLayer[]) {
-  const out: { itemId: string; x: number; y: number; z: number; l: number; w: number; h: number }[] = []
-  const capOf = new Map<string, number>()   // thùng / lớp đủ của từng mã trên pallet này
-  for (const ly of layers) capOf.set(ly.itemId, Math.max(capOf.get(ly.itemId) ?? 0, ly.n))
-  let z = b.z + baseH
-  let prev: { fx: number; fy: number } | null = null
-  layers.forEach((ly, li) => {
-    const cap = capOf.get(ly.itemId)!
-    const g = [gridFor(b.l, b.w, ly.l, ly.w, cap), gridFor(b.l, b.w, ly.w, ly.l, cap)]
-      .map(o => ({ ...o, d: prev ? Math.abs(o.nx * o.cl - prev.fx) + Math.abs(o.ny * o.cw - prev.fy) : 0 }))
-      .sort((a, c) => a.over - c.over || a.d - c.d || a.nx * a.ny - c.nx * c.ny)[0]
-    const { nx, ny, cl, cw } = g
-    const per = nx * ny
-    // lớp thiếu trên cùng: chỉ chiếm số hàng cần, căn giữa — khối gọn, không loe ra mép
-    const top = ly.n < cap && li === layers.length - 1
-    const rows = top ? Math.ceil(ly.n / nx) : ny
-    const ox = b.x + (b.l - nx * cl) / 2, oy = b.y + (b.w - rows * cw) / 2
-    const spread = ly.n < per && !top
-    for (let k = 0; k < Math.min(ly.n, per); k++) {
-      const c = spread ? Math.floor((k * per) / ly.n) : k
-      out.push({ itemId: ly.itemId, x: ox + (c % nx) * cl, y: oy + Math.floor(c / nx) * cw, z, l: cl, w: cw, h: ly.h })
-    }
-    prev = { fx: nx * cl, fy: ny * cw }
-    z += ly.h
-  })
-  return out
+/** Thùng đã xếp trên mặt pallet (toạ độ theo cỡ pallet L×W) → toạ độ trong xe của pallet `b`. Pallet đặt
+ *  xoay (cạnh dài theo bề ngang xe) thì đổi trục. */
+function onPallet(b: PlacedBox, baseH: number, L: number, cs: PalletCarton[]) {
+  const turned = Math.abs(b.l - L) > 1
+  return cs.map(c => turned
+    ? { itemId: c.itemId, x: b.x + c.y, y: b.y + c.x, z: b.z + baseH + c.z, l: c.w, w: c.l, h: c.h }
+    : { itemId: c.itemId, x: b.x + c.x, y: b.y + c.y, z: b.z + baseH + c.z, l: c.l, w: c.w, h: c.h })
 }
 
 const upperBound = (a: number[], v: number) => { let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] <= v) lo = m + 1; else hi = m } return lo }
@@ -142,12 +110,13 @@ export function buildCargo(plan: LoadPlan, meta: PlanGroupMeta[], colors: Map<st
       })
       finish(deck); finish(feet)
       entry.parts.push({ mesh: deck, cum: upTo(n, 1), mats: [gw] }, { mesh: feet, cum: upTo(n, 9), mats: [gw] })
-      if (m.layers?.length) {
-        // các lớp thùng thật — mỗi MÃ một mesh: pallet gộp thấy rõ từng mã, đúng cỡ thùng, đúng màu
-        const byItem = new Map<string, { list: ReturnType<typeof palletCartons>; cum: number[] }>()
-        for (const ly of m.layers) if (!byItem.has(ly.itemId)) byItem.set(ly.itemId, { list: [], cum: [0] })
+      if (m.cartons?.length) {
+        // thùng thật — mỗi MÃ một mesh: pallet gộp thấy rõ từng mã, đúng cỡ thùng, đúng màu
+        const L = plan.groups[gi].l
+        const byItem = new Map<string, { list: ReturnType<typeof onPallet>; cum: number[] }>()
+        for (const c of m.cartons) if (!byItem.has(c.itemId)) byItem.set(c.itemId, { list: [], cum: [0] })
         for (const b of boxes) {
-          for (const c of palletCartons(b, base.h, m.layers)) byItem.get(c.itemId)!.list.push(c)
+          for (const c of onPallet(b, base.h, L, m.cartons)) byItem.get(c.itemId)!.list.push(c)
           for (const v of byItem.values()) v.cum.push(v.list.length)
         }
         for (const [itemId, v] of byItem) entry.parts.push(cartonPart(v.list, groupColor({ ...m, colorKey: itemId }, colors), v.cum, itemId))

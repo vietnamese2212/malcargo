@@ -45,7 +45,7 @@ export interface Trip {
   name: string
   vehicleId: string | null
   orderIds: string[]   // THỨ TỰ GIAO: đơn đầu giao trước ⇒ xếp sau cùng, sát cửa
-  lightInPallet?: boolean    // xe pallet: hàng nhẹ đóng pallet như hàng khác (mặc định rải thùng lên nóc pallet)
+  lightOwnPallet?: boolean   // xe pallet: phần lẻ hàng nhẹ đứng pallet riêng (mặc định dồn lên trên cùng pallet gộp)
   updatedAt: number
 }
 

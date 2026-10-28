@@ -75,35 +75,47 @@ for (const [name, truck, orders] of cases) {
   invariants('hàng nhẹ thùng to', r)
   ok(r.plan.placedCount === r.plan.totalCount, `hàng nhẹ thùng to: chỉ xếp ${r.plan.placedCount}/${r.plan.totalCount}`)
 }
-// Xe pallet, chuyến bật "Hàng nhẹ đóng pallet" ⇒ không còn thùng rời nào. 200 túi (216/pallet) tự đủ một
-// pallet ⇒ pallet RIÊNG; 25 túi thì dồn chung pallet gộp với phần lẻ mã khác. Tắt ⇒ rải thùng lên nóc.
+// Xe pallet (user 28/10): mọi hàng NẰM GỌN trên pallet của nó (không thùng rời vắt qua pallet), có KHE giữa
+// các pallet; đủ quy cách ⇒ pallet chẵn; phần lẻ mặc định DỒN pallet gộp ≤ 1,65m, hàng NHẸ TRÊN CÙNG, liền khối;
+// chuyến bật "Hàng nhẹ: pallet riêng" ⇒ phần lẻ hàng nhẹ đứng pallet riêng. Ca = chuyến 271026-1936-01.
 {
   const tui = items['adm-i-tui110']
+  const P = E.DEFAULT_PALLET_SETTINGS
   const os = [{ id: 'z', name: 'Đơn Z', place: '', lines: [
-    { item: items['adm-i-scu180'], qty: 110 }, { item: items['adm-i-c100'], qty: 120 }, { item: tui, qty: 200 },
+    { item: items['adm-i-scu180'], qty: 110 }, { item: items['adm-i-c100'], qty: 200 }, { item: tui, qty: 200 },
   ] }]
-  const a = E.computeTrip({ truck: trucks['adm-v-p8t'], orders: os, pallet: E.DEFAULT_PALLET_SETTINGS, lightInPallet: true })
-  invariants('nhẹ · đóng pallet', a)
-  ok(a.fits && a.count.every(c => c.unit === 'pallet'),
-    `nhẹ · đóng pallet: phải toàn pallet và vừa xe, được ${JSON.stringify(a.count.map(c => [c.label, c.unit, c.placed]))}`)
-  const rowA = a.count.filter(c => a.meta[c.group].itemId === tui.id)
-  ok(rowA.length === 1 && rowA[0].placed === 1, `nhẹ · đóng pallet: 200 túi phải là 1 pallet riêng, được ${JSON.stringify(a.count.map(c => c.label))}`)
-  ok(E.suggestTruck(os, E.DEFAULT_PALLET_SETTINGS, E.ADMIN_VEHICLES.filter(v => v.kind === 'pallet'), true) === 'adm-v-p8t',
-    'nhẹ · đóng pallet: gợi ý xe phải là xe pallet 8 tấn')
-  console.log(`• Nhẹ · đóng pallet (xe pallet 8 tấn) — ${a.count.map(c => `${c.label} ${c.placed} ${c.unit}`).join(' · ')}`)
-  const few = [{ id: 'w', name: 'Đơn W', place: '', lines: [{ item: items['adm-i-st180'], qty: 150 }, { item: tui, qty: 25 }] }]
-  const c = E.computeTrip({ truck: trucks['adm-v-p8t'], orders: few, pallet: E.DEFAULT_PALLET_SETTINGS, lightInPallet: true })
-  invariants('nhẹ ít · đóng pallet', c)
-  ok(c.count.every(x => x.unit === 'pallet') && !c.count.some(x => c.meta[x.group].itemId === tui.id),
-    `nhẹ ít · đóng pallet: 25 túi phải dồn vào pallet gộp, được ${JSON.stringify(c.count.map(x => x.label))}`)
-  console.log(`• Nhẹ ít · đóng pallet — ${c.count.map(x => `${x.label} ${x.placed} ${x.unit}`).join(' · ')}`)
-  const b = E.computeTrip({ truck: trucks['adm-v-p8t'], orders: os, pallet: E.DEFAULT_PALLET_SETTINGS })
-  invariants('nhẹ · lên nóc', b)
-  const rowB = b.count.filter(c => b.meta[c.group].itemId === tui.id)
-  // (200 túi trên nóc chỉ 2 pallet nền: chồng ≤ 8 lớp nên còn dư vài thùng — ca nên bật "Hàng nhẹ đóng pallet")
-  ok(rowB.length === 1 && rowB[0].unit === 'thùng' && rowB[0].onTopOfOthers && rowB[0].placed > 0,
-    `nhẹ · lên nóc: thạch túi phải rải thùng lên nóc, được ${JSON.stringify(rowB.map(c => [c.label, c.unit, c.placed]))}`)
-  console.log(`• Nhẹ · lên nóc (xe pallet 8 tấn) — ${b.count.map(c => `${c.label} ${c.placed}/${c.total} ${c.unit}`).join(' · ')}`)
+  const lightIds = new Set(E.ADMIN_ITEMS.filter(i => i.light).map(i => i.id))
+  const palletChecks = (name, r) => {
+    invariants(name, r)
+    ok(r.fits && r.count.every(c => c.unit === 'pallet'), `${name}: phải toàn pallet và vừa xe, được ${JSON.stringify(r.count.map(c => [c.label, c.unit, c.placed]))}`)
+    for (const [gi, m] of r.meta.entries()) {
+      const cs = m.cartons ?? []
+      ok(cs.every(c => c.x >= -0.5 && c.y >= -0.5 && c.x + c.l <= P.l + 0.5 && c.y + c.w <= P.w + 0.5), `${name}: ${m.label} có thùng chờm ra ngoài chân pallet`)
+      let lap = 0, heavyOnLight = 0
+      for (let i = 0; i < cs.length; i++) for (let j = 0; j < cs.length; j++) {
+        if (i === j) continue
+        const a = cs[i], b = cs[j]
+        const xy = a.x + a.l - 1 > b.x && b.x + b.l - 1 > a.x && a.y + a.w - 1 > b.y && b.y + b.w - 1 > a.y
+        if (i < j && xy && a.z + a.h - 1 > b.z && b.z + b.h - 1 > a.z) lap++
+        if (xy && !lightIds.has(a.itemId) && lightIds.has(b.itemId) && a.z >= b.z + b.h - 1) heavyOnLight++
+      }
+      ok(!lap, `${name}: ${m.label} có ${lap} cặp thùng chồng lấn`)
+      ok(!heavyOnLight, `${name}: ${m.label} có ${heavyOnLight} thùng hàng thường nằm TRÊN hàng nhẹ`)
+      if (m.mix) ok(r.plan.groups[gi].h <= P.maxH + 0.5, `${name}: ${m.label} cao ${r.plan.groups[gi].h} > ${P.maxH}`)
+    }
+    const ps = r.plan.placed
+    ok(ps.some(a => ps.some(b => b !== a && b.x >= a.x + a.l + 1 && Math.abs(b.y - a.y) < 1)), `${name}: các pallet trong làn phải có khe`)
+  }
+  const a = E.computeTrip({ truck: trucks['adm-v-p8t'], orders: os, pallet: P })
+  palletChecks('pallet · phần lẻ dồn', a)
+  ok(a.count.some(c => a.meta[c.group].itemId === items['adm-i-c100'].id && a.meta[c.group].cartons?.length === 143), 'pallet · phần lẻ dồn: Sữa chua chai phải có 1 pallet chẵn 143 thùng')
+  ok(a.meta.some(m => m.mix?.some(x => x.itemId === tui.id) && m.mix.some(x => x.itemId === items['adm-i-c100'].id)), 'pallet · phần lẻ dồn: thạch túi phải dồn chung pallet gộp với phần lẻ Sữa chua chai')
+  console.log(`• Pallet · phần lẻ dồn (xe pallet 8 tấn) — ${a.count.map(c => `${c.label}${c.mix ? ' [' + c.mix.map(x => x.n + ' ' + x.label).join(' + ') + ']' : ''}`).join(' · ')}`)
+  const b = E.computeTrip({ truck: trucks['adm-v-p8t'], orders: os, pallet: P, lightOwnPallet: true })
+  palletChecks('pallet · nhẹ pallet riêng', b)
+  ok(b.meta.filter(m => m.cartons?.some(c => c.itemId === tui.id)).every(m => m.cartons.every(c => c.itemId === tui.id)), 'pallet · nhẹ pallet riêng: pallet chứa thạch túi chỉ có thạch túi')
+  console.log(`• Pallet · nhẹ pallet riêng — ${b.count.map(c => c.label).join(' · ')}`)
+  ok(E.suggestTruck(os, P, E.ADMIN_VEHICLES.filter(v => v.kind === 'pallet'), true) === 'adm-v-p8t', 'pallet: gợi ý xe phải là xe pallet 8 tấn')
 }
 const t0 = performance.now()
 const sug = E.suggestTruck(sample, E.DEFAULT_PALLET_SETTINGS, E.ADMIN_VEHICLES.filter(v => v.kind === 'loose'))
