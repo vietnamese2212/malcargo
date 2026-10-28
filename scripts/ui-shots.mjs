@@ -41,6 +41,8 @@ for (const dev of DEVICES) {
     await p.evaluate(() => window.scrollTo(0, 0))
     await p.getByRole('button', { name: 'Đổi xe' }).click(); await p.waitForTimeout(400)
     await p.screenshot({ path: `${OUT}/${dev.name}-spec.jpg`, type: 'jpeg', quality: 78 })
+    await p.getByRole('dialog', { name: 'Thùng xe' }).locator('button[aria-expanded="false"]').first().click(); await p.waitForTimeout(200)
+    await p.screenshot({ path: `${OUT}/${dev.name}-spec-open.jpg`, type: 'jpeg', quality: 78 })
     await p.getByRole('dialog', { name: 'Thùng xe' }).getByText('Xe pallet 8 tấn').click(); await p.waitForTimeout(4500)
     await p.keyboard.press('Escape'); await p.waitForTimeout(200)
     await p.screenshot({ path: `${OUT}/${dev.name}-pallet.jpg`, type: 'jpeg', quality: 78 })

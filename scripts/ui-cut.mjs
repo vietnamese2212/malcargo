@@ -54,7 +54,9 @@ for (const dev of DEVS) {
   await p.getByRole('button', { name: T('Diễn giải'), exact: true }).click(); await p.waitForTimeout(400); await scan(p, dev.name, 'Diễn giải từng mã'); await p.keyboard.press('Escape'); await p.waitForTimeout(200)
   await p.getByRole('button', { name: new RegExp(esc(T('Bảng đếm chân'))) }).click(); await p.waitForTimeout(300); await scan(p, dev.name, 'Bảng đếm chân')
   await p.evaluate(() => window.scrollTo(0, 0))
-  await p.getByRole('button', { name: T('Đổi xe') }).click(); await p.waitForTimeout(500); await scan(p, dev.name, 'Bảng Thùng xe'); await p.keyboard.press('Escape'); await p.waitForTimeout(200)
+  await p.getByRole('button', { name: T('Đổi xe') }).click(); await p.waitForTimeout(500); await scan(p, dev.name, 'Bảng Thùng xe')
+  // thông số thùng xe gấp sẵn — bấm dòng tóm tắt để mở ô sửa
+  await p.getByRole('dialog', { name: T('Thùng xe') }).locator('button[aria-expanded="false"]').first().click(); await p.waitForTimeout(200); await scan(p, dev.name, 'Bảng Thùng xe · mở thông số'); await p.keyboard.press('Escape'); await p.waitForTimeout(200)
   await p.getByRole('button', { name: new RegExp('^' + esc(TP('Chuyến đang mở: {name}. Bấm để xem các chuyến'))) }).click(); await p.waitForTimeout(200); await scan(p, dev.name, 'Chọn chuyến'); await p.keyboard.press('Escape')
   for (const [label, tabs] of [['Mã hàng', ['Của tôi', 'Mẫu chung']], ['Xe', ['Xe của tôi', 'Mẫu chung']], ['Đơn hàng', []], ['Các chuyến', []], ['Tài khoản & dữ liệu', []], ['Nhập từ Excel', []]]) {
     await p.getByRole('button', { name: T('Danh mục') }).click(); await p.waitForTimeout(200)

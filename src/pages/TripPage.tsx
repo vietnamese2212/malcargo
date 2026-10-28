@@ -58,7 +58,8 @@ export default function TripPage({ id }: { id: string }) {
   const upsertOrder = useData(s => s.upsertOrder)
   const items = useAllItems()
   const vehicles = useAllVehicles()
-  const [spec, setSpec] = useState(false)
+  // bảng Thùng xe: null = đóng; more = phần thông số đang mở (bấm chip Lòng / Tải / nút chỉnh ⇒ mở sẵn, bấm tên xe ⇒ gấp — để đổi xe)
+  const [spec, setSpec] = useState<{ more: boolean } | null>(null)
 
   const vehicle = findVehicle(vehicles, trip?.vehicleId ?? null)
   const candidates = useMemo(() => pickPool(vehicles, vehicle).map(truckOf), [vehicles, vehicle])
@@ -261,7 +262,7 @@ export default function TripPage({ id }: { id: string }) {
       <div className="lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(380px,440px)_1fr]">
         {/* ── BẢN VẼ: dải thông số xe + 3D + khung tên ── */}
         <section data-scene className="sticky top-12 z-10 flex h-[50vh] min-h-[320px] flex-col bg-[#e7ecf2] sm:top-14 lg:relative lg:top-0 lg:order-2 lg:h-full">
-          <SpecStrip vehicle={vehicle} pallet={pallet} onOpen={() => setSpec(true)} onKind={k => patchVehicle({ kind: k })}
+          <SpecStrip vehicle={vehicle} pallet={pallet} onOpen={more => setSpec({ more })} onKind={k => patchVehicle({ kind: k })}
             lightOwn={tripOrders.some(o => o.lines.some(l => l.qty > 0 && l.item.light)) ? !!trip.lightOwnPallet : null}
             onLightOwn={v => upsertTrip({ ...trip, lightOwnPallet: v })} />
           <div className="relative min-h-0 flex-1">
@@ -313,7 +314,8 @@ export default function TripPage({ id }: { id: string }) {
 
             {spec && (
               <SpecPopup vehicle={vehicle} vehicles={vehicles} suggestion={suggestion} fits={hasCargo ? fits : null} sharedWith={vehicleSharedWith}
-                onClose={() => setSpec(false)} onPick={pickVehicle} onPatch={patchVehicle}
+                more={spec.more} onMore={more => setSpec({ more })}
+                onClose={() => setSpec(null)} onPick={pickVehicle} onPatch={patchVehicle}
                 onEdit={v => setEditVehicle({ v })} onAdd={() => setEditVehicle({ v: null })} />
             )}
           </div>
@@ -635,17 +637,17 @@ function AccountButton({ onData }: { onData: () => void }) {
 // công tắc hàng nhẹ (chuyến không có hàng nhẹ).
 function SpecStrip({ vehicle, pallet, lightOwn, onOpen, onKind, onLightOwn }: {
   vehicle?: Vehicle; pallet: { l: number; w: number }; lightOwn: boolean | null
-  onOpen: () => void; onKind: (k: VehicleKind) => void; onLightOwn: (v: boolean) => void
+  onOpen: (more: boolean) => void; onKind: (k: VehicleKind) => void; onLightOwn: (v: boolean) => void
 }) {
   const chip = 'flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[13px] text-slate-900 transition-colors hover:border-slate-400 hover:bg-slate-50'
   return (
     <div className="flex min-h-[56px] shrink-0 flex-wrap items-center gap-2 border-b border-slate-300 bg-white px-3 py-2 sm:min-h-[48px] sm:gap-1.5 sm:py-1.5">
       {!vehicle ? (
-        <button onClick={onOpen} className={chip}><Truck size={16} />{t('Chọn xe')}</button>
+        <button onClick={() => onOpen(false)} className={chip}><Truck size={16} />{t('Chọn xe')}</button>
       ) : (
         <>
           {/* điện thoại: chiếm phần còn lại của hàng đầu, tên dài thì xuống dòng; máy tính: rộng theo chữ */}
-          <button onClick={onOpen} aria-label={t('Đổi xe')} className={cx(chip, 'min-w-0 flex-1 font-semibold sm:flex-none')}>
+          <button onClick={() => onOpen(false)} aria-label={t('Đổi xe')} className={cx(chip, 'min-w-0 flex-1 font-semibold sm:flex-none')}>
             <span className="max-sm:hidden"><TruckGlyph pallet={vehicle.kind === 'pallet'} small /></span>
             <span className="min-w-0 text-left leading-tight">
               <span className="block break-words sm:whitespace-nowrap">{tx(vehicle.name)}</span>
@@ -676,18 +678,18 @@ function SpecStrip({ vehicle, pallet, lightOwn, onOpen, onKind, onLightOwn }: {
               </span>
             </button>
           )}
-          <button onClick={onOpen} className={cx(chip, 'max-sm:hidden')} title={t('Lòng thùng dài × rộng × cao')}>
+          <button onClick={() => onOpen(true)} className={cx(chip, 'max-sm:hidden')} title={t('Lòng thùng dài × rộng × cao')}>
             <span className="text-slate-600">{t('Lòng')}</span><span className="num font-semibold">{m(vehicle.l)} × {m(vehicle.w)} × {m(vehicle.h)} m</span>
           </button>
-          <button onClick={onOpen} className={cx(chip, 'max-sm:hidden')}>
+          <button onClick={() => onOpen(true)} className={cx(chip, 'max-sm:hidden')}>
             <span className="text-slate-600">{t('Tải')}</span><span className="num font-semibold">{vehicle.payloadKg != null ? fmtKgShort(vehicle.payloadKg) : '—'}</span>
           </button>
           {vehicle.kind === 'pallet' && (
-            <button onClick={onOpen} className={cx(chip, 'max-sm:hidden')}>
+            <button onClick={() => onOpen(true)} className={cx(chip, 'max-sm:hidden')}>
               <span className="text-slate-600">Pallet</span><span className="num font-semibold">{m(pallet.l)} × {m(pallet.w)} m</span>
             </button>
           )}
-          <button onClick={onOpen} aria-label={t('Chỉnh thông số thùng xe')} title={t('Chỉnh thông số thùng xe')} className={cx(chip, 'ml-auto text-brand-700 max-sm:hidden')}>
+          <button onClick={() => onOpen(true)} aria-label={t('Chỉnh thông số thùng xe')} title={t('Chỉnh thông số thùng xe')} className={cx(chip, 'ml-auto text-brand-700 max-sm:hidden')}>
             <SlidersHorizontal size={16} />
           </button>
         </>
@@ -827,8 +829,9 @@ function ViewMenu({ view, walls, onView, onWalls }: { view: ViewPreset; walls: '
 }
 
 // ── Bảng Thùng xe: chỉnh xe đang dùng + đổi xe khác (tìm, ô chọn, thử ✓/✗ từng xe, sửa) ───────
-function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, onClose, onPick, onPatch, onEdit, onAdd }: {
+function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, more, onMore, onClose, onPick, onPatch, onEdit, onAdd }: {
   vehicle?: Vehicle; vehicles: Vehicle[]; suggestion: string | null; fits: Record<string, FitCheck> | null; sharedWith: number
+  more: boolean; onMore: (v: boolean) => void
   onClose: () => void; onPick: (id: string) => void; onPatch: (p: Partial<Vehicle>) => void; onEdit: (v: Vehicle) => void; onAdd: () => void
 }) {
   const pallet = useData(s => s.pallet)
@@ -882,14 +885,25 @@ function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, onClose, o
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {vehicle && (
           <div className="space-y-2.5 px-3 py-3">
-            {/* XE: lòng thùng + tải — của riêng xe này */}
+            {/* XE: lòng thùng + tải — của riêng xe này. Gấp thành một dòng tóm tắt, bấm mới mở ô sửa (cùng kiểu Block) */}
             <div className="rounded-lg border border-slate-300">
-              <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
+              <button type="button" onClick={() => onMore(!more)} aria-expanded={more} title={t('Chỉnh thông số thùng xe')}
+                className={cx('flex w-full items-center gap-2 rounded-t-lg px-3 py-2 text-left hover:bg-slate-50', more ? 'border-b border-slate-200' : 'rounded-b-lg')}>
                 <TruckGlyph pallet={vehicle.kind === 'pallet'} small />
-                <span className="min-w-0 flex-1 break-words text-sm font-semibold leading-snug text-slate-900">{tx(vehicle.name)}</span>
-                <OwnerTag v={vehicle} />
-              </div>
-              <div className="space-y-2.5 p-3">
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="min-w-0 break-words text-sm font-semibold leading-snug text-slate-900">{tx(vehicle.name)}</span>
+                    <OwnerTag v={vehicle} />
+                  </span>
+                  <span className="num block text-[12px] leading-snug text-slate-600">
+                    <span className="whitespace-nowrap">{m(vehicle.l)} × {m(vehicle.w)} × {m(vehicle.h)} m</span>
+                    {vehicle.payloadKg != null && <> · <span className="whitespace-nowrap">{fmtKgShort(vehicle.payloadKg)}</span></>}
+                    {' · '}{vehicle.kind === 'pallet' ? <span className="whitespace-nowrap">pallet {m(pallet.l)} × {m(pallet.w)} m</span> : t('thùng rời')}
+                  </span>
+                </span>
+                <ChevronDown size={18} className={cx('shrink-0 text-slate-500 transition-transform', more && 'rotate-180')} />
+              </button>
+              {more && <div className="space-y-2.5 p-3">
                 <Segmented value={vehicle.kind} onChange={k => onPatch({ kind: k })} options={[
                   { value: 'loose', label: t('Thùng rời (xe xá)') }, { value: 'pallet', label: t('Xếp pallet') },
                 ]} />
@@ -907,10 +921,10 @@ function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, onClose, o
                     : sharedWith ? t('Xe này đang dùng ở {n} chuyến khác, sửa ở đây là sửa cho cả các chuyến đó.', { n: sharedWith })
                     : t('Sửa xong sơ đồ tự vẽ lại.')}
                 </p>
-              </div>
+              </div>}
             </div>
             {/* PALLET: một cỡ dùng chung cho MỌI xe pallet — tách khung riêng để không lẫn với kích thước xe */}
-            {vehicle.kind === 'pallet' && (
+            {more && vehicle.kind === 'pallet' && (
               <div className="rounded-lg border border-slate-300 bg-slate-50">
                 <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
                   <Layers size={16} className="text-slate-600" />
