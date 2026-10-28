@@ -19,13 +19,13 @@ export interface CargoHandle {
 interface Part { mesh: THREE.InstancedMesh; cum: number[]; mats: THREE.Material[]; itemId?: string }
 interface GroupMeshes { steps: number[]; parts: Part[] }
 
-/** Thùng đã xếp trên mặt pallet (toạ độ theo cỡ pallet L×W) → toạ độ trong xe của pallet `b`. Pallet đặt
- *  xoay (cạnh dài theo bề ngang xe) thì đổi trục. */
-function onPallet(b: PlacedBox, baseH: number, L: number, cs: PalletCarton[]) {
+/** Thùng / tấm gỗ trên pallet (toạ độ theo khối L×W của nhóm — chân + phần chờm) → toạ độ trong xe của
+ *  pallet `b`. Pallet đặt xoay (cạnh dài theo bề ngang xe) thì đổi trục. */
+function onPallet<T extends { x: number; y: number; l: number; w: number }>(b: PlacedBox, L: number, cs: T[]): T[] {
   const turned = Math.abs(b.l - L) > 1
   return cs.map(c => turned
-    ? { itemId: c.itemId, x: b.x + c.y, y: b.y + c.x, z: b.z + baseH + c.z, l: c.w, w: c.l, h: c.h }
-    : { itemId: c.itemId, x: b.x + c.x, y: b.y + c.y, z: b.z + baseH + c.z, l: c.l, w: c.w, h: c.h })
+    ? { ...c, x: b.x + c.y, y: b.y + c.x, l: c.w, w: c.l }
+    : { ...c, x: b.x + c.x, y: b.y + c.y })
 }
 
 const upperBound = (a: number[], v: number) => { let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] <= v) lo = m + 1; else hi = m } return lo }
@@ -94,14 +94,16 @@ export function buildCargo(plan: LoadPlan, meta: PlanGroupMeta[], colors: Map<st
     const entry: GroupMeshes = { steps: boxes.map(b => b.step), parts: [] }
 
     if (base) {
-      // PALLET: ván mặt + 9 chân gỗ
+      // PALLET: ván mặt + 9 chân gỗ — đúng cỡ chân pallet (`deck`), thùng chờm mép thì khối rộng hơn tấm gỗ
       const n = boxes.length
+      const L = plan.groups[gi].l
       const gw = track(woodMat.clone())   // riêng từng nhóm để làm mờ được khi soi mã khác
       const deck = new THREE.InstancedMesh(unitBox, gw, n)
       const feet = new THREE.InstancedMesh(unitBox, gw, n * 9)
-      boxes.forEach((b, i) => {
+      boxes.forEach((b0, i) => {
+        const b = m.deck ? onPallet(b0, L, [m.deck])[0] : b0
         const l = b.l / 1000, w = b.w / 1000, bh = base.h / 1000
-        const cx = (b.x + b.l / 2) / 1000, cz = W / 2 - (b.y + b.w / 2) / 1000, y0 = floorY + b.z / 1000
+        const cx = (b.x + b.l / 2) / 1000, cz = W / 2 - (b.y + b.w / 2) / 1000, y0 = floorY + b0.z / 1000
         place(deck, i, cx, y0 + bh * 0.82, cz, l, bh * 0.36, w)
         let k = 0
         for (const fx of [-1, 0, 1]) for (const fz of [-1, 0, 1]) {
@@ -112,11 +114,10 @@ export function buildCargo(plan: LoadPlan, meta: PlanGroupMeta[], colors: Map<st
       entry.parts.push({ mesh: deck, cum: upTo(n, 1), mats: [gw] }, { mesh: feet, cum: upTo(n, 9), mats: [gw] })
       if (m.cartons?.length) {
         // thùng thật — mỗi MÃ một mesh: pallet gộp thấy rõ từng mã, đúng cỡ thùng, đúng màu
-        const L = plan.groups[gi].l
-        const byItem = new Map<string, { list: ReturnType<typeof onPallet>; cum: number[] }>()
+        const byItem = new Map<string, { list: PalletCarton[]; cum: number[] }>()
         for (const c of m.cartons) if (!byItem.has(c.itemId)) byItem.set(c.itemId, { list: [], cum: [0] })
         for (const b of boxes) {
-          for (const c of onPallet(b, base.h, L, m.cartons)) byItem.get(c.itemId)!.list.push(c)
+          for (const c of onPallet(b, L, m.cartons)) byItem.get(c.itemId)!.list.push({ ...c, z: b.z + base.h + c.z })
           for (const v of byItem.values()) v.cum.push(v.list.length)
         }
         for (const [itemId, v] of byItem) entry.parts.push(cartonPart(v.list, groupColor({ ...m, colorKey: itemId }, colors), v.cum, itemId))

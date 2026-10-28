@@ -1,8 +1,8 @@
 // Ghép dữ liệu của người dùng (xe · mã hàng · đơn) vào thuật toán xếp — cùng trình tự với màn 3D
-// của SUPPLYC: xe xá xếp thẳng thùng; xe pallet gom hàng lên pallet trước, hàng nhẹ rải lên nóc
-// pallet (hoặc đóng pallet như hàng khác nếu chuyến bật vậy). File này THUẦN (không React) để chạy được trong Web Worker và trong bài kiểm.
+// của SUPPLYC: xe xá xếp thẳng thùng; xe pallet gom mọi hàng lên pallet trước rồi xếp các pallet.
+// File này THUẦN (không React) để chạy được trong Web Worker và trong bài kiểm.
 import {
-  computeLoadPlan, palletizeGroups, palletFitError, palletsTooTall, palletPattern,
+  computeLoadPlan, palletizeGroups, palletFitError, palletsTooTall, layerPattern,
   palletFloorSlots, type LoadGroup, type LoadPlan, type PalletSpec, type PalletizeInput, type PlacedBox,
 } from './loadPlan'
 import type { Item, PalletSettings, VehicleKind } from '../data/types'
@@ -23,12 +23,13 @@ export interface PlanGroupMeta {
   holds?: string[]           // pallet gộp: id các mã nằm trong khối này
   layers?: PalletLayer[]     // pallet: các lớp thùng THẬT từ dưới lên (nặng dưới, nhẹ trên)
   cartons?: PalletCarton[]   // pallet: từng thùng đã xếp trên mặt pallet — vẽ 3D đúng cỡ, đúng màu mã
+  deck?: { x: number; y: number; l: number; w: number }   // pallet: chỗ tấm gỗ trong khối (khối = chân + phần thùng chờm mép)
   mix?: { itemId: string; label: string; n: number }[]   // pallet gộp: gồm mã nào, bao nhiêu thùng
 }
 
-/** Một lớp thùng trên pallet: `n` thùng cỡ l × w × h của một mã. */
-export interface PalletLayer { itemId: string; l: number; w: number; h: number; n: number }
-/** Một thùng trên mặt pallet: gốc = góc chân pallet đặt theo chiều dài × rộng của cỡ pallet, z từ mặt đế. */
+/** Một lớp thùng trên pallet: `n` thùng cỡ l × w × h của một mã; `per` = số thùng một lớp đầy của mã đó. */
+export interface PalletLayer { itemId: string; l: number; w: number; h: number; n: number; per: number }
+/** Một thùng trên pallet: gốc = góc KHỐI pallet (chân + phần chờm) theo dài × rộng của khối, z từ mặt đế. */
 export interface PalletCarton { itemId: string; x: number; y: number; z: number; l: number; w: number; h: number }
 
 export interface CountRow {
@@ -59,28 +60,31 @@ export interface TripResult {
   warnings: string[]
 }
 
-/** Thùng thật trên MẶT một pallet L×W (gốc góc chân, z tính từ mặt đế). Mỗi mã lần lượt theo ruột (nặng
- *  dưới, nhẹ trên); mỗi thùng vào vị trí của mẫu xếp gọn (`palletPattern`, căn giữa chân) có mặt đỡ THẤP
- *  nhất (đặt trên điểm cao nhất của mặt đỡ; bằng nhau thì chỗ phẳng hơn trước) ⇒ chỗ trống của lớp thiếu
- *  được mã sau lấp nốt, cả mặt dâng đều — liền khối, không lỗ, không cột (user 28/10: "xếp liền khối trên
- *  pallet, không có khoảng hở"; bản đầu chỉ nhận chỗ phẳng tuyệt đối ⇒ thạch túi chồng thành cột 2,3m). */
-function packPallet(L: number, W: number, layers: PalletLayer[]): PalletCarton[] {
-  const R = 10, nx = Math.ceil(L / R), ny = Math.ceil(W / R)
-  const H = new Float32Array(nx * ny)
-  const out: PalletCarton[] = []
+/** Thùng thật trên MẶT một pallet L×W, z tính từ mặt đế. Mỗi mã lần lượt theo ruột (nặng dưới, nhẹ trên);
+ *  mỗi thùng vào vị trí của mẫu lớp ĐẦY của mã (`layerPattern` — đúng số thùng/lớp, căn giữa chân; chân không
+ *  chứa nổi thì chờm mép) có mặt đỡ THẤP nhất (đặt trên điểm cao nhất của mặt đỡ; bằng nhau thì chỗ phẳng
+ *  hơn trước) ⇒ chỗ trống của lớp thiếu được mã sau lấp nốt, cả mặt dâng đều — liền khối, không lỗ, không cột
+ *  (user 28/10: "xếp liền khối trên pallet, không có khoảng hở"). Toạ độ theo góc KHỐI (chân + phần chờm —
+ *  khớp `palletFoot` của lõi); `deck` = chỗ tấm gỗ trong khối. */
+function packPallet(L: number, W: number, layers: PalletLayer[]): { cartons: PalletCarton[]; deck: { x: number; y: number; l: number; w: number } } {
   const runs: PalletLayer[] = []
   for (const ly of layers) {
     const last = runs[runs.length - 1]
-    if (last && last.itemId === ly.itemId && last.l === ly.l && last.w === ly.w && last.h === ly.h) last.n += ly.n
+    if (last && last.itemId === ly.itemId && last.l === ly.l && last.w === ly.w && last.h === ly.h && last.per === ly.per) last.n += ly.n
     else runs.push({ ...ly })
   }
-  for (const run of runs) {
-    const pat = palletPattern(L, W, run.l, run.w)
-    if (!pat.length) continue
-    const ox = Math.floor((L - Math.max(...pat.map(p => p.x + p.l))) / 2), oy = Math.floor((W - Math.max(...pat.map(p => p.y + p.w))) / 2)
+  const pats = runs.map(run => layerPattern(L, W, run.l, run.w, run.per) ?? [])
+  let x0 = 0, y0 = 0, x1 = L, y1 = W
+  for (const p of pats.flat()) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x + p.l); y1 = Math.max(y1, p.y + p.w) }
+  const R = 10, nx = Math.ceil((x1 - x0) / R), ny = Math.ceil((y1 - y0) / R)
+  const H = new Float32Array(nx * ny)
+  const out: PalletCarton[] = []
+  runs.forEach((run, ri) => {
+    const pat = pats[ri]
+    if (!pat.length) return
     // ô lưới NẰM TRỌN trong thùng (thùng 255mm cạnh nhau không dùng chung ô mép)
-    const spots = pat.map(p => ({ x: p.x + ox, y: p.y + oy, l: p.l, w: p.w,
-      i0: Math.ceil((p.x + ox) / R), i1: Math.floor((p.x + ox + p.l) / R), j0: Math.ceil((p.y + oy) / R), j1: Math.floor((p.y + oy + p.w) / R) }))
+    const spots = pat.map(p => ({ x: p.x - x0, y: p.y - y0, l: p.l, w: p.w,
+      i0: Math.ceil((p.x - x0) / R), i1: Math.floor((p.x - x0 + p.l) / R), j0: Math.ceil((p.y - y0) / R), j1: Math.floor((p.y - y0 + p.w) / R) }))
     const span = (s: typeof spots[number]) => {
       let mn = Infinity, mx = -Infinity
       for (let i = s.i0; i < s.i1; i++) for (let j = s.j0; j < s.j1; j++) { const v = H[i * ny + j]; if (v < mn) mn = v; if (v > mx) mx = v }
@@ -96,29 +100,34 @@ function packPallet(L: number, W: number, layers: PalletLayer[]): PalletCarton[]
       out.push({ itemId: run.itemId, x: s.x, y: s.y, z: pz, l: s.l, w: s.w, h: run.h })
       for (let i = s.i0; i < s.i1; i++) for (let j = s.j0; j < s.j1; j++) H[i * ny + j] = pz + run.h
     }
-  }
-  return out
+  })
+  return { cartons: out, deck: { x: -x0, y: -y0, l: L, w: W } }
 }
 
-/** KHE GIỮA CÁC PALLET (user 28/10: "tạo khoảng hở giữa các pallet"): dàn phần sàn còn THỪA của từng làn
- *  dọc / của bề ngang thành khe đều giữa các pallet (≤ 80mm) — không bớt chỗ pallet nào. */
+/** KHE GIỮA CÁC PALLET (user 28/10: "tạo khoảng hở giữa các pallet"): dàn phần sàn còn THỪA thành khe đều
+ *  (≤ 80mm) — không bớt chỗ pallet nào. Mỗi pallet lùi `bậc × khe`, bậc = số pallet nối nhau đứng TRƯỚC nó
+ *  trong cùng dải (dọc: cùng khoảng bề ngang; ngang: cùng khoảng chiều dài) ⇒ pallet đặt xoay / khối rộng
+ *  hơn chân (thùng chờm mép) ở làn bên cạnh cũng không bị đẩy đè lên. */
 function spacePallets(plan: LoadPlan): LoadPlan {
   const T = plan.truck
   const placed = plan.placed.map(b => ({ ...b }))
-  const laneKey = (b: PlacedBox) => `${b.y}|${b.w}`
-  const lanes = new Map<string, PlacedBox[]>()
-  for (const b of placed) lanes.set(laneKey(b), [...(lanes.get(laneKey(b)) ?? []), b])
-  for (const lane of lanes.values()) {
-    lane.sort((a, b) => a.x - b.x)
-    const gap = Math.min(80, (T.length - Math.max(...lane.map(b => b.x + b.l))) / Math.max(1, lane.length))
-    if (gap > 0) lane.forEach((b, i) => { b.x += i * gap })
+  const spread = (pos: 'x' | 'y', len: 'l' | 'w', cross: 'x' | 'y', crossLen: 'l' | 'w', room: number) => {
+    const bs = [...placed].sort((a, b) => a[pos] - b[pos])
+    const depth = new Map<PlacedBox, number>()
+    for (const b of bs) {
+      let d = 0
+      for (const a of bs) {
+        if (a === b || a[pos] + a[len] > b[pos] + 1) continue
+        if (Math.min(a[cross] + a[crossLen], b[cross] + b[crossLen]) - Math.max(a[cross], b[cross]) > 1) d = Math.max(d, (depth.get(a) ?? 0) + 1)
+      }
+      depth.set(b, d)
+    }
+    let gap = 80
+    for (const b of bs) { const d = depth.get(b)!; if (d > 0) gap = Math.min(gap, (room - b[pos] - b[len]) / d) }
+    if (gap > 0) for (const b of bs) b[pos] += depth.get(b)! * gap
   }
-  const ys = [...lanes.keys()].map(k => k.split('|').map(Number)).sort((a, b) => a[0] - b[0])
-  const apart = ys.every((v, i) => i === 0 || ys[i - 1][0] + ys[i - 1][1] <= v[0] + 1e-6)
-  if (apart && ys.length > 1) {
-    const gy = Math.min(80, (T.width - (ys[ys.length - 1][0] + ys[ys.length - 1][1])) / (ys.length - 1))
-    if (gy > 0) ys.forEach(([y, w], i) => { for (const b of lanes.get(`${y}|${w}`)!) b.y += i * gy })
-  }
+  spread('x', 'l', 'y', 'w', T.length)
+  spread('y', 'w', 'x', 'l', T.width)
   const maxX = placed.reduce((m, b) => Math.max(m, b.x + b.l), 0)
   return { ...plan, placed, lengthUsedPct: T.length > 0 ? Math.round((maxX / T.length) * 100) : 0 }
 }
@@ -247,7 +256,8 @@ export function computeTrip(input: TripInput): TripResult {
     const srcByKey = new Map(toPal.map(g => [g.key, g]))
     const palGroups: G[] = res.groups.map(pg => {
       // ruột từ lõi (lớp thùng thật, dưới lên) — khoá dòng hàng ⇒ mã hàng
-      const ls: PalletLayer[] | undefined = pg.contents?.map(c => ({ itemId: srcByKey.get(c.key)?.meta.itemId ?? c.key, l: c.l, w: c.w, h: c.h, n: c.n }))
+      const ls: PalletLayer[] | undefined = pg.contents?.map(c => ({ itemId: srcByKey.get(c.key)?.meta.itemId ?? c.key, l: c.l, w: c.w, h: c.h, n: c.n, per: c.per }))
+      const packed = ls ? packPallet(spec.l, spec.w, ls) : null
       const ids = [...new Set((ls ?? []).map(x => x.itemId))]
       // pallet chẵn `|full` / pallet lẻ riêng `|plt` của 1 mã; khối gộp mà ruột chỉ 1 mã cũng mang tên + màu mã đó
       const src = srcByKey.get(pg.key.replace(/\|(full|plt)$/, '')) ?? (ids.length === 1 ? toPal.find(g => g.doKey === pg.doKey && g.meta.itemId === ids[0]) : undefined)
@@ -263,7 +273,7 @@ export function computeTrip(input: TripInput): TripResult {
             : `${src.label} (pallet lẻ)`,   // khối của bể gộp mà ruột chỉ một mã
           orderName: pg.doLabel, itemId: src?.meta.itemId ?? null, isPallet: true,
           colorKey: src?.meta.itemId ?? `mix|${pg.doKey}`,
-          ...(ls ? { layers: ls, cartons: packPallet(spec.l, spec.w, ls) } : {}),
+          ...(ls && packed ? { layers: ls, cartons: packed.cartons, deck: packed.deck } : {}),
           ...(mixed ? { holds: mix ? mix.map(x => x.itemId) : toPal.filter(g => g.doKey === pg.doKey).map(g => g.meta.itemId!), mix } : {}),
         },
       }

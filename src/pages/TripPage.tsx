@@ -2,7 +2,7 @@
 // (một chạm đổi xá/pallet, chạm để chỉnh thùng xe), khung tên gọn ở góc trên trái (chạm để xem chi tiết).
 // Cột trái: hàng trên xe theo từng đơn + bảng đếm chân. Thanh trên: chọn / xoá chuyến cạnh nút "+".
 // Sửa mã hàng / xe MẪU CHUNG ⇒ tự thành bản "của tôi" rồi gắn vào chuyến, mẫu giữ nguyên.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   AlertTriangle, ArrowDown, ArrowUp, Camera, Check, ChevronDown, ClipboardCopy, ClipboardList, CloudOff, Crosshair, ExternalLink, Eye, EyeOff,
   FileSpreadsheet, Layers, Loader2, LogOut, MapPin, Menu, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Rotate3d, Ruler,
@@ -343,7 +343,7 @@ export default function TripPage({ id }: { id: string }) {
                       return (
                         <div key={key} className={cx('border-t border-slate-100', isSel ? 'bg-brand-50 shadow-[inset_3px_0_0_#1a66ff]' : isOpen && 'bg-brand-50/50')}>
                           {/* tên hàng chiếm trọn dòng trên (xuống dòng được, không cắt chữ) — bấm để chỉ mã trên xe;
-                              bút chì = sửa mã. Dòng dưới: quy cách + số thùng */}
+                              nút "Sửa" = mở thông tin mã. Dòng dưới: quy cách xếp (thùng/pallet · lớp · kg) + số thùng */}
                           <div className="py-1.5 pl-3 pr-1">
                             <div className="flex items-center gap-1">
                               <button type="button" onClick={() => pick(o.id, l.itemId)} aria-pressed={isSel} title="Xem mã này nằm đâu trên xe"
@@ -351,13 +351,15 @@ export default function TripPage({ id }: { id: string }) {
                                 <BoxGlyph w={it.w} h={it.h} light={it.light} color={itemColor(it.id)} />
                                 <span className="min-w-0 flex-1 break-words text-sm font-semibold leading-snug text-slate-900">{it.name}</span>
                               </button>
-                              <IconButton label={`Sửa ${it.name}`} aria-expanded={isOpen} onClick={() => setEditing(isOpen ? null : key)}
-                                className={cx('shrink-0', isOpen ? 'text-brand-700' : 'text-slate-500')}><Pencil size={15} /></IconButton>
+                              <button type="button" aria-label={`Sửa ${it.name}`} aria-expanded={isOpen} onClick={() => setEditing(isOpen ? null : key)}
+                                className={cx('tap inline-flex shrink-0 items-center gap-1 rounded-md px-2 text-[13px] font-semibold hover:bg-slate-100',
+                                  isOpen ? 'text-brand-700' : 'text-slate-600')}>
+                                <Pencil size={14} />{isOpen ? 'Xong' : 'Sửa'}
+                              </button>
                             </div>
                             <div className="flex items-center gap-2 pl-[42px]">
                               <span className="num min-w-0 flex-1 text-[12px] leading-snug text-slate-600">
-                                <span className="whitespace-nowrap">{fmtDims(it.l, it.w, it.h)} mm</span>
-                                {it.kg != null && <> · <span className="whitespace-nowrap">{fmtDec(it.kg, 2)} kg</span></>}
+                                {specParts(it).map((s, i, a) => <Fragment key={i}><span className="whitespace-nowrap">{s}{i < a.length - 1 && ' ·'}</span>{' '}</Fragment>)}
                                 {it.light && <Badge tone="amber" className="ml-1">nhẹ</Badge>}
                               </span>
                               <div className="flex shrink-0 items-center">
@@ -370,7 +372,7 @@ export default function TripPage({ id }: { id: string }) {
                               </div>
                             </div>
                           </div>
-                          {isOpen && <ItemEditor it={it} palletMode={kind === 'pallet'} onEdit={p => editItem(it, p)} onRemove={() => { toggleLine(o, l.itemId); setEditing(null) }} />}
+                          {isOpen && <ItemEditor it={it} onEdit={p => editItem(it, p)} onRemove={() => { toggleLine(o, l.itemId); setEditing(null) }} />}
                         </div>
                       )
                     })}
@@ -1025,7 +1027,15 @@ function Block({ title, summary, open, onToggle, children }: { title: string; su
 }
 
 // ── Sửa nhanh một mã hàng ngay trong dòng ───────────────────────────────────
-function ItemEditor({ it, palletMode, onEdit, onRemove }: { it: Item; palletMode: boolean; onEdit: (p: Partial<Item>) => void; onRemove: () => void }) {
+// Quy cách trên dòng hàng (user 28/10: "thay vì 420 × 255 × 130 mm thì để 110 thùng – 11 lớp – 10,05 kg"):
+// số thủ kho đối chiếu khi xếp; cỡ thùng xem ở phần Sửa. Chưa khai thùng/pallet lẫn số lớp thì mới hiện cỡ thùng.
+function specParts(it: Item): string[] {
+  const pack = [it.perPallet ? `${fmtInt(it.perPallet)} thùng/pallet` : null, it.maxLayers ? `${fmtInt(it.maxLayers)} lớp` : null]
+    .filter((s): s is string => !!s)
+  return [...(pack.length ? pack : [`${fmtDims(it.l, it.w, it.h)} mm`]), ...(it.kg != null ? [`${fmtDec(it.kg, 2)} kg`] : [])]
+}
+
+function ItemEditor({ it, onEdit, onRemove }: { it: Item; onEdit: (p: Partial<Item>) => void; onRemove: () => void }) {
   const [name, setName] = useState(it.name)
   useEffect(() => setName(it.name), [it.name])
   return (
@@ -1042,9 +1052,7 @@ function ItemEditor({ it, palletMode, onEdit, onRemove }: { it: Item; palletMode
       <div className="grid grid-cols-3 gap-2">
         <LiveNum label="Nặng / thùng" value={it.kg} valid={n => n >= 0} suffix="kg" onCommit={v => onEdit({ kg: v })} />
         <LiveNum label="Chồng tối đa" value={it.maxLayers} valid={n => n >= 1 && Number.isInteger(n)} suffix="lớp" onCommit={v => onEdit({ maxLayers: v })} />
-        {palletMode
-          ? <LiveNum label="Thùng/pallet" value={it.perPallet} valid={n => n >= 1 && Number.isInteger(n)} onCommit={v => onEdit({ perPallet: v })} />
-          : <span />}
+        <LiveNum label="Thùng/pallet" value={it.perPallet} valid={n => n >= 1 && Number.isInteger(n)} onCommit={v => onEdit({ perPallet: v })} />
       </div>
       <Switch checked={it.light} onChange={v => onEdit({ light: v })} label="Hàng nhẹ, cho lên trên hàng khác" />
       <div className="flex items-center justify-between gap-2">

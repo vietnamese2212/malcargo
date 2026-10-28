@@ -76,8 +76,10 @@ for (const [name, truck, orders] of cases) {
   ok(r.plan.placedCount === r.plan.totalCount, `hàng nhẹ thùng to: chỉ xếp ${r.plan.placedCount}/${r.plan.totalCount}`)
 }
 // Xe pallet (user 28/10): mọi hàng NẰM GỌN trên pallet của nó (không thùng rời vắt qua pallet), có KHE giữa
-// các pallet; đủ quy cách ⇒ pallet chẵn; phần lẻ mặc định DỒN pallet gộp ≤ 1,65m, hàng NHẸ TRÊN CÙNG, liền khối;
-// chuyến bật "Hàng nhẹ: pallet riêng" ⇒ phần lẻ hàng nhẹ đứng pallet riêng. Ca = chuyến 271026-1936-01.
+// các pallet; pallet chẵn = quy cách ÷ số lớp thùng/lớp, KHÔNG quá số lớp khai ("110 thùng – 11 lớp ⇒ 1 lớp
+// 10 thùng"; ảnh: Sữa 180 thành 13 lớp vượt quy định); phần lẻ MỖI MÃ nằm nguyên MỘT pallet ("100 thùng,
+// quy cách 110 mà không lên 1 pallet?"), dồn pallet gộp ≤ 1,65m, hàng NHẸ TRÊN CÙNG; chuyến bật "Hàng nhẹ:
+// pallet riêng" ⇒ phần lẻ hàng nhẹ đứng pallet riêng.
 {
   const tui = items['adm-i-tui110']
   const P = E.DEFAULT_PALLET_SETTINGS
@@ -88,9 +90,18 @@ for (const [name, truck, orders] of cases) {
   const palletChecks = (name, r) => {
     invariants(name, r)
     ok(r.fits && r.count.every(c => c.unit === 'pallet'), `${name}: phải toàn pallet và vừa xe, được ${JSON.stringify(r.count.map(c => [c.label, c.unit, c.placed]))}`)
+    const remOn = new Map()   // mã → số pallet KHÔNG chẵn đang chứa nó
     for (const [gi, m] of r.meta.entries()) {
-      const cs = m.cartons ?? []
-      ok(cs.every(c => c.x >= -0.5 && c.y >= -0.5 && c.x + c.l <= P.l + 0.5 && c.y + c.w <= P.w + 0.5), `${name}: ${m.label} có thùng chờm ra ngoài chân pallet`)
+      const g = r.plan.groups[gi], cs = m.cartons ?? [], d = m.deck
+      // thùng trong khối; khối = chân + phần chờm, chờm mỗi bên ≤ 60mm
+      ok(d && cs.every(c => c.x >= -0.5 && c.y >= -0.5 && c.x + c.l <= g.l + 0.5 && c.y + c.w <= g.w + 0.5)
+        && Math.max(d.x, d.y, g.l - d.x - d.l, g.w - d.y - d.w) <= 60, `${name}: ${m.label} có thùng ra ngoài khối pallet / chờm quá 60mm`)
+      const it = m.itemId ? items[m.itemId] : null
+      if (it && cs.length === it.perPallet) {
+        const per = Math.ceil(it.perPallet / it.maxLayers), top = Math.max(...cs.map(c => c.z + c.h))
+        ok(top <= it.maxLayers * it.h + 0.5 && cs.filter(c => c.z < 1).length === per,
+          `${name}: ${m.label} pallet chẵn phải ${per} thùng/lớp, ≤ ${it.maxLayers} lớp — được ${cs.filter(c => c.z < 1).length}/lớp, cao ${top}`)
+      } else for (const id of new Set(cs.map(c => c.itemId))) remOn.set(`${m.orderName}|${id}`, (remOn.get(`${m.orderName}|${id}`) ?? 0) + 1)
       let lap = 0, heavyOnLight = 0
       for (let i = 0; i < cs.length; i++) for (let j = 0; j < cs.length; j++) {
         if (i === j) continue
@@ -103,14 +114,20 @@ for (const [name, truck, orders] of cases) {
       ok(!heavyOnLight, `${name}: ${m.label} có ${heavyOnLight} thùng hàng thường nằm TRÊN hàng nhẹ`)
       if (m.mix) ok(r.plan.groups[gi].h <= P.maxH + 0.5, `${name}: ${m.label} cao ${r.plan.groups[gi].h} > ${P.maxH}`)
     }
+    for (const [k, n] of remOn) ok(n === 1, `${name}: phần lẻ ${k} vắt qua ${n} pallet`)
     const ps = r.plan.placed
     ok(ps.some(a => ps.some(b => b !== a && b.x >= a.x + a.l + 1 && Math.abs(b.y - a.y) < 1)), `${name}: các pallet trong làn phải có khe`)
   }
+  const show = r => r.count.map(c => `${c.label}${c.mix ? ' [' + c.mix.map(x => x.n + ' ' + x.label).join(' + ') + ']' : ''}`).join(' · ')
+  // Ca ảnh chủ dự án 28/10: chuyến mẫu, xe 5 tấn đổi sang chở pallet
+  const s = E.computeTrip({ truck: { ...trucks['adm-v-5t'], kind: 'pallet' }, orders: sample, pallet: P })
+  palletChecks('pallet · chuyến mẫu xe 5 tấn', s)
+  ok(s.meta.some(m => m.mix?.some(x => x.itemId === tui.id)), 'pallet · chuyến mẫu: thạch túi phải dồn lên pallet gộp phần lẻ')
+  console.log(`• Pallet · chuyến mẫu xe 5 tấn — ${show(s)}`)
   const a = E.computeTrip({ truck: trucks['adm-v-p8t'], orders: os, pallet: P })
   palletChecks('pallet · phần lẻ dồn', a)
   ok(a.count.some(c => a.meta[c.group].itemId === items['adm-i-c100'].id && a.meta[c.group].cartons?.length === 143), 'pallet · phần lẻ dồn: Sữa chua chai phải có 1 pallet chẵn 143 thùng')
-  ok(a.meta.some(m => m.mix?.some(x => x.itemId === tui.id) && m.mix.some(x => x.itemId === items['adm-i-c100'].id)), 'pallet · phần lẻ dồn: thạch túi phải dồn chung pallet gộp với phần lẻ Sữa chua chai')
-  console.log(`• Pallet · phần lẻ dồn (xe pallet 8 tấn) — ${a.count.map(c => `${c.label}${c.mix ? ' [' + c.mix.map(x => x.n + ' ' + x.label).join(' + ') + ']' : ''}`).join(' · ')}`)
+  console.log(`• Pallet · phần lẻ dồn (xe pallet 8 tấn) — ${show(a)}`)
   const b = E.computeTrip({ truck: trucks['adm-v-p8t'], orders: os, pallet: P, lightOwnPallet: true })
   palletChecks('pallet · nhẹ pallet riêng', b)
   ok(b.meta.filter(m => m.cartons?.some(c => c.itemId === tui.id)).every(m => m.cartons.every(c => c.itemId === tui.id)), 'pallet · nhẹ pallet riêng: pallet chứa thạch túi chỉ có thạch túi')
