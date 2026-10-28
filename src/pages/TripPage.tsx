@@ -19,12 +19,13 @@ import Scene from '../three/LazyScene'
 import type { ViewPreset } from '../three/TruckScene'
 import { groupColor, itemColors, tint } from '../three/colors'
 import {
-  Badge, BoxGlyph, Button, Confirm, Empty, IconButton, LiveNum, MenuItem, Popover, SearchInput, SectionBand, Segmented, Sheet, Switch,
-  TextInput, cx, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3,
+  Badge, BoxGlyph, Button, Confirm, Empty, IconButton, LiveNum, MenuItem, Popover, SearchInput, SectionBand, Segmented, Sheet,
+  cx, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3,
 } from '../ui/kit'
 import { Logo, PageHeader, Panel } from '../ui/Shell'
 import { TruckGlyph } from './VehiclesPage'
 import { VehicleSheet } from '../ui/VehicleSheet'
+import { ItemSheet } from '../ui/ItemSheet'
 import { ItemPicker } from '../ui/ItemPicker'
 import { ImportSheet } from '../ui/ImportSheet'
 import { go, replaceRoute } from '../ui/route'
@@ -41,7 +42,6 @@ const MENU: { p: PanelName; label: string; icon: typeof Package }[] = [
 ]
 // Lòng thùng hợp lệ (mm) — khớp form Thêm xe
 const OK_L = (n: number) => n >= 500 && n <= 20000, OK_W = (n: number) => n >= 500 && n <= 3500, OK_H = (n: number) => n >= 500 && n <= 4500
-const OK_BOX = (n: number) => n >= 20 && n <= 3000
 const m = (mm: number) => fmtDec(mm / 1000, 1)
 
 export default function TripPage({ id }: { id: string }) {
@@ -52,7 +52,6 @@ export default function TripPage({ id }: { id: string }) {
   const upsertTrip = useData(s => s.upsertTrip)
   const removeTrip = useData(s => s.removeTrip)
   const upsertVehicle = useData(s => s.upsertVehicle)
-  const upsertItem = useData(s => s.upsertItem)
   const upsertOrder = useData(s => s.upsertOrder)
   const items = useAllItems()
   const vehicles = useAllVehicles()
@@ -170,17 +169,13 @@ export default function TripPage({ id }: { id: string }) {
   const pickVehicle = (vid: string) => upsertTrip({ ...trip, vehicleId: vid })
   const vehicleSharedWith = vehicle ? trips.filter(t => t.id !== trip.id && t.vehicleId === vehicle.id).length : 0
 
-  // ── sửa MÃ HÀNG ngay tại chỗ (mẫu chung ⇒ sao về, thay vào các đơn của chuyến này) ──
-  const editItem = (it: Item, patch: Partial<Item>) => {
-    if (it.owner === 'admin') {
-      const mine: Item = { ...it, ...patch, id: newId(), owner: 'me', code: it.code.replace(/^MAU-/, '') }
-      upsertItem(mine)
-      rawOrders.filter(o => o.lines.some(l => l.itemId === it.id))
-        .forEach(o => upsertOrder({ ...o, lines: o.lines.map(l => (l.itemId === it.id ? { ...l, itemId: mine.id } : l)) }))
-      setEditing(e => (e?.endsWith(`:${it.id}`) ? e.replace(it.id, mine.id) : e))
-      setSel(s => (s?.itemId === it.id ? { ...s, itemId: mine.id } : s))
-      setToast('Đã tạo mã của bạn từ mã mẫu')
-    } else upsertItem({ ...it, ...patch })
+  // ── sửa MÃ HÀNG từ dòng hàng (popup `ItemSheet`): mã mẫu lưu thành mã của tôi (id mới) ⇒ thay vào các đơn của chuyến này ──
+  const adoptItem = (from: Item, saved: Item) => {
+    if (saved.id === from.id) return
+    rawOrders.filter(o => o.lines.some(l => l.itemId === from.id))
+      .forEach(o => upsertOrder({ ...o, lines: o.lines.map(l => (l.itemId === from.id ? { ...l, itemId: saved.id } : l)) }))
+    setSel(s => (s?.itemId === from.id ? { ...s, itemId: saved.id } : s))
+    setToast('Đã tạo mã của bạn từ mã mẫu')
   }
   const setQty = (o: Order, itemId: string, qty: number) =>
     upsertOrder({ ...o, lines: o.lines.map(l => (l.itemId === itemId ? { ...l, qty: Math.max(0, Math.round(qty)) } : l)) })
@@ -204,6 +199,13 @@ export default function TripPage({ id }: { id: string }) {
   const itemColor = (itemId: string) => (colors.has(itemId) ? tint(colors.get(itemId)!) : undefined)
   const all = orderTotals(tripOrders.flatMap(o => o.lines), pallet)
   const byId = new Map(items.map(i => [i.id, i]))
+  // dòng hàng đang mở popup sửa mã (`editing` = "đơn:mã")
+  const editLine = (() => {
+    if (!editing) return null
+    const i = editing.indexOf(':')
+    const o = rawOrders.find(x => x.id === editing.slice(0, i)), it = byId.get(editing.slice(i + 1))
+    return o && it ? { o, it } : null
+  })()
   const notes = [...(r?.errors ?? []), ...(r?.warnings ?? [])]
   // nhãn trên 3D cho đơn / mã đang chọn: tên · nằm ở khối nào · đoạn nào của thùng (tính từ đầu thùng, phía cabin)
   const selName = sel && (sel.itemId ? byId.get(sel.itemId)?.name : rawOrders.find(o => o.id === sel.orderId)?.name)
@@ -338,12 +340,11 @@ export default function TripPage({ id }: { id: string }) {
                           <IconButton label="Bỏ dòng" onClick={() => toggleLine(o, l.itemId)}><X size={16} /></IconButton>
                         </div>
                       )
-                      const isOpen = editing === key
                       const isSel = sel?.orderId === o.id && sel.itemId === l.itemId
                       return (
-                        <div key={key} className={cx('border-t border-slate-100', isSel ? 'bg-brand-50 shadow-[inset_3px_0_0_#1a66ff]' : isOpen && 'bg-brand-50/50')}>
+                        <div key={key} className={cx('border-t border-slate-100', isSel && 'bg-brand-50 shadow-[inset_3px_0_0_#1a66ff]')}>
                           {/* tên hàng chiếm trọn dòng trên (xuống dòng được, không cắt chữ) — bấm để chỉ mã trên xe;
-                              nút "Sửa" = mở thông tin mã. Dòng dưới: quy cách xếp (thùng/pallet · lớp · kg) + số thùng */}
+                              nút "Sửa" = popup thông tin mã. Dòng dưới: quy cách xếp (thùng/pallet · lớp · kg) + số thùng */}
                           <div className="py-1.5 pl-3 pr-1">
                             <div className="flex items-center gap-1">
                               <button type="button" onClick={() => pick(o.id, l.itemId)} aria-pressed={isSel} title="Xem mã này nằm đâu trên xe"
@@ -351,10 +352,9 @@ export default function TripPage({ id }: { id: string }) {
                                 <BoxGlyph w={it.w} h={it.h} light={it.light} color={itemColor(it.id)} />
                                 <span className="min-w-0 flex-1 break-words text-sm font-semibold leading-snug text-slate-900">{it.name}</span>
                               </button>
-                              <button type="button" aria-label={`Sửa ${it.name}`} aria-expanded={isOpen} onClick={() => setEditing(isOpen ? null : key)}
-                                className={cx('tap inline-flex shrink-0 items-center gap-1 rounded-md px-2 text-[13px] font-semibold hover:bg-slate-100',
-                                  isOpen ? 'text-brand-700' : 'text-slate-600')}>
-                                <Pencil size={14} />{isOpen ? 'Xong' : 'Sửa'}
+                              <button type="button" aria-label={`Sửa ${it.name}`} aria-haspopup="dialog" onClick={() => setEditing(key)}
+                                className="tap inline-flex shrink-0 items-center gap-1 rounded-md px-2 text-[13px] font-semibold text-slate-600 hover:bg-slate-100">
+                                <Pencil size={14} />Sửa
                               </button>
                             </div>
                             <div className="flex items-center gap-2 pl-[42px]">
@@ -372,7 +372,6 @@ export default function TripPage({ id }: { id: string }) {
                               </div>
                             </div>
                           </div>
-                          {isOpen && <ItemEditor it={it} onEdit={p => editItem(it, p)} onRemove={() => { toggleLine(o, l.itemId); setEditing(null) }} />}
                         </div>
                       )
                     })}
@@ -402,6 +401,10 @@ export default function TripPage({ id }: { id: string }) {
 
       <VehicleSheet open={!!editVehicle} vehicle={editVehicle?.v ?? null} onClose={() => setEditVehicle(null)}
         onSaved={nv => { if (!editVehicle?.v || editVehicle.v.id === trip.vehicleId) pickVehicle(nv.id) }} />
+      {/* sửa mã từ dòng hàng — popup (user 28/10: "để trong hàng nhìn hơi rối") */}
+      <ItemSheet open={!!editLine} item={editLine?.it ?? null} onClose={() => setEditing(null)}
+        onSaved={saved => { if (editLine) adoptItem(editLine.it, saved) }}
+        onUnlink={() => { if (editLine) toggleLine(editLine.o, editLine.it.id) }} />
       <OrderPicker open={pickOrders} onClose={() => setPickOrders(false)} inTrip={trip.orderIds}
         onAdd={ids => upsertTrip({ ...trip, orderIds: [...trip.orderIds, ...ids] })}
         onNew={() => { setPickOrders(false); setPickFor(newOrderInTrip()) }} />
@@ -1033,34 +1036,6 @@ function specParts(it: Item): string[] {
   const pack = [it.perPallet ? `${fmtInt(it.perPallet)} thùng/pallet` : null, it.maxLayers ? `${fmtInt(it.maxLayers)} lớp` : null]
     .filter((s): s is string => !!s)
   return [...(pack.length ? pack : [`${fmtDims(it.l, it.w, it.h)} mm`]), ...(it.kg != null ? [`${fmtDec(it.kg, 2)} kg`] : [])]
-}
-
-function ItemEditor({ it, onEdit, onRemove }: { it: Item; onEdit: (p: Partial<Item>) => void; onRemove: () => void }) {
-  const [name, setName] = useState(it.name)
-  useEffect(() => setName(it.name), [it.name])
-  return (
-    <div className="space-y-2.5 border-t border-brand-100 px-4 pb-3 pt-2.5">
-      <label className="block">
-        <span className="mb-1 block text-[12px] font-medium text-slate-600">Tên hàng</span>
-        <TextInput value={name} onChange={e => setName(e.target.value)} onBlur={() => name.trim() && name !== it.name && onEdit({ name: name.trim() })} />
-      </label>
-      <div className="grid grid-cols-3 gap-2">
-        <LiveNum label="Dài thùng" value={it.l} valid={OK_BOX} suffix="mm" onCommit={v => v && onEdit({ l: v })} />
-        <LiveNum label="Rộng" value={it.w} valid={OK_BOX} suffix="mm" onCommit={v => v && onEdit({ w: v })} />
-        <LiveNum label="Cao" value={it.h} valid={OK_BOX} suffix="mm" onCommit={v => v && onEdit({ h: v })} />
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        <LiveNum label="Nặng / thùng" value={it.kg} valid={n => n >= 0} suffix="kg" onCommit={v => onEdit({ kg: v })} />
-        <LiveNum label="Chồng tối đa" value={it.maxLayers} valid={n => n >= 1 && Number.isInteger(n)} suffix="lớp" onCommit={v => onEdit({ maxLayers: v })} />
-        <LiveNum label="Thùng/pallet" value={it.perPallet} valid={n => n >= 1 && Number.isInteger(n)} onCommit={v => onEdit({ perPallet: v })} />
-      </div>
-      <Switch checked={it.light} onChange={v => onEdit({ light: v })} label="Hàng nhẹ, cho lên trên hàng khác" />
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[12px] text-slate-600">{it.owner === 'admin' ? 'Mã mẫu: sửa số nào app tự tạo mã của bạn.' : `Mã ${it.code}: sửa ở đây là sửa cho mọi đơn dùng mã này.`}</span>
-        <Button variant="danger" onClick={onRemove}><X size={15} />Bỏ khỏi đơn</Button>
-      </div>
-    </div>
-  )
 }
 
 // ── Bảng đếm chân — cái thủ kho cầm khi xếp, bên nhận dùng đối chiếu ────────────

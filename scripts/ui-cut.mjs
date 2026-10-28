@@ -46,7 +46,7 @@ for (const dev of DEVS) {
   await p.goto(srv.base + '#/trip/sample-t1', { waitUntil: 'networkidle' }); await p.waitForTimeout(3500)
   await scan(p, dev.name, 'Bàn xếp xe')
   await p.getByRole('button', { name: /^Kết quả:/ }).click(); await p.waitForTimeout(200); await scan(p, dev.name, 'Khung tên mở'); await p.getByRole('button', { name: /^Kết quả:/ }).click()
-  await p.getByRole('button', { name: 'Sửa Sữa 180ml x48' }).first().click().catch(() => {}); await p.waitForTimeout(200); await scan(p, dev.name, 'Sửa mã trong dòng'); await p.getByRole('button', { name: 'Sửa Sữa 180ml x48' }).first().click().catch(() => {})
+  await p.getByRole('button', { name: 'Sửa Sữa 180ml x48' }).first().click().catch(() => {}); await p.waitForTimeout(200); await scan(p, dev.name, 'Popup sửa mã từ dòng hàng'); await p.keyboard.press('Escape'); await p.waitForTimeout(150)
   // bấm dòng hàng = chỉ mã đó trên xe (nhãn "đang chỉ" ở đáy bản vẽ); bấm lại để bỏ chọn
   await p.getByRole('button', { name: 'Sữa 180ml x48', exact: true }).first().click().catch(() => {}); await p.waitForTimeout(300); await scan(p, dev.name, 'Chọn mã trên xe'); await p.getByRole('button', { name: 'Sữa 180ml x48', exact: true }).first().click().catch(() => {})
   await p.getByRole('button', { name: /Bảng đếm chân/ }).click(); await p.waitForTimeout(300); await scan(p, dev.name, 'Bảng đếm chân')

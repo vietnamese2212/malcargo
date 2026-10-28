@@ -1,6 +1,6 @@
 // Form mã hàng — 4 ô bắt buộc (mã, tên, kích thước thùng), phần còn lại có mặc định.
 import { useEffect, useState } from 'react'
-import { Copy, Trash2 } from 'lucide-react'
+import { Copy, Trash2, X } from 'lucide-react'
 import type { Item } from '../data/types'
 import { newId, useData } from '../data/store'
 import { removeCatalog, saveCatalog, useAuth } from '../data/cloud'
@@ -8,9 +8,10 @@ import { Badge, Button, Confirm, Field, NumInput, Sheet, Switch, TextInput, fmtD
 
 const blank = (owner: Item['owner'] = 'me'): Item => ({ id: newId(), owner, code: '', name: '', l: 0, w: 0, h: 0, kg: null, perPallet: null, maxLayers: null, light: false, updatedAt: 0 })
 
-/** `asSample`: admin thêm một mã MẪU CHUNG mới. */
-export function ItemSheet({ item, open, onClose, onSaved, asSample }: {
-  item: Item | null; open: boolean; onClose: () => void; onSaved?: (it: Item) => void; asSample?: boolean
+/** `asSample`: admin thêm một mã MẪU CHUNG mới. `onUnlink`: mở từ một dòng hàng của đơn — có nút "Bỏ khỏi đơn"
+ *  thay cho nút xoá mã khỏi danh mục (ở màn chuyến, xoá hẳn mã là quá tay). */
+export function ItemSheet({ item, open, onClose, onSaved, asSample, onUnlink }: {
+  item: Item | null; open: boolean; onClose: () => void; onSaved?: (it: Item) => void; asSample?: boolean; onUnlink?: () => void
 }) {
   const upsert = useData(s => s.upsertItem)
   const remove = useData(s => s.removeItem)
@@ -65,7 +66,7 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample }: {
       footer={<>
         {err && <p className="mb-2 text-[13px] text-red-700">{err}</p>}
         <div className="flex gap-2">
-          {item && (!sample || adminEdit) && <Button variant="danger" onClick={() => setAskDel(true)} aria-label={sample ? 'Xoá mã mẫu' : 'Xoá mã'}><Trash2 size={17} /></Button>}
+          {item && !onUnlink && (!sample || adminEdit) && <Button variant="danger" onClick={() => setAskDel(true)} aria-label={sample ? 'Xoá mã mẫu' : 'Xoá mã'}><Trash2 size={17} /></Button>}
           {adminEdit ? <>
             {item && <Button className="flex-1" onClick={save}><Copy size={16} />Lưu thành của tôi</Button>}
             <Button variant="primary" className="flex-1" disabled={busy} onClick={saveShared}>{busy ? 'Đang lưu…' : 'Lưu mẫu chung'}</Button>
@@ -95,6 +96,12 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample }: {
         <Field label="Số thùng trên 1 pallet" hint="Chỉ cần khi chở bằng xe pallet"><NumInput value={f.perPallet} onChange={v => set('perPallet', v == null ? null : Math.round(v))} suffix="thùng" placeholder="—" /></Field>
         <Switch checked={f.light} onChange={v => set('light', v)} label="Hàng nhẹ — cho lên trên hàng khác" hint="Túi, hộp giấy nhẹ… được xếp lên mặt các khối hàng nặng" />
         {sample && item && <p className="text-xs text-slate-600">Mẫu gốc: thùng {fmtDims(item?.l ?? 0, item?.w ?? 0, item?.h ?? 0)} mm, số tham khảo, nên đo lại thùng thật.</p>}
+        {onUnlink && (
+          <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
+            <span className="text-[13px] text-slate-600">{sample ? 'Sửa số rồi Lưu: app tạo mã của bạn, thay vào đơn của chuyến này.' : 'Sửa ở đây là sửa cho mọi đơn dùng mã này.'}</span>
+            <Button variant="danger" className="shrink-0" onClick={() => { onUnlink(); onClose() }}><X size={16} />Bỏ khỏi đơn</Button>
+          </div>
+        )}
       </fieldset>
       <Confirm open={askDel} onClose={() => setAskDel(false)} title={`Xoá ${sample ? 'mã mẫu' : 'mã'} ${f.code}?`}
         body={sample ? 'Mã mẫu biến mất khỏi danh sách của MỌI người dùng; đơn nào đang dùng sẽ báo thiếu mã.'
