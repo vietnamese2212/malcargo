@@ -124,6 +124,18 @@ for (const [name, truck, orders] of cases) {
   palletChecks('pallet · chuyến mẫu xe 5 tấn', s)
   ok(s.meta.some(m => m.mix?.some(x => x.itemId === tui.id)), 'pallet · chuyến mẫu: thạch túi phải dồn lên pallet gộp phần lẻ')
   console.log(`• Pallet · chuyến mẫu xe 5 tấn — ${show(s)}`)
+  // Ảnh chủ dự án 28/10: Sữa chua chai 144 = pallet chẵn 143 + 1 thùng thừa dồn lên pallet lẻ (Sữa chua 180) —
+  // thùng thừa phải nằm GỌN giữa mặt, không ra góc chờm mép theo mẫu 11 thùng/lớp (nhìn như gác lên pallet bên)
+  {
+    const os144 = sample.map(o => ({ ...o, lines: o.lines.map(l => (l.item.id === 'adm-i-c100' ? { ...l, qty: 144 } : l)) }))
+    const r = E.computeTrip({ truck: { ...trucks['adm-v-5t'], kind: 'pallet' }, orders: os144, pallet: P })
+    palletChecks('pallet · thùng thừa 144', r)
+    const gi = r.meta.findIndex(m => m.mix?.some(x => x.itemId === 'adm-i-c100' && x.n === 1))
+    const m = r.meta[gi], d = m?.deck, c = m?.cartons.find(x => x.itemId === 'adm-i-c100')
+    ok(c && d.x === 0 && d.y === 0 && c.x >= d.x && c.x + c.l <= d.x + d.l && c.y >= d.y && c.y + c.w <= d.y + d.w
+      && Math.abs(c.x + c.l / 2 - (d.x + d.l / 2)) < 60 && Math.abs(c.y + c.w / 2 - (d.y + d.w / 2)) < 60,
+      `pallet · thùng thừa 144: thùng thừa phải nằm giữa mặt pallet lẻ, gọn trong chân — được ${JSON.stringify({ c, d })}`)
+  }
   const a = E.computeTrip({ truck: trucks['adm-v-p8t'], orders: os, pallet: P })
   palletChecks('pallet · phần lẻ dồn', a)
   ok(a.count.some(c => a.meta[c.group].itemId === items['adm-i-c100'].id && a.meta[c.group].cartons?.length === 143), 'pallet · phần lẻ dồn: Sữa chua chai phải có 1 pallet chẵn 143 thùng')

@@ -2,7 +2,7 @@
 // của SUPPLYC: xe xá xếp thẳng thùng; xe pallet gom mọi hàng lên pallet trước rồi xếp các pallet.
 // File này THUẦN (không React) để chạy được trong Web Worker và trong bài kiểm.
 import {
-  computeLoadPlan, palletizeGroups, palletFitError, palletsTooTall, layerPattern,
+  computeLoadPlan, palletizeGroups, palletFitError, palletsTooTall, runPattern,
   palletFloorSlots, type LoadGroup, type LoadPlan, type PalletSpec, type PalletizeInput, type PlacedBox,
 } from './loadPlan'
 import type { Item, PalletSettings, VehicleKind } from '../data/types'
@@ -60,20 +60,22 @@ export interface TripResult {
   warnings: string[]
 }
 
-/** Thùng thật trên MẶT một pallet L×W, z tính từ mặt đế. Mỗi mã lần lượt theo ruột (nặng dưới, nhẹ trên);
- *  mỗi thùng vào vị trí của mẫu lớp ĐẦY của mã (`layerPattern` — đúng số thùng/lớp, căn giữa chân; chân không
- *  chứa nổi thì chờm mép) có mặt đỡ THẤP nhất (đặt trên điểm cao nhất của mặt đỡ; bằng nhau thì chỗ phẳng
- *  hơn trước) ⇒ chỗ trống của lớp thiếu được mã sau lấp nốt, cả mặt dâng đều — liền khối, không lỗ, không cột
- *  (user 28/10: "xếp liền khối trên pallet, không có khoảng hở"). Toạ độ theo góc KHỐI (chân + phần chờm —
- *  khớp `palletFoot` của lõi); `deck` = chỗ tấm gỗ trong khối. */
-function packPallet(L: number, W: number, layers: PalletLayer[]): { cartons: PalletCarton[]; deck: { x: number; y: number; l: number; w: number } } {
+/** Thùng thật trên MẶT pallet, z tính từ mặt đế. Mỗi mã lần lượt theo ruột (nặng dưới, nhẹ trên); mỗi thùng
+ *  vào vị trí mẫu của mã (`runPattern` — có lớp đầy: mẫu đúng số thùng/lớp, căn giữa chân, chân không chứa nổi
+ *  thì chờm mép; chưa đủ một lớp: mẫu gọn cho đúng số thùng đó) có mặt đỡ THẤP nhất (đặt trên điểm cao nhất của
+ *  mặt đỡ; bằng nhau thì chỗ phẳng hơn, rồi chỗ GẦN GIỮA chân hơn) ⇒ chỗ trống của lớp thiếu được mã sau lấp
+ *  nốt, cả mặt dâng đều — liền khối, không lỗ, không cột (user 28/10: "xếp liền khối trên pallet"); thùng lẻ
+ *  nằm giữa mặt, không ra góc ("thừa 1 thùng lại xếp lên nóc pallet nguyên?" — thùng ở góc sát pallet bên cạnh).
+ *  Toạ độ theo góc KHỐI (chân + phần chờm — khớp `palletFoot` của lõi); `deck` = chỗ tấm gỗ trong khối. */
+function packPallet(spec: PalletSpec, layers: PalletLayer[]): { cartons: PalletCarton[]; deck: { x: number; y: number; l: number; w: number } } {
+  const L = spec.l, W = spec.w
   const runs: PalletLayer[] = []
   for (const ly of layers) {
     const last = runs[runs.length - 1]
     if (last && last.itemId === ly.itemId && last.l === ly.l && last.w === ly.w && last.h === ly.h && last.per === ly.per) last.n += ly.n
     else runs.push({ ...ly })
   }
-  const pats = runs.map(run => layerPattern(L, W, run.l, run.w, run.per) ?? [])
+  const pats = runs.map(run => runPattern(spec, run) ?? [])
   let x0 = 0, y0 = 0, x1 = L, y1 = W
   for (const p of pats.flat()) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x + p.l); y1 = Math.max(y1, p.y + p.w) }
   const R = 10, nx = Math.ceil((x1 - x0) / R), ny = Math.ceil((y1 - y0) / R)
@@ -90,11 +92,14 @@ function packPallet(L: number, W: number, layers: PalletLayer[]): { cartons: Pal
       for (let i = s.i0; i < s.i1; i++) for (let j = s.j0; j < s.j1; j++) { const v = H[i * ny + j]; if (v < mn) mn = v; if (v > mx) mx = v }
       return { mn, mx }
     }
+    // khoảng cách tới tâm chân pallet — chỗ đặt ngang nhau thì gần giữa trước
+    const cx = L / 2 - x0, cy = W / 2 - y0
+    const far = spots.map(s => (s.x + s.l / 2 - cx) ** 2 + (s.y + s.w / 2 - cy) ** 2)
     for (let k = 0; k < run.n; k++) {
       let pick = 0, pz = Infinity, pd = Infinity
       spots.forEach((s, q) => {
         const { mn, mx } = span(s)
-        if (mx < pz - 1e-6 || (Math.abs(mx - pz) <= 1e-6 && mx - mn < pd)) { pz = mx; pd = mx - mn; pick = q }
+        if (mx < pz - 1e-6 || (Math.abs(mx - pz) <= 1e-6 && (mx - mn < pd - 1e-6 || (Math.abs(mx - mn - pd) <= 1e-6 && far[q] < far[pick])))) { pz = mx; pd = mx - mn; pick = q }
       })
       const s = spots[pick]
       out.push({ itemId: run.itemId, x: s.x, y: s.y, z: pz, l: s.l, w: s.w, h: run.h })
@@ -257,7 +262,7 @@ export function computeTrip(input: TripInput): TripResult {
     const palGroups: G[] = res.groups.map(pg => {
       // ruột từ lõi (lớp thùng thật, dưới lên) — khoá dòng hàng ⇒ mã hàng
       const ls: PalletLayer[] | undefined = pg.contents?.map(c => ({ itemId: srcByKey.get(c.key)?.meta.itemId ?? c.key, l: c.l, w: c.w, h: c.h, n: c.n, per: c.per }))
-      const packed = ls ? packPallet(spec.l, spec.w, ls) : null
+      const packed = ls ? packPallet(spec, ls) : null
       const ids = [...new Set((ls ?? []).map(x => x.itemId))]
       // pallet chẵn `|full` / pallet lẻ riêng `|plt` của 1 mã; khối gộp mà ruột chỉ 1 mã cũng mang tên + màu mã đó
       const src = srcByKey.get(pg.key.replace(/\|(full|plt)$/, '')) ?? (ids.length === 1 ? toPal.find(g => g.doKey === pg.doKey && g.meta.itemId === ids[0]) : undefined)
