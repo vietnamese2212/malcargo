@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, X } from 'lucide-react'
-import { IconButton, cx, useViewportBox } from './kit'
+import { IconButton, KeyboardShield, cx, useViewportBox } from './kit'
 import { t } from '../i18n'
 
 /** Chữ ký MAL (cùng kiểu logo mal.com.vn): "MAL" nghiêng đậm + nhãn sản phẩm CARGO nền xanh. */
@@ -38,7 +38,8 @@ export function Panel({ open, onClose, children }: { open: boolean; onClose: () 
   return createPortal(
     <div className="fixed inset-0 z-40 flex justify-end" style={box}>
       <div className="absolute inset-0 bg-navy-950/45" style={{ animation: 'fade .15s' }} onClick={onClose} />
-      <div role="dialog" aria-modal="true" className="relative h-full w-full overflow-y-auto overscroll-contain bg-canvas sm:max-w-4xl sm:border-l sm:border-slate-200"
+      <KeyboardShield className="bg-canvas" />
+      <div role="dialog" aria-modal="true" data-scroll className="relative h-full w-full overflow-y-auto overscroll-contain bg-canvas sm:max-w-4xl sm:border-l sm:border-slate-200"
         style={{ animation: 'sheet-left .2s ease-out' }}>
         <PanelCtx.Provider value={{ close: onClose }}>{children}</PanelCtx.Provider>
       </div>

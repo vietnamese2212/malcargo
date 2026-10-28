@@ -19,8 +19,8 @@ import Scene from '../three/LazyScene'
 import type { ViewPreset } from '../three/TruckScene'
 import { groupColor, itemColors, tint } from '../three/colors'
 import {
-  Badge, BoxGlyph, Button, Confirm, Empty, Field, IconButton, LiveNum, MenuItem, Popover, SearchInput, SectionBand, Segmented, Sheet,
-  TextInput, cx, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3,
+  Badge, BoxGlyph, Button, Confirm, Empty, Field, IconButton, KeyboardShield, LiveNum, MenuItem, Popover, SearchInput, SectionBand, Segmented, Sheet,
+  TextInput, cx, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3, useViewportBox, useVisualView,
 } from '../ui/kit'
 import { Logo, PageHeader, Panel } from '../ui/Shell'
 import { TruckGlyph } from './VehiclesPage'
@@ -100,6 +100,9 @@ export default function TripPage({ id }: { id: string }) {
   const [delTrip, setDelTrip] = useState<Trip | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3200); return () => clearTimeout(t) }, [toast])
+  // điện thoại gõ số thùng: bàn phím chiếm nửa dưới, khung 3D dính nửa trên ⇒ ô đang gõ bị kẹt giữa, khuất.
+  // Bàn phím mở thì khung 3D thôi dính, trôi theo trang — ô đang gõ luôn thấy được.
+  const { kb } = useVisualView()
 
   // Sửa chuyến mẫu ⇒ kho đã tách thành chuyến mới: chuyển sang chuyến đó tại chỗ (màn giữ nguyên, ô đang mở
   // trỏ sang đơn bản sao), rồi báo mã chuyến mới. Chuyến mẫu không đổi.
@@ -261,7 +264,7 @@ export default function TripPage({ id }: { id: string }) {
 
       <div className="lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(380px,440px)_1fr]">
         {/* ── BẢN VẼ: dải thông số xe + 3D + khung tên ── */}
-        <section data-scene className="sticky top-12 z-10 flex h-[50vh] min-h-[320px] flex-col bg-[#e7ecf2] sm:top-14 lg:relative lg:top-0 lg:order-2 lg:h-full">
+        <section data-scene className={cx('sticky top-12 z-10 flex h-[50vh] min-h-[320px] flex-col bg-[#e7ecf2] sm:top-14 lg:relative lg:top-0 lg:order-2 lg:h-full', kb && 'max-lg:relative max-lg:top-0')}>
           <SpecStrip vehicle={vehicle} pallet={pallet} onOpen={more => setSpec({ more })} onKind={k => patchVehicle({ kind: k })}
             lightOwn={tripOrders.some(o => o.lines.some(l => l.qty > 0 && l.item.light)) ? !!trip.lightOwnPallet : null}
             onLightOwn={v => upsertTrip({ ...trip, lightOwnPallet: v })} />
@@ -482,7 +485,8 @@ function TripSwitcher({ trip, trips, onRename, onDelete, onAll, onNew }: {
               <input autoFocus defaultValue={trip.name} aria-label={t('Tên chuyến')}
                 onBlur={e => { e.target.value.trim() && onRename(e.target.value.trim()); setRenaming(false) }}
                 onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setRenaming(false) }}
-                className="tap min-w-0 flex-1 rounded-md border border-brand-500 px-2 text-sm font-semibold outline-none ring-2 ring-brand-100" />
+                // chữ < 16px thì iPhone tự phóng to cả trang khi chạm vào ô
+                className="tap min-w-0 flex-1 rounded-md border border-brand-500 px-2 text-base font-semibold outline-none ring-2 ring-brand-100 sm:text-sm" />
             ) : (
               <>
                 <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-700">{t('Các chuyến')} · {rows.length}</span>
@@ -836,6 +840,8 @@ function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, more, onMo
 }) {
   const pallet = useData(s => s.pallet)
   const setPallet = useData(s => s.setPallet)
+  const box = useViewportBox(true)
+  const { kb } = useVisualView()
   const [q, setQ] = useState('')
   const [onlyFit, setOnlyFit] = useState(false)
   useEffect(() => {
@@ -875,14 +881,19 @@ function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, more, onMo
     )
   }
   return (
+    // điện thoại: khung bám phần màn còn thấy — bàn phím mở (ô lòng thùng, ô tìm xe) thì bảng nằm ngay trên bàn phím,
+    // không chìm dưới nó; máy tính: khung không có hộp (contents), bảng đặt góc phải khung 3D như cũ
+    <div className="pointer-events-none fixed inset-0 z-40 lg:contents" style={box}>
     <div role="dialog" aria-label={t('Thùng xe')}
-      className="pb-safe fixed inset-x-0 bottom-0 z-40 flex max-h-[56dvh] flex-col rounded-t-2xl border-t border-slate-300 bg-white shadow-pop lg:absolute lg:inset-x-auto lg:bottom-auto lg:right-3 lg:top-14 lg:max-h-[calc(100%-68px)] lg:w-[400px] lg:rounded-lg lg:border"
+      className={cx('pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col rounded-t-2xl border-t border-slate-300 bg-white shadow-pop lg:inset-x-auto lg:bottom-auto lg:right-3 lg:top-14 lg:max-h-[calc(100%-68px)] lg:w-[400px] lg:rounded-lg lg:border',
+        kb ? 'max-h-[92%]' : 'pb-safe max-h-[56%]')}
       style={{ animation: 'sheet-up .18s ease-out' }}>
+      <KeyboardShield className="bg-white" />
       <div className="flex items-center gap-2 border-b border-slate-200 py-1 pl-4 pr-1">
         <h2 className="flex-1 text-base font-semibold text-slate-900">{t('Thùng xe')}</h2>
         <IconButton label={t('Đóng')} onClick={onClose}><X size={19} /></IconButton>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div data-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {vehicle && (
           <div className="space-y-2.5 px-3 py-3">
             {/* XE: lòng thùng + tải — của riêng xe này. Gấp thành một dòng tóm tắt, bấm mới mở ô sửa (cùng kiểu Block) */}
@@ -969,6 +980,7 @@ function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, more, onMo
         </div>
         <div className="h-3" />
       </div>
+    </div>
     </div>
   )
 }

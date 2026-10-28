@@ -14,7 +14,8 @@ Ghi chú nội bộ của chủ dự án (không nằm trong repo công khai): @
 - Logo **MAL** (chữ nghiêng đậm, cùng kiểu mal.com.vn) + nhãn **CARGO** nền xanh — `Logo` trong `src/ui/Shell.tsx`. Tông **navy `#0b1424` + xanh dương `#1a66ff`**. Không dùng xanh lá, bạc, cam / vàng da cam làm màu thương hiệu. Màu thành công/nguy hiểm (emerald/red/amber) chỉ dùng cho trạng thái.
 - Font Be Vietnam Pro (tự lưu, chạy offline). Ưu tiên điện thoại, điểm chạm ≥ 44 px. MỘT màn làm việc (**Bàn xếp xe**, `TripPage.tsx`): thanh trên navy CỐ ĐỊNH (menu 3 vạch bên trái · chuyến đang mở ▾ + nút `+` · Login bằng chữ · logo bên phải); danh mục Mã hàng / Xe / Đơn / Chuyến / Tài khoản mở thành tấm phủ (`Panel`) ngay trên màn đó.
 - Form thêm/sửa = `Sheet` (trượt từ đáy trên điện thoại, từ lề phải trên máy tính); xác nhận xoá = `Confirm` — cấm `window.confirm/alert`.
-- Chống bấm nhầm trên điện thoại: tấm phủ (`Sheet` / `Confirm` / `Panel`) bám phần màn còn thấy (`useViewportBox` — iPhone bàn phím không thu nhỏ trang, tấm cũ hở dải đáy lộ nút của trang; bàn phím mở thì chừa chỗ thanh tự điền nổi của iOS); đang gõ mà chạm ra ngoài tấm ⇒ chỉ cất bàn phím, không đóng; `Popover` chạm ra ngoài ⇒ chỉ đóng bảng, nuốt cú chạm (chuột thì như cũ).
+- Bàn phím điện thoại (iPhone không thu nhỏ trang khi bàn phím mở): `useVisualView()` trong kit (`kb` = bàn phím mở, chỉ máy cảm ứng). Mọi khung `fixed` bám đáy / tấm phủ (`Sheet`, `Confirm`, `Panel`, bảng Thùng xe) bám phần màn còn thấy (`useViewportBox`) + `KeyboardShield` che dải dưới (sau thanh tự điền của iOS — trang lộ ra, chạm trúng nút của trang); khung cuộn đánh `data-scroll` để ô đang gõ tự kéo vào chỗ thấy; khung 3D Bàn xếp xe thôi dính, dải tổng trang đơn ẩn khi `kb`. Ô nhập trên điện thoại chữ ≥ 16px (nhỏ hơn iPhone tự phóng to trang). Khung `fixed` bám đáy mới ⇒ làm theo cùng cách, thêm vào `scripts/ui-keyboard.mjs`.
+- Chống bấm nhầm: đang gõ mà chạm ra ngoài tấm ⇒ chỉ cất bàn phím, không đóng; `Popover` chạm ra ngoài trên điện thoại ⇒ chỉ đóng bảng, nuốt cú chạm (chuột thì như cũ).
 - Danh mục Mã hàng / Xe (tab "Của tôi") / Đơn hàng (trừ đơn mẫu): ô chọn đầu dòng (`RowCheck`, nằm NGOÀI nút của dòng) + thanh dính đáy `SelectBar` (chọn tất cả · Bỏ chọn · Xoá N) → `Confirm`.
 - Nút chỉ có biểu tượng PHẢI có `aria-label` (script kiểm tìm nút theo tên).
 - **Không cắt chữ "…"**: tên, quy cách, ghi chú phải XUỐNG DÒNG (`break-words`; cụm số như `5.700 × 2.000 × 2.000 mm` bọc `whitespace-nowrap` để không bẻ giữa cụm). `truncate` chỉ dùng chỗ buộc một dòng mà vẫn đủ chỗ ở 360 px (tên chuyến trên thanh trên). `scripts/ui-cut.mjs` đo ở 1440 / 390 / 360 px.
@@ -57,6 +58,6 @@ Ghi chú nội bộ của chủ dự án (không nằm trong repo công khai): @
 ## Kiểm trước khi báo xong
 ```bash
 npm test            # thuật toán: bất biến hình học + bảng đếm chân khớp số đã xếp (6 ca)
-npm run check:ui    # build + chụp mọi màn 1440/390 (đo tràn ngang, lỗi trình duyệt) + luồng người mới + chọn nhiều để xoá / chạm ra ngoài (ui-bulk) + chữ bị cắt / nút đè (1440/390/360)
+npm run check:ui    # build + chụp mọi màn 1440/390 (đo tràn ngang, lỗi trình duyệt) + luồng người mới + chọn nhiều để xoá / chạm ra ngoài (ui-bulk) + bàn phím giả lập (ui-keyboard) + chữ bị cắt / nút đè (1440/390/360)
 ```
 Ảnh ra `scripts/out/` — mở xem bằng mắt, đừng chỉ tin chữ XANH. Script KHÔNG bấm link ra ngoài (Zalo/email/mal.com.vn): `mailto:` từng mở Outlook thật trên máy.

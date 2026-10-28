@@ -1,7 +1,7 @@
 // Bộ thành phần dùng chung — một kiểu nút, một kiểu ô nhập, một kiểu tấm trượt cho cả app.
 // Khuôn Manhattan (thẻ trắng trên canvas xám, dải tổng hợp navy, section band) + luật dễ đọc:
 // chữ phụ tối thiểu slate-500 trên nền trắng, không bóng trên thứ nằm yên, góc bo 6–8 px.
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, Trash2, X } from 'lucide-react'
 import { numLocale, t } from '../i18n'
@@ -310,34 +310,70 @@ export function LiveNum({ value, onCommit, valid = n => n > 0, suffix, label, cl
   )
 }
 
-/** Khung tấm phủ bám theo phần màn CÒN THẤY. iPhone: bàn phím không thu nhỏ trang — tấm `fixed inset-0` giữ
- *  nguyên cỡ cũ, đáy chìm dưới bàn phím và hở một dải lộ trang phía sau (chạm vào đó là bấm nhầm nút của trang).
- *  Theo visualViewport thì đáy tấm nằm sát trên bàn phím, phủ kín đúng phần đang thấy. iPhone còn có thanh gợi ý
- *  tự điền + nút cất bàn phím NỔI trên mép bàn phím, đè lên nút Huỷ / Lưu ⇒ bàn phím mở thì chừa thêm khoảng đó. */
-const IOS = typeof navigator !== 'undefined' && (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
+// ── Phần màn CÒN THẤY khi bàn phím điện thoại mở ────────────────────────────
+// iPhone: bàn phím KHÔNG thu nhỏ trang — khung `fixed` giữ nguyên cỡ cũ, đáy chìm dưới bàn phím; dải sau thanh gợi ý
+// tự điền (nổi trên mép bàn phím) vẫn lộ trang phía sau, chạm vào là bấm nhầm nút của trang. visualViewport cho đúng
+// phần đang thấy (đã trừ cả thanh gợi ý) ⇒ mọi khung bám đáy / tấm phủ bám theo nó.
+type VisualView = { top: number; height: number; kb: boolean; zoom: boolean }
+let vvSnap: VisualView = { top: 0, height: 0, kb: false, zoom: false }
+let vvFull = 0, vvW = 0
+const vvSubs = new Set<() => void>()
+// chỉ máy cảm ứng mới có bàn phím ảo — máy tính kéo cửa sổ thấp lại không phải "bàn phím mở"
+const touch = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
+const readVV = () => {
+  const vv = window.visualViewport
+  if (!vv) return
+  if (Math.abs(vv.width - vvW) > 1) { vvW = vv.width; vvFull = 0 }   // xoay máy: đo lại chiều cao đầy
+  const zoom = vv.scale > 1.01
+  if (!zoom) vvFull = Math.max(vvFull, vv.height)
+  const next = { top: Math.round(vv.offsetTop), height: Math.round(vv.height), kb: touch && !zoom && vvFull - vv.height > 150, zoom }
+  if (next.top !== vvSnap.top || next.height !== vvSnap.height || next.kb !== vvSnap.kb || next.zoom !== vvSnap.zoom) vvSnap = next
+}
+if (typeof window !== 'undefined' && window.visualViewport) {
+  readVV()
+  const on = () => { const was = vvSnap; readVV(); if (vvSnap !== was) { vvSubs.forEach(f => f()); keepFocusInView() } }
+  window.visualViewport.addEventListener('resize', on)
+  window.visualViewport.addEventListener('scroll', on)
+  // chạm vào một ô: chờ bàn phím trượt lên xong rồi kéo ô vào chỗ thấy được
+  document.addEventListener('focusin', () => setTimeout(keepFocusInView, 350))
+}
+/** `kb`: bàn phím đang mở · `top/height`: phần màn còn thấy (toạ độ khung `fixed`) · `zoom`: đang phóng to hai ngón. */
+export const useVisualView = () => useSyncExternalStore(f => { vvSubs.add(f); return () => { vvSubs.delete(f) } }, () => vvSnap, () => vvSnap)
+
+/** Khung `fixed inset-0` của tấm phủ ⇒ đúng phần màn còn thấy: đáy tấm nằm sát trên bàn phím. Đang phóng to thì thôi. */
 export function useViewportBox(on: boolean): CSSProperties | undefined {
-  const [box, setBox] = useState<CSSProperties>()
-  useEffect(() => {
-    const vv = window.visualViewport
-    if (!on || !vv) return
-    let full = vv.height
-    // đang phóng to bằng hai ngón thì thôi — bám theo khung phóng to làm tấm nhảy lung tung
-    const fit = () => {
-      full = Math.max(full, vv.height)
-      const kb = full - vv.height > 150
-      setBox(vv.scale > 1.01 ? undefined : { top: vv.offsetTop, height: vv.height, bottom: 'auto', paddingBottom: kb && IOS ? 72 : undefined })
-    }
-    fit()
-    vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit)
-    return () => { vv.removeEventListener('resize', fit); vv.removeEventListener('scroll', fit); setBox(undefined) }
-  }, [on])
-  return box
+  const v = useVisualView()
+  return on && v.height && !v.zoom ? { top: v.top, height: v.height, bottom: 'auto' } : undefined
+}
+
+/** Phủ phần màn nằm DƯỚI phần còn thấy (sau thanh gợi ý của bàn phím) — đặt trong khung đã bám `useViewportBox`.
+ *  Chạm vào đó chỉ cất bàn phím, không bấm trúng gì của trang phía sau. */
+export function KeyboardShield({ className = 'bg-navy-950/45' }: { className?: string }) {
+  const v = useVisualView()
+  if (!v.kb) return null
+  return <div aria-hidden className={cx('absolute inset-x-0 top-full h-screen', className)} onClick={() => (document.activeElement as HTMLElement | null)?.blur()} />
+}
+
+const isTextField = (a: Element | null): a is HTMLElement =>
+  a instanceof HTMLTextAreaElement || (a instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'range', 'file'].includes(a.type))
+
+/** Ô đang gõ nằm trong khung cuộn (`data-scroll`: thân tấm sửa, tấm danh mục, bảng Thùng xe): kéo nó vào phần thấy được
+ *  của khung — bàn phím mở làm khung ngắn lại, ô vừa chạm (vd. ô kích thước) bị đẩy khuất dưới đáy. */
+function keepFocusInView() {
+  const a = document.activeElement
+  if (!vvSnap.kb || !isTextField(a)) return
+  const sc = a.closest<HTMLElement>('[data-scroll]')
+  if (!sc) return
+  const r = a.getBoundingClientRect(), s = sc.getBoundingClientRect()
+  const pad = 12
+  if (r.bottom > s.bottom - pad) sc.scrollTop += r.bottom - s.bottom + pad
+  else if (r.top < s.top + pad) sc.scrollTop -= s.top - r.top + pad
 }
 
 // ô đang gõ (bàn phím đang mở) nằm trong `el`
 const typingIn = (el: HTMLElement | null) => {
   const a = document.activeElement
-  return !!el && !!a && el.contains(a) && (a instanceof HTMLTextAreaElement || (a instanceof HTMLInputElement && !['checkbox', 'radio', 'button'].includes(a.type)))
+  return !!el && el.contains(a) && isTextField(a)
 }
 
 /** Tấm trượt: điện thoại trượt từ đáy, máy tính trượt từ lề phải. Header + thân cuộn + chân dính đáy. */
@@ -353,6 +389,7 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, wide }
     return () => { window.removeEventListener('keydown', k); document.body.style.overflow = prev }
   }, [open, onClose])
   const box = useViewportBox(open)
+  const { kb } = useVisualView()
   const sheet = useRef<HTMLDivElement>(null)
   // điện thoại đang gõ mà chạm ra ngoài tấm: chỉ cất bàn phím, KHÔNG đóng tấm — khỏi mất chữ vừa gõ
   const keepOpen = useRef(false)
@@ -362,6 +399,7 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, wide }
       <div className="absolute inset-0 bg-navy-950/45" style={{ animation: 'fade .15s' }}
         onPointerDown={e => { keepOpen.current = e.pointerType !== 'mouse' && typingIn(sheet.current) }}
         onClick={() => { if (keepOpen.current) (document.activeElement as HTMLElement).blur(); else onClose() }} />
+      <KeyboardShield />
       <div ref={sheet} role="dialog" aria-modal="true" data-sheet
         className={cx('relative flex max-h-[92%] w-full flex-col rounded-t-2xl bg-white shadow-pop sm:h-full sm:max-h-none sm:rounded-none sm:border-l sm:border-slate-200',
           wide === 'table' ? 'sm:max-w-[780px]' : wide ? 'sm:max-w-[560px]' : 'sm:max-w-[460px]')}
@@ -374,8 +412,9 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, wide }
           </div>
           <IconButton label={t('Đóng')} onClick={onClose} className="-mr-2"><X size={20} /></IconButton>
         </div>
-        <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
-        {footer && <div className="pb-safe border-t border-slate-200 bg-white px-5 py-3">{footer}</div>}
+        <div data-scroll className="flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
+        {/* bàn phím mở: đáy tấm đã ở trên bàn phím — bỏ khoảng chừa vạch Home */}
+        {footer && <div className={cx('border-t border-slate-200 bg-white px-5 py-3', !kb && 'pb-safe')}>{footer}</div>}
       </div>
     </div>,
     document.body,

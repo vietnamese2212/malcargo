@@ -100,7 +100,7 @@ export function ImportSheet({ open, onClose, start = 'items', onDone }: { open: 
           <p className="mt-1.5 text-[12px] text-slate-600">{t(def.note)}</p>
           <textarea value={text[tab] ?? ''} onChange={e => setText(x => ({ ...x, [tab]: e.target.value }))} rows={6} aria-label={t('Dán bảng {name}', { name: t(def.title) })}
             placeholder={sampleRows(def).map(r => r.join('\t')).join('\n')}
-            className="mt-2 w-full rounded-md border border-slate-300 p-2.5 font-mono text-[13px] outline-none placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+            className="mt-2 w-full rounded-md border border-slate-300 p-2.5 font-mono text-base outline-none sm:text-[13px] placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
         </div>
       </div>
 

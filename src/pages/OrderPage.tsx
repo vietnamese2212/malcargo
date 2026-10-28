@@ -5,7 +5,7 @@ import { isSample, newId, newTripLabel, useAllItems, useData } from '../data/sto
 import type { Order } from '../data/types'
 import { orderTotals } from '../engine/plan'
 import { resolveOrder } from '../data/resolve'
-import { BoxGlyph, Button, Confirm, Empty, Field, IconButton, SectionBand, TextInput, cx, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3 } from '../ui/kit'
+import { BoxGlyph, Button, Confirm, Empty, Field, IconButton, SectionBand, TextInput, cx, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3, useVisualView } from '../ui/kit'
 import { ListCard, Page, PageHeader } from '../ui/Shell'
 import { ItemPicker } from '../ui/ItemPicker'
 import { go, replaceRoute } from '../ui/route'
@@ -21,6 +21,7 @@ export default function OrderPage({ id, back }: { id: string; back?: string }) {
   const items = useAllItems()
   const [picking, setPicking] = useState(false)
   const [askDel, setAskDel] = useState(false)
+  const { kb } = useVisualView()
   const backTrip = back?.startsWith('trip:') ? trips.find(t => t.id === back.slice(5)) : undefined
   const backHref = back?.startsWith('trip:') ? `#/trip/${back.slice(5)}` : '#/orders'
   const backLabel = backTrip ? tx(backTrip.name) : t('Đơn hàng')
@@ -114,8 +115,9 @@ export default function OrderPage({ id, back }: { id: string; back?: string }) {
         </ListCard>
       </Page>
 
-      {/* dải tổng navy + đi xếp xe: dính đáy */}
-      <div className="pb-safe fixed inset-x-0 bottom-0 z-20 bg-navy-900 text-white">
+      {/* dải tổng navy + đi xếp xe: dính đáy. Điện thoại đang gõ (bàn phím mở) thì ẩn — iPhone để nó trôi lơ lửng
+          giữa màn, đè lên ô số thùng đang gõ */}
+      <div className={cx('pb-safe fixed inset-x-0 bottom-0 z-20 bg-navy-900 text-white', kb && 'hidden')}>
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5 sm:px-6">
           <div className="num grid flex-1 grid-cols-2 gap-x-4 gap-y-0.5 text-[13px] text-slate-300 sm:flex sm:gap-8">
             <span><b className="text-base font-semibold text-white">{fmtInt(totals.cartons)}</b> {t('{n:thùng|thùng}', { n: totals.cartons })}</span>
