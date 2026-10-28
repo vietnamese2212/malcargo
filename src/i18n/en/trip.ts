@@ -281,4 +281,7 @@ export const TRIP: Record<string, string> = {
   'lớp ghép': 'mixed layer',
   'chưa đủ lớp': 'partial layer',
   'Diễn giải': 'Breakdown',
+  'Toàn màn hình': 'Full screen',
+  'Thoát toàn màn hình': 'Exit full screen',
+  'Nhập đơn từ Excel': 'Import orders from Excel',
 }

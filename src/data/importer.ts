@@ -2,15 +2,17 @@
 // hoặc chép từng bảng dán vào. Trùng tên / mã với cái đã có ⇒ GHI ĐÈ (giữ id cũ), chưa có ⇒ thêm mới.
 import type { Item, Order, Trip, Vehicle } from './types'
 import { newId, type ImportBatch } from './store'
-import { t, tx } from '../i18n'
+import { getLang, t, tx } from '../i18n'
+import { EN } from '../i18n/en'
 
 export type SheetKey = 'items' | 'vehicles' | 'orders' | 'trips'
 /** `text`: chữ hiện trên giao diện tiếng Anh khi nghĩa cột khác chữ dịch của `label` (vd cột "Mã hàng" = mã, không phải danh mục). */
 export interface SheetDef { key: SheetKey; title: string; cols: { label: string; text?: string; req?: boolean; w: number }[]; note: string; sample: (string | number)[][] }
 
 // Thứ tự cột = thứ tự trong file mẫu. Đổi ở đây là đổi cả file mẫu lẫn cách đọc.
-// `title` (tên trang) + `label` (tiêu đề cột) là ĐỊNH DẠNG FILE — luôn tiếng Việt, file cũ của người dùng vẫn đọc được;
-// giao diện tiếng Anh dịch qua t(). Dòng ví dụ là dữ liệu, dịch lúc hiện bằng tx() (`sampleRows`).
+// File mẫu theo ngôn ngữ giao diện: tên trang + tiêu đề cột tiếng Việt (`title`, `label`) hoặc bản tiếng Anh
+// (`EN`, cột có `text` thì lấy `text`). Đọc file nhận CẢ HAI tên trang (đổi ngôn ngữ giữa chừng / file cũ vẫn đọc
+// được); cột đọc theo VỊ TRÍ. Dòng ví dụ là dữ liệu, dịch lúc hiện bằng tx() (`sampleRows`).
 export const SHEETS: SheetDef[] = [
   {
     key: 'items', title: 'Mã hàng', // i18n-key
@@ -50,6 +52,12 @@ export const SHEETS: SheetDef[] = [
  *  trang Đơn hàng và Chuyến nên vẫn khớp; cách chở không chứa "pallet" vẫn là thùng rời). */
 export const sampleRows = (s: SheetDef) => s.sample.map(r => r.map(c => (typeof c === 'string' ? tx(c) : c)))
 
+/** Tên trang / tiêu đề cột trong file mẫu, cả hai ngôn ngữ (`[vi, en]`); `sheetName` / `colHead` theo ngôn ngữ đang dùng. */
+const titles = (s: SheetDef) => [s.title, EN[s.title] ?? s.title]
+const heads = (c: SheetDef['cols'][number]) => [c.label, EN[c.text ?? c.label] ?? c.label]
+const sheetName = (s: SheetDef) => titles(s)[getLang() === 'vi' ? 0 : 1]
+export const colHead = (c: SheetDef['cols'][number]) => heads(c)[getLang() === 'vi' ? 0 : 1]
+
 export type Rows = (string | number | boolean | null | undefined)[][]
 export interface ImportResult extends ImportBatch { errors: string[]; updated: number }
 
@@ -70,8 +78,8 @@ export const splitPasted = (text: string): Rows => text.split(/\r?\n/).filter(l 
 /** Bỏ dòng trống và dòng tiêu đề (ô đầu trùng tên cột đầu, hoặc ô phải là số lại là chữ).
  *  Trả về [số dòng trong file, ô] để báo lỗi đúng dòng. */
 function body(rows: Rows, k: SheetKey, numCol?: number): [number, Rows[number]][] {
-  const first = key(SHEETS.find(s => s.key === k)!.cols[0].label)
-  const isHead = (r: Rows[number]) => key(str(r[0]).replace(/\*$/, '')) === first || (numCol != null && Number.isNaN(num(r[numCol])))
+  const first = heads(SHEETS.find(s => s.key === k)!.cols[0]).map(key)
+  const isHead = (r: Rows[number]) => first.includes(key(str(r[0]).replace(/\*$/, ''))) || (numCol != null && Number.isNaN(num(r[numCol])))
   return rows.map((r, i) => [i + 1, r] as [number, Rows[number]])
     .filter(([, r]) => r.some(c => str(c)))
     .filter(([, r], i) => !(i === 0 && isHead(r)))
@@ -165,8 +173,7 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
   return out
 }
 
-/** File mẫu .xlsx: trang Hướng dẫn + 4 trang dữ liệu, mỗi trang có dòng tiêu đề và 2–3 dòng ví dụ.
- *  Tên 4 trang dữ liệu + tiêu đề cột luôn tiếng Việt (định dạng file); trang hướng dẫn + dòng ví dụ theo ngôn ngữ. */
+/** File mẫu .xlsx: trang Hướng dẫn + 4 trang dữ liệu, mỗi trang có dòng tiêu đề và 2–3 dòng ví dụ — tất cả theo ngôn ngữ. */
 export async function downloadTemplate() {
   const { default: writeXlsxFile } = await import('write-excel-file/browser')
   const head = (label: string, req?: boolean) => ({ value: req ? `${label} *` : label, fontWeight: 'bold' as const, textColor: '#ffffff', backgroundColor: req ? '#1a66ff' : '#0b1424' })
@@ -176,25 +183,26 @@ export async function downloadTemplate() {
     [t('Điền các trang Mã hàng, Xe, Đơn hàng, Chuyến (trang nào không cần thì để trống), rồi trong app chọn Menu → Nhập từ Excel → Nạp file.')],
     [t('Cột có dấu * là bắt buộc. Xoá các dòng ví dụ trước khi nạp. Giữ nguyên dòng tiêu đề.')],
     [''],
-    ...SHEETS.map(s => [`${s.title}: ${t(s.note)}`]),
+    ...SHEETS.map(s => [`${sheetName(s)}: ${t(s.note)}`]),
   ]
   await writeXlsxFile([
     { sheet: t('Hướng dẫn'), data: guide, columns: [{ width: 120 }] },
     ...SHEETS.map(s => ({
-      sheet: s.title, stickyRowsCount: 1, columns: s.cols.map(c => ({ width: c.w })),
-      data: [s.cols.map(c => head(c.label, c.req)), ...sampleRows(s)],
+      sheet: sheetName(s), stickyRowsCount: 1, columns: s.cols.map(c => ({ width: Math.max(c.w, colHead(c).length + 4) })),
+      data: [s.cols.map(c => head(colHead(c), c.req)), ...sampleRows(s)],
     })),
   ], { fontFamily: 'Arial', fontSize: 11 }).toFile(t('malcargo-mau-nhap-du-lieu.xlsx'))
 }
 
-/** Đọc file .xlsx đã điền: lấy 4 trang theo TÊN trang (không phân biệt hoa thường). */
+/** Đọc file .xlsx đã điền: lấy 4 trang theo TÊN trang, tiếng Việt hay tiếng Anh (không phân biệt hoa thường). */
 export async function readWorkbook(file: File): Promise<Partial<Record<SheetKey, Rows>>> {
   const { default: readXlsxFile } = await import('read-excel-file/browser')
   const sheets = await readXlsxFile(file)
   const out: Partial<Record<SheetKey, Rows>> = {}
   // ô ngày (vd tên chuyến "28/10" Excel tự hiểu là ngày) → chữ ngày/tháng/năm cố định: là DỮ LIỆU, không theo ngôn ngữ giao diện
   for (const s of SHEETS) {
-    const hit = sheets.find(x => key(x.sheet) === key(s.title))
+    const names = titles(s).map(key)
+    const hit = sheets.find(x => names.includes(key(x.sheet)))
     if (hit) out[s.key] = hit.data.map(r => r.map(c => (c instanceof Date ? c.toLocaleDateString('vi-VN') : (c as string | number | boolean | null))))
   }
   return out

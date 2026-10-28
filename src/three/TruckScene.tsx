@@ -113,11 +113,19 @@ export default function TruckScene(p: TruckSceneProps) {
     ctx.current = c
     controls.addEventListener('change', () => { c.dirty = true })
 
+    // Khung đổi cỡ (toàn màn hình, xoay máy): lùi / tiến camera theo góc nhìn hẹp nhất để xe vẫn lọt khung như
+    // trước — giữ nguyên góc người dùng đang xoay, không nhảy về góc mặc định
     const resize = () => {
       const w = el.clientWidth || 1, h = el.clientHeight || 1
       renderer.setSize(w, h, false)
       renderer.domElement.style.width = '100%'; renderer.domElement.style.height = '100%'
+      const before = fitFov(camera)
       camera.aspect = w / h; camera.updateProjectionMatrix(); c.dirty = true
+      const k = Math.sin(before / 2) / Math.sin(fitFov(camera) / 2)
+      if (!c.truck || Math.abs(k - 1) < 0.01) return
+      const back = (pos: THREE.Vector3, tgt: THREE.Vector3) => pos.sub(tgt).multiplyScalar(k).add(tgt)
+      back(camera.position, controls.target)
+      if (c.tween) back(c.tween.to, c.tween.tTo)
     }
     const ro = new ResizeObserver(resize); ro.observe(el); resize()
 
@@ -211,15 +219,19 @@ function applyWalls(t: TruckHandle, walls: 'glass' | 'open') {
   if (walls === 'open') for (const o of t.nearPanels) o.visible = false
 }
 
+/** Góc nhìn hẹp nhất của khung (dọc hay ngang) — khối cầu bao xe phải lọt trong góc này. */
+function fitFov(camera: THREE.PerspectiveCamera) {
+  const vfov = THREE.MathUtils.degToRad(camera.fov)
+  return Math.min(vfov, 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect))
+}
+
 function goTo(c: Ctx, preset: ViewPreset, animate: boolean) {
   const t = c.truck
   if (!t) return
   const b = t.bounds
   const cx = (b.minX + b.maxX) / 2, len = b.maxX - b.minX
   // Căn khung theo KHỐI CẦU bao xe + góc nhìn ngang/dọc của khung — xe nào, màn nào cũng lọt trọn
-  const vfov = THREE.MathUtils.degToRad(c.camera.fov)
-  const hfov = 2 * Math.atan(Math.tan(vfov / 2) * c.camera.aspect)
-  const fov = Math.min(vfov, hfov)
+  const fov = fitFov(c.camera)
   const sphere = (dx: number, dy: number, dz: number) => 0.5 * Math.sqrt(dx * dx + dy * dy + dz * dz)
   const dist = (rad: number, k: number) => (rad / Math.sin(fov / 2)) * k
   const tgt = new THREE.Vector3(cx, b.topY * 0.5, 0)

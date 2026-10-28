@@ -5,8 +5,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   AlertTriangle, ArrowDown, ArrowUp, Camera, Check, ChevronDown, ClipboardCopy, ClipboardList, CloudOff, Crosshair, ExternalLink, Eye, EyeOff,
-  FileSpreadsheet, Layers, Loader2, LogOut, MapPin, Menu, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Rotate3d, Ruler,
-  SlidersHorizontal, Sparkles, Table2, Trash2, Truck, UserRound, Users, X,
+  FileSpreadsheet, Layers, Loader2, LogOut, MapPin, Maximize2, Menu, Minimize2, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Rotate3d, Ruler,
+  SlidersHorizontal, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, X,
 } from 'lucide-react'
 import { findVehicle, isBlankOrder, isSample, newId, newTripLabel, nextName, useAllItems, useAllVehicles, useData } from '../data/store'
 import { signInGoogle, signOut, useAuth } from '../data/cloud'
@@ -91,7 +91,7 @@ export default function TripPage({ id }: { id: string }) {
   const [open, setOpen] = useState({ cargo: true, count: false })
   const [explain, setExplain] = useState(false)   // popup bảng diễn giải từng mã (nút trên khung 3D)
   const [panel, setPanel] = useState<PanelName | null>(null)
-  const [importing, setImporting] = useState(false)
+  const [importing, setImporting] = useState<'menu' | 'trip' | null>(null)   // 'trip' = nút nhập đơn trên bàn ⇒ đơn vào chuyến này
   const [unlink, setUnlink] = useState<Order | null>(null)
   const [editVehicle, setEditVehicle] = useState<{ v: Vehicle | null } | null>(null)
   const [pickOrders, setPickOrders] = useState(false)
@@ -104,6 +104,7 @@ export default function TripPage({ id }: { id: string }) {
   // điện thoại gõ số thùng: bàn phím chiếm nửa dưới, khung 3D dính nửa trên ⇒ ô đang gõ bị kẹt giữa, khuất.
   // Bàn phím mở thì khung 3D thôi dính, trôi theo trang — ô đang gõ luôn thấy được.
   const { kb } = useVisualView()
+  const [full, setFull] = useToggleFull()
 
   // Sửa chuyến mẫu ⇒ kho đã tách thành chuyến mới: chuyển sang chuyến đó tại chỗ (màn giữ nguyên, ô đang mở
   // trỏ sang đơn bản sao), rồi báo mã chuyến mới. Chuyến mẫu không đổi.
@@ -249,7 +250,7 @@ export default function TripPage({ id }: { id: string }) {
     <div className="flex min-h-[100dvh] flex-col lg:h-[100dvh]">
       {/* ── thanh trên navy: nút danh mục (3 vạch) · chuyến đang mở ▾ + chuyến mới · … · Login · logo MAL ── */}
       <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-1 bg-navy-950 pl-1 pr-3 text-white sm:h-14 sm:gap-2 sm:pl-2 sm:pr-4">
-        <MainMenu onPanel={setPanel} onImport={() => setImporting(true)} />
+        <MainMenu onPanel={setPanel} onImport={() => setImporting('menu')} />
         <TripSwitcher trip={trip} trips={trips} onRename={name => upsertTrip({ ...trip, name })} onDelete={setDelTrip}
           onAll={() => setPanel('trips')} onNew={newTrip} />
         <Button variant="primary" onClick={newTrip} aria-label={t('Chuyến mới')} title={t('Tạo chuyến mới')} className="w-10 shrink-0 px-0 sm:w-auto sm:px-3.5"><Plus size={18} /><span className="hidden sm:inline">{t('Chuyến mới')}</span></Button>
@@ -271,7 +272,10 @@ export default function TripPage({ id }: { id: string }) {
 
       <div className="lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(380px,440px)_1fr]">
         {/* ── BẢN VẼ: dải thông số xe + 3D + khung tên ── */}
-        <section data-scene className={cx('sticky top-12 z-10 flex h-[50vh] min-h-[320px] flex-col bg-[#e7ecf2] sm:top-14 lg:relative lg:top-0 lg:order-2 lg:h-full', kb && 'max-lg:relative max-lg:top-0')}>
+        {/* toàn màn hình: khung 3D phủ kín màn (máy có Fullscreen API thì ẩn luôn thanh trình duyệt) */}
+        <section data-scene className={full
+          ? 'fixed inset-0 z-40 flex flex-col bg-[#e7ecf2] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)]'
+          : cx('sticky top-12 z-10 flex h-[50vh] min-h-[320px] flex-col bg-[#e7ecf2] sm:top-14 lg:relative lg:top-0 lg:order-2 lg:h-full', kb && 'max-lg:relative max-lg:top-0')}>
           <SpecStrip vehicle={vehicle} pallet={pallet} onOpen={more => setSpec({ more })} onKind={k => patchVehicle({ kind: k })}
             lightOwn={tripOrders.some(o => o.lines.some(l => l.qty > 0 && l.item.light)) ? !!trip.lightOwnPallet : null}
             onLightOwn={v => upsertTrip({ ...trip, lightOwnPallet: v })} />
@@ -293,6 +297,10 @@ export default function TripPage({ id }: { id: string }) {
                   </button>
                 )}
                 <ViewMenu view={view.preset} walls={walls} onView={p => setView(v => ({ preset: p, n: v.n + 1 }))} onWalls={() => setWalls(w => (w === 'open' ? 'glass' : 'open'))} />
+                <button type="button" onClick={() => setFull(!full)} aria-pressed={full} aria-label={full ? t('Thoát toàn màn hình') : t('Toàn màn hình')} title={full ? t('Thoát toàn màn hình') : t('Toàn màn hình')}
+                  className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md border border-slate-300 bg-white text-slate-800 hover:bg-slate-50">
+                  {full ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                </button>
               </div>
             </div>
 
@@ -349,7 +357,10 @@ export default function TripPage({ id }: { id: string }) {
             {!rawOrders.length ? (
               <div className="px-4 py-6 text-center">
                 <p className="text-sm text-slate-700">{t('Xe chở hàng gì? Chọn mã hàng rồi nhập số thùng, hàng hiện lên xe ngay.')}</p>
-                <Button variant="primary" className="mt-3" onClick={addCargo}><Plus size={18} />{t('Thêm hàng')}</Button>
+                <div className="mt-3 flex flex-wrap justify-center gap-2">
+                  <Button variant="primary" onClick={addCargo}><Plus size={18} />{t('Thêm hàng')}</Button>
+                  <Button onClick={() => setImporting('trip')}><Upload size={17} />{t('Nhập đơn từ Excel')}</Button>
+                </div>
               </div>
             ) : (
               <div className="space-y-3 bg-canvas p-3 sm:rounded-b-lg">
@@ -409,6 +420,9 @@ export default function TripPage({ id }: { id: string }) {
                 <button onClick={() => setPickOrders(true)} className="tap flex w-full items-center justify-center gap-2 rounded-lg border-[1.5px] border-dashed border-slate-400 px-4 text-[13px] font-semibold text-slate-700 hover:border-slate-500 hover:bg-white">
                   <Plus size={16} />{t('Thêm đơn / điểm giao khác')}
                 </button>
+                <button onClick={() => setImporting('trip')} className="tap flex w-full items-center justify-center gap-2 rounded-lg border-[1.5px] border-dashed border-slate-400 px-4 text-[13px] font-semibold text-slate-700 hover:border-slate-500 hover:bg-white">
+                  <Upload size={16} />{t('Nhập đơn từ Excel')}
+                </button>
               </div>
             )}
           </Block>
@@ -450,7 +464,8 @@ export default function TripPage({ id }: { id: string }) {
       <Confirm open={!!unlink} onClose={() => setUnlink(null)} okText={t('Gỡ khỏi chuyến')} title={t('Gỡ {name} khỏi chuyến?', { name: tx(unlink?.name ?? '') })}
         body={t('Hàng của đơn này rời khỏi xe. Đơn vẫn còn trong Đơn hàng, thêm lại lúc nào cũng được.')}
         onOk={() => { if (unlink) upsertTrip({ ...trip, orderIds: trip.orderIds.filter(x => x !== unlink.id) }) }} />
-      <ImportSheet open={importing} onClose={() => setImporting(false)} onDone={setToast} />
+      <ImportSheet open={!!importing} onClose={() => setImporting(null)} onDone={setToast}
+        start={importing === 'trip' ? 'orders' : 'items'} trip={importing === 'trip' ? { id: trip.id, name: trip.name } : undefined} />
       <Panel open={!!panel} onClose={() => setPanel(null)}>
         {panel === 'items' && <ItemsPage />}
         {panel === 'vehicles' && <VehiclesPage />}
@@ -814,6 +829,34 @@ function Row({ label, value, pct, bad }: { label: string; value: string; pct?: n
 }
 
 // ── Góc nhìn: MỘT nút, bấm mở danh sách hướng nhìn + ẩn/hiện vách ─────────────
+// Khung 3D toàn màn hình: phủ kín bằng CSS (iPhone không cho trang web vào toàn màn hình thật); máy có
+// Fullscreen API thì xin luôn để ẩn thanh trình duyệt — thoát bằng Esc / cử chỉ của máy ⇒ khung về chỗ cũ.
+function useToggleFull(): [boolean, (on: boolean) => void] {
+  const [full, setFull] = useState(false)
+  const set = (on: boolean) => {
+    setFull(on)
+    if (on) document.documentElement.requestFullscreen?.()?.catch(() => {})
+    else if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+  }
+  useEffect(() => {
+    if (!full) return
+    const html = document.documentElement, overflow = html.style.overflow
+    html.style.overflow = 'hidden'   // trang phía sau không cuộn theo ngón tay
+    const onFs = () => { if (!document.fullscreenElement) setFull(false) }
+    // Esc: trình duyệt thường tự thoát toàn màn hình thật (⇒ onFs); còn lại thì tự thoát — trừ khi đang mở bảng / hộp hỏi
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !document.querySelector('[role=dialog],[role=alertdialog]')) setFull(false) }
+    document.addEventListener('fullscreenchange', onFs)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      html.style.overflow = overflow
+      document.removeEventListener('fullscreenchange', onFs)
+      window.removeEventListener('keydown', onKey)
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+    }
+  }, [full])
+  return [full, set]
+}
+
 function ViewMenu({ view, walls, onView, onWalls }: { view: ViewPreset; walls: 'open' | 'glass'; onView: (p: ViewPreset) => void; onWalls: () => void }) {
   const cur = t(VIEWS.find(([p]) => p === view)?.[1] ?? VIEWS[0][1])
   return (

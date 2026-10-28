@@ -45,10 +45,11 @@ Ghi chú nội bộ của chủ dự án (không nằm trong repo công khai): @
 - Thẻ đơn trên Bàn xếp xe: bấm TÊN đơn hay dải số ⇒ chỉ hàng của đơn trên xe (không phải ô nhập); sửa tên / điểm giao bằng nút "Sửa" ⇒ popup `OrderSheet`.
 - Dòng hàng trên Bàn xếp xe hiện quy cách xếp "110 thùng/pallet · 11 lớp · 9,85 kg" (chưa khai thùng/pallet lẫn số lớp mới hiện cỡ thùng) + nút chữ "Sửa" mở POPUP `ItemSheet` (cùng form danh mục Mã hàng — không sửa trong dòng, chủ dự án thấy rối): mã mẫu Lưu ⇒ thành mã của tôi rồi thay vào các đơn của chuyến (`adoptItem`); mở từ dòng hàng thì có "Bỏ khỏi đơn" thay cho nút xoá mã.
 - Màu CỐ ĐỊNH theo MÃ (`itemColors`; mã mẫu có màu ghim sẵn), KHÔNG theo thứ tự xếp — bật công tắc / đổi xe / đổi số không được làm đổi màu hàng. Bấm dòng hàng / dải số của đơn ⇒ chỉ khối của nó trên xe (pallet gộp chứa phần lẻ của mã cũng sáng — `PlanGroupMeta.holds`), vẫn chỉ đúng nó khi sơ đồ tính lại.
-- Góc nhìn căn theo khối cầu bao xe (`goTo` trong `TruckScene.tsx`) — xe nào, màn nào cũng lọt trọn. "Ẩn vách" ẩn cả cột + vòm nóc phía người xem.
+- Góc nhìn căn theo khối cầu bao xe (`goTo` trong `TruckScene.tsx`) — xe nào, màn nào cũng lọt trọn; khung đổi cỡ (toàn màn hình, xoay máy) ⇒ camera lùi / tiến theo góc nhìn hẹp nhất (`fitFov`), giữ góc đang xoay. "Ẩn vách" ẩn cả cột + vòm nóc phía người xem.
+- Nút **toàn màn hình** (góc phải trên khung 3D, `useToggleFull` trong TripPage): khung 3D `fixed inset-0` phủ kín (iPhone không cho trang vào toàn màn hình thật) + máy có Fullscreen API thì xin luôn để ẩn thanh trình duyệt; Esc / thoát của máy ⇒ về chỗ cũ; trang sau khoá cuộn.
 
 ## Dữ liệu
-- Trên máy: `zustand` + localStorage key `malcargo-data-v1` (`src/data/store.ts`); sao lưu / nạp file JSON (`app: 'malcargo'`); nhập Excel bằng file mẫu 4 trang (`src/data/importer.ts`).
+- Trên máy: `zustand` + localStorage key `malcargo-data-v1` (`src/data/store.ts`); sao lưu / nạp file JSON (`app: 'malcargo'`); nhập Excel bằng file mẫu 4 trang (`src/data/importer.ts`) — tên trang + tiêu đề cột theo ngôn ngữ giao diện, đọc được file cả hai ngôn ngữ (cột đọc theo vị trí). Nút "Nhập đơn từ Excel" ngay khối Hàng trên xe (Bàn xếp xe) mở trang Đơn hàng; đơn chưa thuộc chuyến nào ⇒ vào chuyến đang mở (chuyến mẫu ⇒ tách như mọi lần sửa).
 - **Chuyến mẫu** (`sample-t1` + đơn `sample-o1/o2`) luôn nguyên gốc: không xoá; sửa bất cứ gì ⇒ store tự TÁCH thành chuyến mới mã `ddmmyy-hhmm-stt` (`makeFork` trong store.ts), màn chuyến chuyển sang đó tại chỗ. Chuyến mới nào cũng có mã này (tên mặc định = mã).
 - **Nháp trống không giữ**: "+", "Thêm hàng", "Đơn mới" tạo ngay chuyến / đơn để làm việc; bỏ đó thì tự dọn — đóng bảng chọn mã mà đơn vẫn trống ⇒ bỏ đơn; mở app / đổi màn ⇒ `sweepBlank` (App.tsx) dọn mọi đơn trống (không mã, không điểm giao, tên mặc định "Đơn N") và chuyến trống (không còn đơn, tên = mã / "Chuyến N"), trừ cái đang mở + đơn trong chuyến đang mở. Đặt tên riêng ⇒ giữ.
 - **Dấu đã xoá** (`deleted`: id → lúc xoá, giữ 90 ngày, đi cùng bản sao lưu): mọi lần xoá / dọn / thay cả bộ đều ghi; `mergeBackup` bỏ bản ghi bị xoá SAU lần sửa cuối của nó — thiếu dấu này thì gộp hai máy làm thứ đã xoá sống lại. Thay cả bộ bằng bộ có chứa id đã xoá (nạp file) ⇒ bỏ dấu, sống lại.
@@ -60,6 +61,6 @@ Ghi chú nội bộ của chủ dự án (không nằm trong repo công khai): @
 ## Kiểm trước khi báo xong
 ```bash
 npm test            # thuật toán: bất biến hình học + bảng đếm chân khớp số đã xếp (6 ca) + kho dữ liệu (dọn nháp, dấu đã xoá, gộp hai máy) + bản dịch
-npm run check:ui    # build + chụp mọi màn 1440/390 (đo tràn ngang, lỗi trình duyệt) + luồng người mới + chọn nhiều để xoá / nháp trống tự dọn / chạm ra ngoài (ui-bulk) + bàn phím giả lập (ui-keyboard) + chữ bị cắt / nút đè (1440/390/360)
+npm run check:ui    # build + chụp mọi màn 1440/390 (đo tràn ngang, lỗi trình duyệt) + luồng người mới + chọn nhiều để xoá / nháp trống tự dọn / chạm ra ngoài (ui-bulk) + bàn phím giả lập (ui-keyboard) + toàn màn hình 3D / nhập đơn vào chuyến / file mẫu hai ngôn ngữ (ui-tools) + chữ bị cắt / nút đè (1440/390/360)
 ```
 Ảnh ra `scripts/out/` — mở xem bằng mắt, đừng chỉ tin chữ XANH. Script KHÔNG bấm link ra ngoài (Zalo/email/mal.com.vn): `mailto:` từng mở Outlook thật trên máy.

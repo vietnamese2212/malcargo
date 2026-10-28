@@ -139,12 +139,13 @@ export const SHEETS: Record<string, string> = {
   'không thấy đơn "{name}"': 'order "{name}" not found',
   'không thấy xe "{name}" (chuyến vẫn nhập, chưa gán xe)': 'truck "{name}" not found (trip imported without a truck)',
 
-  // ── file mẫu .xlsx: trang Hướng dẫn + tên file (tên 4 trang dữ liệu, tiêu đề cột giữ tiếng Việt) ──
+  // ── file mẫu .xlsx: trang Hướng dẫn + tên file (tên trang + tiêu đề cột lấy bản dịch của SHEETS trong importer.ts) ──
   'MalCargo — file mẫu nhập dữ liệu': 'MalCargo — data import template',
   'Điền các trang Mã hàng, Xe, Đơn hàng, Chuyến (trang nào không cần thì để trống), rồi trong app chọn Menu → Nhập từ Excel → Nạp file.':
-    'Fill in the sheets Mã hàng (items), Xe (trucks), Đơn hàng (orders), Chuyến (trips); leave any you do not need empty. Then in the app choose Menu → Import from Excel → Load .xlsx file.',
+    'Fill in the sheets Items, Trucks, Orders, Trips (leave any you do not need empty), then in the app choose Menu → Import from Excel → Load .xlsx file.',
   'Cột có dấu * là bắt buộc. Xoá các dòng ví dụ trước khi nạp. Giữ nguyên dòng tiêu đề.':
-    'Columns marked * are required. Delete the example rows before loading. Keep the sheet names and header rows as they are (in Vietnamese).',
+    'Columns marked * are required. Delete the example rows before loading. Keep the sheet names and header rows as they are.',
+  'Đơn nhập vào (chưa thuộc chuyến nào) sẽ thêm vào {trip}.': 'Imported orders (not already in a trip) will be added to {trip}.',
   'Hướng dẫn': 'Guide',
   'malcargo-mau-nhap-du-lieu.xlsx': 'malcargo-import-template.xlsx',
 

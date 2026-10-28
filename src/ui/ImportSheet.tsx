@@ -2,18 +2,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Download, FileSpreadsheet, Upload, X } from 'lucide-react'
 import { useAllItems, useAllVehicles, useData } from '../data/store'
-import { SHEETS, downloadTemplate, parseImport, readWorkbook, sampleRows, splitPasted, type Rows, type SheetDef, type SheetKey } from '../data/importer'
-import { getLang, t } from '../i18n'
+import { SHEETS, colHead, downloadTemplate, parseImport, readWorkbook, sampleRows, splitPasted, type Rows, type SheetKey } from '../data/importer'
+import { t, tx } from '../i18n'
 import { Button, Sheet, Tabs, cx, fmtInt } from './kit'
 
 // "Đã nhập 3 mã hàng, 2 xe" — mỗi trang một cụm đếm (tiếng Anh chia số ít / nhiều)
 const COUNT: Record<SheetKey, string> = {
   items: '{n} mã hàng', vehicles: '{n} xe', orders: '{n} đơn hàng', trips: '{n} chuyến', // i18n-key
 }
-// Tiêu đề cột: tiếng Việt hiện đúng chữ trong file mẫu; tiếng Anh hiện nghĩa cột (`text` khi khác chữ dịch của tiêu đề)
-const colName = (c: SheetDef['cols'][number]) => (getLang() === 'vi' ? c.label : t(c.text ?? c.label))
 
-export function ImportSheet({ open, onClose, start = 'items', onDone }: { open: boolean; onClose: () => void; start?: SheetKey; onDone?: (msg: string) => void }) {
+/** `trip`: mở từ Bàn xếp xe — đơn nhập vào mà chưa thuộc chuyến nào (trang Chuyến không ghi) thì thêm vào chuyến này. */
+export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
+  open: boolean; onClose: () => void; start?: SheetKey; trip?: { id: string; name: string }; onDone?: (msg: string) => void
+}) {
   const items = useAllItems()
   const vehicles = useAllVehicles()
   const orders = useData(s => s.orders)
@@ -41,6 +42,11 @@ export function ImportSheet({ open, onClose, start = 'items', onDone }: { open: 
   }
   const save = () => {
     importBatch(res)
+    if (trip) {
+      const s = useData.getState(), cur = s.trips.find(x => x.id === trip.id)
+      const loose = res.orders.map(o => o.id).filter(id => !s.trips.some(x => x.orderIds.includes(id)))
+      if (cur && loose.length) s.upsertTrip({ ...cur, orderIds: [...cur.orderIds, ...loose] })
+    }
     const parts = SHEETS.filter(s => n[s.key]).map(s => t(COUNT[s.key], { n: fmtInt(n[s.key]) }))
     onDone?.(t('Đã nhập {list}', { list: parts.join(', ') }))
     onClose()
@@ -52,6 +58,7 @@ export function ImportSheet({ open, onClose, start = 'items', onDone }: { open: 
         <Button className="flex-1" onClick={onClose}>{t('Huỷ')}</Button>
         <Button variant="primary" className="flex-[2]" disabled={!total} onClick={save}>{total ? t('Nhập {n} dòng dữ liệu', { n: fmtInt(total) }) : t('Chưa có gì để nhập')}</Button>
       </div>}>
+      {trip && <p className="mb-3 rounded-md bg-brand-50 px-3 py-2 text-[13px] text-brand-900">{t('Đơn nhập vào (chưa thuộc chuyến nào) sẽ thêm vào {trip}.', { trip: tx(trip.name) })}</p>}
       <ol className="space-y-3">
         <li className="rounded-lg border border-slate-200 p-3">
           <div className="flex items-start gap-3">
@@ -93,7 +100,7 @@ export function ImportSheet({ open, onClose, start = 'items', onDone }: { open: 
           <div className="flex flex-wrap gap-1">
             {def.cols.map((c, i) => (
               <span key={c.label} className={cx('num rounded border px-1.5 py-0.5 text-[12px]', c.req ? 'border-brand-200 bg-brand-50 font-semibold text-brand-800' : 'border-slate-200 bg-slate-50 text-slate-700')}>
-                {String.fromCharCode(65 + i)} · {colName(c)}{c.req && ' *'}
+                {String.fromCharCode(65 + i)} · {colHead(c)}{c.req && ' *'}
               </span>
             ))}
           </div>
