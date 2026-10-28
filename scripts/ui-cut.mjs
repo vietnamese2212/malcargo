@@ -1,6 +1,7 @@
 // Chữ bị cắt "…": mở mọi màn + tấm phủ ở 1440 / 390 / 360 px, tìm ô truncate / ellipsis mà chữ dài hơn ô,
 // và trang tràn ngang. Chữ nội dung phải XUỐNG DÒNG, không cắt. Chạy: npm run build && node scripts/ui-cut.mjs
-import { launch, startPreview } from './ui-lib.mjs'
+import { T, TP, TX, UI_LANG, launch, startPreview } from './ui-lib.mjs'
+const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const DEVS = [
   { name: 'pc', viewport: { width: 1440, height: 900 } },
   { name: 'phone', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 },
@@ -45,21 +46,21 @@ for (const dev of DEVS) {
   const p = await (await b.newContext(dev)).newPage()
   await p.goto(srv.base + '#/trip/sample-t1', { waitUntil: 'networkidle' }); await p.waitForTimeout(3500)
   await scan(p, dev.name, 'Bàn xếp xe')
-  await p.getByRole('button', { name: /^Kết quả:/ }).click(); await p.waitForTimeout(200); await scan(p, dev.name, 'Khung tên mở'); await p.getByRole('button', { name: /^Kết quả:/ }).click()
-  await p.getByRole('button', { name: 'Sửa Sữa 180ml x48' }).first().click().catch(() => {}); await p.waitForTimeout(200); await scan(p, dev.name, 'Popup sửa mã từ dòng hàng'); await p.keyboard.press('Escape'); await p.waitForTimeout(150)
+  await p.getByRole('button', { name: new RegExp('^' + esc(TP('Kết quả: {head}. Bấm để xem chi tiết'))) }).click(); await p.waitForTimeout(200); await scan(p, dev.name, 'Khung tên mở'); await p.getByRole('button', { name: new RegExp('^' + esc(TP('Kết quả: {head}. Bấm để xem chi tiết'))) }).click()
+  await p.getByRole('button', { name: T('Sửa {name}', { name: TX('Sữa 180ml x48') }) }).first().click().catch(() => {}); await p.waitForTimeout(200); await scan(p, dev.name, 'Popup sửa mã từ dòng hàng'); await p.keyboard.press('Escape'); await p.waitForTimeout(150)
   // bấm dòng hàng = chỉ mã đó trên xe (nhãn "đang chỉ" ở đáy bản vẽ); bấm lại để bỏ chọn
-  await p.getByRole('button', { name: 'Sữa 180ml x48', exact: true }).first().click().catch(() => {}); await p.waitForTimeout(300); await scan(p, dev.name, 'Chọn mã trên xe'); await p.getByRole('button', { name: 'Sữa 180ml x48', exact: true }).first().click().catch(() => {})
-  await p.getByRole('button', { name: /Bảng đếm chân/ }).click(); await p.waitForTimeout(300); await scan(p, dev.name, 'Bảng đếm chân')
+  await p.getByRole('button', { name: TX('Sữa 180ml x48'), exact: true }).first().click().catch(() => {}); await p.waitForTimeout(300); await scan(p, dev.name, 'Chọn mã trên xe'); await p.getByRole('button', { name: TX('Sữa 180ml x48'), exact: true }).first().click().catch(() => {})
+  await p.getByRole('button', { name: new RegExp(esc(T('Bảng đếm chân'))) }).click(); await p.waitForTimeout(300); await scan(p, dev.name, 'Bảng đếm chân')
   await p.evaluate(() => window.scrollTo(0, 0))
-  await p.getByRole('button', { name: 'Đổi xe' }).click(); await p.waitForTimeout(500); await scan(p, dev.name, 'Bảng Thùng xe'); await p.keyboard.press('Escape'); await p.waitForTimeout(200)
-  await p.getByRole('button', { name: /^Chuyến đang mở/ }).click(); await p.waitForTimeout(200); await scan(p, dev.name, 'Chọn chuyến'); await p.keyboard.press('Escape')
+  await p.getByRole('button', { name: T('Đổi xe') }).click(); await p.waitForTimeout(500); await scan(p, dev.name, 'Bảng Thùng xe'); await p.keyboard.press('Escape'); await p.waitForTimeout(200)
+  await p.getByRole('button', { name: new RegExp('^' + esc(TP('Chuyến đang mở: {name}. Bấm để xem các chuyến'))) }).click(); await p.waitForTimeout(200); await scan(p, dev.name, 'Chọn chuyến'); await p.keyboard.press('Escape')
   for (const [label, tabs] of [['Mã hàng', ['Của tôi', 'Mẫu chung']], ['Xe', ['Xe của tôi', 'Mẫu chung']], ['Đơn hàng', []], ['Các chuyến', []], ['Tài khoản & dữ liệu', []], ['Nhập từ Excel', []]]) {
-    await p.getByRole('button', { name: 'Danh mục' }).click(); await p.waitForTimeout(200)
-    await p.getByRole('menu').or(p.locator('body')).getByRole('button', { name: label, exact: true }).last().click(); await p.waitForTimeout(500)
+    await p.getByRole('button', { name: T('Danh mục') }).click(); await p.waitForTimeout(200)
+    await p.getByRole('menu').or(p.locator('body')).getByRole('button', { name: T(label), exact: true }).last().click(); await p.waitForTimeout(500)
     await scan(p, dev.name, label)
-    for (const t of tabs) { const tb = p.locator('[role=dialog]').last().getByRole('button', { name: new RegExp('^' + t) }).or(p.locator('[role=dialog]').last().getByRole('tab', { name: new RegExp('^' + t) })); if (await tb.count()) { await tb.first().click(); await p.waitForTimeout(300); await scan(p, dev.name, `${label} · ${t}`) } }
-    if (label === 'Mã hàng') { await p.locator('[role=dialog]').last().getByText('Sữa chua chai 100ml x48').first().click().catch(e => console.log('!', e.message.slice(0, 60))); await p.waitForTimeout(300); await scan(p, dev.name, 'Form mã hàng'); await p.keyboard.press('Escape'); await p.waitForTimeout(200) }
-    if (label === 'Xe') { await p.locator('[role=dialog]').last().getByText('Xe pallet 15 tấn').first().click().catch(e => console.log('!', e.message.slice(0, 60))); await p.waitForTimeout(600); await scan(p, dev.name, 'Form xe'); await p.keyboard.press('Escape'); await p.waitForTimeout(200) }
+    for (const t of tabs) { const tb = p.locator('[role=dialog]').last().getByRole('button', { name: new RegExp('^' + esc(T(t))) }).or(p.locator('[role=dialog]').last().getByRole('tab', { name: new RegExp('^' + esc(T(t))) })); if (await tb.count()) { await tb.first().click(); await p.waitForTimeout(300); await scan(p, dev.name, `${label} · ${t}`) } }
+    if (label === 'Mã hàng') { await p.locator('[role=dialog]').last().getByText(TX('Sữa chua chai 100ml x48')).first().click().catch(e => console.log('!', e.message.slice(0, 60))); await p.waitForTimeout(300); await scan(p, dev.name, 'Form mã hàng'); await p.keyboard.press('Escape'); await p.waitForTimeout(200) }
+    if (label === 'Xe') { await p.locator('[role=dialog]').last().getByText(TX('Xe pallet 15 tấn')).first().click().catch(e => console.log('!', e.message.slice(0, 60))); await p.waitForTimeout(600); await scan(p, dev.name, 'Form xe'); await p.keyboard.press('Escape'); await p.waitForTimeout(200) }
     await p.keyboard.press('Escape'); await p.waitForTimeout(250)
   }
   await p.goto(srv.base + '#/order/sample-o2', { waitUntil: 'networkidle' }); await p.waitForTimeout(800); await scan(p, dev.name, 'Trang đơn')
@@ -70,5 +71,5 @@ const byText = new Map()
 for (const [k, d] of found) { const [where, text] = k.split(' :: '); const e = byText.get(text) ?? { where: new Set(), dev: new Set() }; e.where.add(where); d.forEach(x => e.dev.add(x)); byText.set(text, e) }
 const rows = [...found.entries()]
 for (const [text, e] of [...byText].sort((a, b) => [...a[1].where][0].localeCompare([...b[1].where][0]))) console.log(`[${[...e.dev].join(',')}] ${text}   ←  ${[...e.where].slice(0, 3).join(' | ')}${e.where.size > 3 ? ' …' : ''}`)
-console.log(rows.length ? `\n${rows.length} chỗ bị cắt / tràn ngang — chữ nội dung phải xuống dòng` : 'XANH — không chữ nào bị cắt, không tràn ngang')
+console.log(rows.length ? `\n${rows.length} chỗ bị cắt / tràn ngang — chữ nội dung phải xuống dòng` : `XANH [${UI_LANG}] — không chữ nào bị cắt, không tràn ngang`)
 process.exit(rows.length ? 1 : 0)

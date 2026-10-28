@@ -8,6 +8,7 @@ import type { PlanGroupMeta } from '../engine/plan'
 import { buildTruck, type TruckHandle } from './truckModel'
 import { buildCargo, type CargoHandle } from './cargo'
 import { concreteTexture } from './textures'
+import { t } from '../i18n'
 
 export type ViewPreset = 'overview' | 'rear' | 'top' | 'side'
 
@@ -198,7 +199,7 @@ export default function TruckScene(p: TruckSceneProps) {
     <div ref={host} className={`relative overflow-hidden ${p.className ?? ''}`}>
       {noGL && (
         <div className="absolute inset-0 grid place-items-center p-6 text-center text-sm text-slate-500">
-          Trình duyệt này không hiển thị được 3D. Số liệu và bảng đếm chân vẫn dùng bình thường.
+          {t('Trình duyệt này không hiển thị được 3D. Số liệu và bảng đếm chân vẫn dùng bình thường.')}
         </div>
       )}
     </div>

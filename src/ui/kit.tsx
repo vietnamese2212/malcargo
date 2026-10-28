@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState, type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, X } from 'lucide-react'
+import { numLocale, t } from '../i18n'
 
 export const cx = (...a: (string | false | null | undefined)[]) => a.filter(Boolean).join(' ')
 
@@ -287,7 +288,7 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, wide }
             <h2 className="text-lg font-semibold leading-snug text-slate-900">{title}</h2>
             {subtitle && <p className="mt-0.5 text-[13px] text-slate-600">{subtitle}</p>}
           </div>
-          <IconButton label="Đóng" onClick={onClose} className="-mr-2"><X size={20} /></IconButton>
+          <IconButton label={t('Đóng')} onClick={onClose} className="-mr-2"><X size={20} /></IconButton>
         </div>
         <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
         {footer && <div className="pb-safe border-t border-slate-200 bg-white px-5 py-3">{footer}</div>}
@@ -344,7 +345,7 @@ export function MenuItem({ icon, children, onClick, danger, disabled }: { icon?:
 }
 
 /** Hộp xác nhận nhỏ giữa màn — chỉ dùng cho xoá / thay dữ liệu. */
-export function Confirm({ open, title, body, okText = 'Xoá', danger = true, onOk, onClose }: {
+export function Confirm({ open, title, body, okText = t('Xoá'), danger = true, onOk, onClose }: {
   open: boolean; title: string; body?: ReactNode; okText?: string; danger?: boolean; onOk: () => void; onClose: () => void
 }) {
   if (!open) return null
@@ -355,7 +356,7 @@ export function Confirm({ open, title, body, okText = 'Xoá', danger = true, onO
         <h3 className="text-base font-semibold text-slate-900">{title}</h3>
         {body && <div className="mt-1.5 text-sm text-slate-700">{body}</div>}
         <div className="mt-5 flex gap-2">
-          <Button className="flex-1" onClick={onClose}>Huỷ</Button>
+          <Button className="flex-1" onClick={onClose}>{t('Huỷ')}</Button>
           <Button className="flex-1" variant={danger ? 'danger' : 'primary'} onClick={() => { onOk(); onClose() }}>{okText}</Button>
         </div>
       </div>
@@ -377,8 +378,8 @@ export function Empty({ icon, title, body, action }: { icon: ReactNode; title: s
 }
 
 // ── định dạng số ─────────────────────────────────────────────────────────────
-export const fmtInt = (n: number) => Math.round(n).toLocaleString('vi-VN')
-export const fmtDec = (n: number, d = 1) => n.toLocaleString('vi-VN', { maximumFractionDigits: d })
+export const fmtInt = (n: number) => Math.round(n).toLocaleString(numLocale())
+export const fmtDec = (n: number, d = 1) => n.toLocaleString(numLocale(), { maximumFractionDigits: d })
 export const fmtDims = (l: number, w: number, h: number) => `${fmtInt(l)} × ${fmtInt(w)} × ${fmtInt(h)}`
 export const fmtM3 = (m3: number) => `${fmtDec(m3, m3 < 10 ? 2 : 1)} m³`
-export const fmtKgShort = (kg: number) => (kg >= 1000 ? `${fmtDec(kg / 1000, 2)} tấn` : `${fmtInt(kg)} kg`)
+export const fmtKgShort = (kg: number) => (kg >= 1000 ? `${fmtDec(kg / 1000, 2)} ${t('tấn')}` : `${fmtInt(kg)} kg`)

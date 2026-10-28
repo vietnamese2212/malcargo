@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import type { Item, Order, PalletSettings, Trip, Vehicle } from './types'
+import { t } from '../i18n'
 import { ADMIN_ITEMS, ADMIN_VEHICLES, DEFAULT_PALLET_SETTINGS, SAMPLE_ORDERS, SAMPLE_TRIPS } from './catalog'
 
 export const newId = () =>
@@ -225,11 +226,11 @@ export function exportBackup(): BackupData {
 
 export function parseBackup(text: string): BackupData | string {
   let d: unknown
-  try { d = JSON.parse(text) } catch { return 'File không đọc được (không phải file sao lưu của app).' }
+  try { d = JSON.parse(text) } catch { return t('File không đọc được (không phải file sao lưu của app).') }
   const b = d as Partial<BackupData>
   if (!b || b.app !== 'malcargo' || !Array.isArray(b.items) || !Array.isArray(b.vehicles)
     || !Array.isArray(b.orders) || !Array.isArray(b.trips) || !b.pallet)
-    return 'File không phải bản sao lưu của MalCargo.'
+    return t('File không phải bản sao lưu của MalCargo.')
   return b as BackupData
 }
 

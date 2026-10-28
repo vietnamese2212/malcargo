@@ -8,6 +8,7 @@ import OrderPage from './pages/OrderPage'
 import ItemsPage from './pages/ItemsPage'
 import VehiclesPage from './pages/VehiclesPage'
 import AccountPage from './pages/AccountPage'
+import { useLang } from './i18n'
 
 /** Mở app = vào thẳng bàn xếp xe của chuyến sửa gần nhất; chưa có chuyến nào thì tạo sẵn một chuyến trống. */
 function Home() {
@@ -28,6 +29,9 @@ function Home() {
 
 export default function App() {
   const route = useRoute()
+  // đổi ngôn ngữ ⇒ dựng lại cả app (key) để mọi chữ, kể cả chữ tính sẵn trong useMemo, theo ngôn ngữ mới
+  const lang = useLang(s => s.lang)
+  useEffect(() => { document.documentElement.lang = lang }, [lang])
   // Chuyến mẫu vừa tách thành chuyến mới: GIỮ nguyên màn chuyến (bảng đang mở, ô đang gõ), chỉ đổi id;
   // mọi lần đổi chuyến khác thì dựng màn mới như thường.
   const rid = route.page === 'trip' ? route.id : ''
@@ -38,7 +42,7 @@ export default function App() {
     prev.current = rid
   }
   return (
-    <Shell>
+    <Shell key={lang}>
       {route.page === 'trips' && <Home />}
       {route.page === 'trip' && <TripPage key={tripKey.current} id={route.id} />}
       {route.page === 'orders' && <OrdersPage />}
