@@ -26,7 +26,7 @@ import { Logo, PageHeader, Panel } from '../ui/Shell'
 import { TruckGlyph } from './VehiclesPage'
 import { VehicleSheet } from '../ui/VehicleSheet'
 import { ItemSheet } from '../ui/ItemSheet'
-import { ExplainSheet } from './TripExplain'
+import { ExplainPopup } from './TripExplain'
 import { LangSwitch } from '../ui/LangSwitch'
 import { t, tx } from '../i18n'
 import { ItemPicker } from '../ui/ItemPicker'
@@ -86,7 +86,8 @@ export default function TripPage({ id }: { id: string }) {
   const [sel, setSel] = useState<{ orderId: string; itemId?: string } | null>(null)   // chọn đơn / mã ở cột trái
   const [view, setView] = useState<{ preset: ViewPreset; n: number }>({ preset: 'overview', n: 0 })
   const [walls, setWalls] = useState<'open' | 'glass'>('open')
-  const [open, setOpen] = useState({ cargo: true, explain: false, count: false })
+  const [open, setOpen] = useState({ cargo: true, count: false })
+  const [explain, setExplain] = useState(false)   // popup bảng diễn giải từng mã (nút trên khung 3D)
   const [panel, setPanel] = useState<PanelName | null>(null)
   const [importing, setImporting] = useState(false)
   const [unlink, setUnlink] = useState<Order | null>(null)
@@ -272,7 +273,16 @@ export default function TripPage({ id }: { id: string }) {
                 orders={tripOrders.map(o => ({ name: o.name, cartons: orderTotals(o.lines, pallet).cartons }))}
                 sug={suggestion && vehicle && suggestion !== vehicle.id ? vehicles.find(v => v.id === suggestion) : undefined}
                 noneFits={!suggestion} onPick={vid => { pickVehicle(vid); setToast(t('Đã đổi xe')) }} />
-              <ViewMenu view={view.preset} walls={walls} onView={p => setView(v => ({ preset: p, n: v.n + 1 }))} onWalls={() => setWalls(w => (w === 'open' ? 'glass' : 'open'))} />
+              {/* điện thoại: nút diễn giải chỉ biểu tượng, xếp dưới nút góc nhìn — dải số liệu bên trái cần đủ bề ngang */}
+              <div className="flex shrink-0 flex-col-reverse items-end gap-2 sm:flex-row">
+                {r && r.plan.placed.length > 0 && (
+                  <button type="button" onClick={() => setExplain(true)} aria-haspopup="dialog" aria-label={t('Diễn giải')} title={t('Cao bao nhiêu, lẻ bao nhiêu — tính trước khi lên hàng')}
+                    className="pointer-events-auto flex h-9 min-w-9 items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-2 text-[12px] font-semibold text-slate-800 hover:bg-slate-50">
+                    <Table2 size={16} /><span className="max-sm:hidden">{t('Diễn giải')}</span>
+                  </button>
+                )}
+                <ViewMenu view={view.preset} walls={walls} onView={p => setView(v => ({ preset: p, n: v.n + 1 }))} onWalls={() => setWalls(w => (w === 'open' ? 'glass' : 'open'))} />
+              </div>
             </div>
 
             {/* đáy bản vẽ, xếp chồng không đè nhau: thông báo · nhãn đơn / mã đang chọn · thanh bước xếp */}
@@ -391,15 +401,6 @@ export default function TripPage({ id }: { id: string }) {
             )}
           </Block>
 
-          <Block title={t('Diễn giải từng mã')} open={open.explain} onToggle={() => setOpen(o => ({ ...o, explain: !o.explain }))}
-            summary={t('Cao bao nhiêu, lẻ bao nhiêu — tính trước khi lên hàng')}>
-            <ExplainSheet r={r} vehicle={vehicle} items={items} colors={colors} tripName={trip.name} focus={shown} onToast={setToast}
-              onFocus={gs => {
-                setSel(null)
-                setFocus(f => (gs.length && f && f.size === gs.length && gs.every(g => f.has(g)) ? null : gs.length ? new Set(gs) : null))
-              }} />
-          </Block>
-
           <Block title={t('Bảng đếm chân')} open={open.count} onToggle={() => setOpen(o => ({ ...o, count: !o.count }))}
             summary={r ? t('{n} dòng, thứ tự xếp từ cabin ra cửa', { n: r.count.length }) : t('Có khi đã xếp hàng lên xe')}>
             <CountSheet r={r} colors={colors} focus={shown} tripName={trip.name} vehicle={vehicle}
@@ -415,6 +416,7 @@ export default function TripPage({ id }: { id: string }) {
         </aside>
       </div>
 
+      <ExplainPopup open={explain} onClose={() => setExplain(false)} r={r} vehicle={vehicle} items={items} colors={colors} tripName={trip.name} onToast={setToast} />
       <VehicleSheet open={!!editVehicle} vehicle={editVehicle?.v ?? null} onClose={() => setEditVehicle(null)}
         onSaved={nv => { if (!editVehicle?.v || editVehicle.v.id === trip.vehicleId) pickVehicle(nv.id) }} />
       <OrderSheet order={rawOrders.find(o => o.id === editOrder) ?? null} onClose={() => setEditOrder(null)}

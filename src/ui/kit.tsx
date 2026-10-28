@@ -264,7 +264,7 @@ export function LiveNum({ value, onCommit, valid = n => n > 0, suffix, label, cl
 
 /** Tấm trượt: điện thoại trượt từ đáy, máy tính trượt từ lề phải. Header + thân cuộn + chân dính đáy. */
 export function Sheet({ open, onClose, title, subtitle, children, footer, wide }: {
-  open: boolean; onClose: () => void; title: ReactNode; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode; wide?: boolean
+  open: boolean; onClose: () => void; title: ReactNode; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode; wide?: boolean | 'table'
 }) {
   useEffect(() => {
     if (!open) return
@@ -280,7 +280,7 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, wide }
       <div className="absolute inset-0 bg-navy-950/45" style={{ animation: 'fade .15s' }} onClick={onClose} />
       <div role="dialog" aria-modal="true" data-sheet
         className={cx('relative flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-white shadow-pop sm:h-full sm:max-h-none sm:rounded-none sm:border-l sm:border-slate-200',
-          wide ? 'sm:max-w-[560px]' : 'sm:max-w-[460px]')}
+          wide === 'table' ? 'sm:max-w-[780px]' : wide ? 'sm:max-w-[560px]' : 'sm:max-w-[460px]')}
         style={{ animation: `${window.innerWidth < 640 ? 'sheet-up' : 'sheet-left'} .2s ease-out` }}>
         <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-slate-300 sm:hidden" />
         <div className="flex items-start gap-3 border-b border-slate-200 px-5 pb-3 pt-2 sm:py-4">
