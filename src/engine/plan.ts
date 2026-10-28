@@ -97,7 +97,7 @@ function cutFree(free: Rect[], p: Rect): Rect[] {
  *   3. trên cùng: hàng nhẹ — lớp đủ rồi phần lẻ. Chỉ LỚP TRÊN CÙNG được thiếu.
  *  Lớp cao bằng thùng cao nhất trong lớp. Thùng lớp hỗn hợp nằm gọn trong chân, cụm thùng căn giữa.
  *  Toạ độ theo góc KHỐI (chân + phần chờm — khớp `palletFoot` của lõi); `deck` = chỗ tấm gỗ trong khối. */
-function packPallet(spec: PalletSpec, layers: PalletLayer[], light: Set<string>): { cartons: PalletCarton[]; deck: { x: number; y: number; l: number; w: number } } {
+function packPallet(spec: PalletSpec, layers: PalletLayer[], light: Set<string>, maxLayers: Map<string, number>): { cartons: PalletCarton[]; deck: { x: number; y: number; l: number; w: number } } {
   const L = spec.l, W = spec.w
   type Run = PalletLayer & { left: number }
   const runs: Run[] = []
@@ -106,73 +106,159 @@ function packPallet(spec: PalletSpec, layers: PalletLayer[], light: Set<string>)
     if (last && last.itemId === ly.itemId && last.l === ly.l && last.w === ly.w && last.h === ly.h && last.per === ly.per) { last.n += ly.n; last.left += ly.n }
     else runs.push({ ...ly, left: ly.n })
   }
-  type Box = Omit<PalletCarton, 'z'>
+  // k = số lớp CÙNG MÃ chồng thẳng tới thùng này (tính cả nó) — không được vượt số lớp tối đa của mã
+  type Box = Omit<PalletCarton, 'z'> & { k: number }
   const levels: Box[][] = []
   const heavy = runs.filter(r => !light.has(r.itemId)), lite = runs.filter(r => light.has(r.itemId))
+  const patOf = (r: Run, n = r.per) => runPattern(spec, { n, per: r.per, l: r.l, w: r.w }) ?? []
+  // khung KHỐI = chân + phần chờm của mẫu từng đợt (khớp `palletFoot` của lõi) — ô mẫu được chờm trong khung này
+  let fx0 = 0, fy0 = 0, fx1 = L, fy1 = W
+  for (const r of runs) for (const s of patOf(r, Math.min(r.n, r.per))) { fx0 = Math.min(fx0, s.x); fy0 = Math.min(fy0, s.y); fx1 = Math.max(fx1, s.x + s.l); fy1 = Math.max(fy1, s.y + s.w) }
+  const inFoot = (s: Rect) => s.x >= fx0 && s.y >= fy0 && s.x + s.l <= fx1 && s.y + s.w <= fy1
+  const inDeck = (s: Rect) => s.x >= 0 && s.y >= 0 && s.x + s.l <= L && s.y + s.w <= W
+  const hit = (a: Rect, b: Rect) => a.x < b.x + b.l && b.x < a.x + a.l && a.y < b.y + b.w && b.y < a.y + a.w
   // CHỖ ĐỠ: thùng chỉ đặt nơi ≥ 70% đáy nằm trên lớp dưới (thùng lớp dưới thấp hơn mặt lớp ≤ 35mm vẫn tính — lớp
   // trộn thùng cao 130 với 100); lớp đầu tiên đỡ bằng mặt pallet. Không thùng nào treo trên ô trống của lớp dưới.
+  // Riêng ô của MẪU LỚP ĐỦ (thùng chờm mép theo quy cách — 430×250 11/lớp đặt lên lớp 10/lớp gọn trong chân):
+  // đỡ ≥ 50% mà TRỌNG TÂM thùng nằm trên thùng dưới cũng được (như chính pallet chẵn của mã đó).
   const MIN_SUP = 0.7, PIT = 35
-  const supportOf = (p: Rect) => {
-    const below = levels[levels.length - 1]
+  const topOf = (below: Box[]) => { const t = Math.max(...below.map(b => b.h)); return below.filter(b => b.h >= t - PIT) }
+  const supportOn = (below: Box[] | undefined, p: Rect) => {
     if (!below) return overlap(p, { x: 0, y: 0, l: L, w: W }) / (p.l * p.w)
-    const top = Math.max(...below.map(b => b.h))
-    return below.filter(b => b.h >= top - PIT).reduce((s, b) => s + overlap(p, b), 0) / (p.l * p.w)
+    return topOf(below).reduce((s, b) => s + overlap(p, b), 0) / (p.l * p.w)
   }
-  const full = (r: Run) => {
-    const pat = runPattern(spec, { n: r.per, per: r.per, l: r.l, w: r.w }) ?? []
-    while (pat.length && r.left >= r.per && pat.every(p => supportOf(p) >= MIN_SUP)) {
-      levels.push(pat.map(p => ({ itemId: r.itemId, ...p, h: r.h }))); r.left -= r.per
+  const steady = (below: Box[] | undefined, p: Rect) => {
+    const s = supportOn(below, p)
+    if (s >= MIN_SUP) return true
+    if (s < 0.5) return false
+    const cx = p.x + p.l / 2, cy = p.y + p.w / 2
+    return (below ? topOf(below) : [{ x: 0, y: 0, l: L, w: W }]).some(b => cx > b.x && cx < b.x + b.l && cy > b.y && cy < b.y + b.w)
+  }
+  const supportOf = (p: Rect) => supportOn(levels[levels.length - 1], p)
+  const maxOf = (id: string) => maxLayers.get(id) ?? Infinity
+  const ownOn = (below: Box[] | undefined, p: Rect, id: string) => 1 + Math.max(0, ...(below ?? []).filter(b => b.itemId === id && overlap(b, p) > 0).map(b => b.k))
+  // mẫu lớp và 3 bản lật (mẫu căn giữa chân ⇒ lật vẫn nằm đúng khung) — chọn bản khớp lớp dưới
+  const flips = (pat: Rect[]): Rect[][] => {
+    const fx = (p: Rect) => ({ ...p, x: L - p.x - p.l }), fy = (p: Rect) => ({ ...p, y: W - p.y - p.w })
+    return [pat, pat.map(fx), pat.map(fy), pat.map(p => fy(fx(p)))]
+  }
+  // `bridge` (chỉ hàng nhẹ, khi mẫu đủ không đặt trọn được): thùng được GÁC qua khe lớp ghép dưới (đỡ ≥ 30%) —
+  // thạch túi nhẹ, thực tế vẫn xếp đủ lớp như vậy; không thế thì lớp nào cũng hụt ⇒ chồng quá số lớp thành tháp
+  const full = (r: Run, bridge = false) => {
+    const pats = flips(patOf(r))
+    while (pats[0].length && r.left >= r.per) {
+      const below = levels[levels.length - 1]
+      const best = pats.filter(p => p.every(q => (bridge ? supportOn(below, q) >= 0.3 : steady(below, q)) && ownOn(below, q, r.itemId) <= maxOf(r.itemId)))
+        .map(p => { const s = p.map(q => supportOn(below, q)); return { p, min: Math.min(...s), s: s.reduce((t, v) => t + v, 0) } })
+        .sort((a, b) => b.min - a.min || b.s - a.s)[0]
+      if (!best) break
+      levels.push(best.p.map(p => ({ itemId: r.itemId, ...p, h: r.h, k: ownOn(below, p, r.itemId) }))); r.left -= r.per
     }
   }
-  // một lớp hỗn hợp: `group` theo thứ tự — mã đầu trước, rồi mã cùng chiều cao, rồi mã thấp / cao dần.
-  // `min` = ngưỡng chỗ đỡ (lớp nào không đặt nổi thùng nào thì hạ về 0 để không bỏ sót thùng)
-  const mixed = (group: Run[], fillers: () => Run[], min = MIN_SUP) => {
-    let free: Rect[] = [{ x: 0, y: 0, l: L, w: W }]
-    const lv: Box[] = []
-    const ok = (p: Rect) => supportOf(p) >= min
-    const below = levels[levels.length - 1] ?? []
-    const put = (r: Run) => {
-      while (r.left > 0) {
-        const p = fitIn(free, r.l, r.w, ok, below)
-        if (!p) break
-        lv.push({ itemId: r.itemId, ...p, h: r.h }); free = cutFree(free, p); r.left--
+  // MỘT LỚP GHÉP (phần lẻ không đủ lớp, user 28/10 tối: "xếp như này là hỏng — thực tế không bao giờ xếp vậy, sai
+  // cả nguyên tắc số lớp": lớp đáy chỉ vài thùng lẻ + thạch túi lấp lỗ chỗ ⇒ mẫu lớp đủ của thạch không đặt trọn
+  // lên trên, lớp nào cũng hụt 5 thùng ⇒ thạch chồng 11 lớp thành tháp, đỉnh lởm chởm). Nay THỬ nhiều cách đặt
+  // rồi chọn: (1) đặt được nhiều thùng của nhóm nhất; (2) lớp kế (mẫu của mã sẽ xếp tiếp) ít ô thiếu đỡ nhất;
+  // (3) phủ kín nhất; (4) gọn nhất. Cách đặt mã đầu: ô MẪU LỚP ĐỦ (mã cùng cỡ đáy chia nhau — lớp ghép vẫn đủ
+  // 10 thùng 420×255), bỏ trống dồn về một cạnh; hoặc MẪU GỌN đúng số thùng, căn giữa / dồn một góc. Hàng lấp
+  // (hàng nhẹ khi hàng thường đã hết) đặt TRƯỚC vào đúng ô mẫu lớp đủ của nó (lớp trên chồng thẳng cột), rồi mới
+  // lấp chỗ hở. Mỗi cột thùng cùng mã không quá SỐ LỚP TỐI ĐA của mã (`k`) — lớp lẻ trên cùng tránh cột đã đủ.
+  // `min` = ngưỡng chỗ đỡ, `free` = bỏ giới hạn số lớp (lớp nào không đặt nổi thùng nào thì nới dần để không sót thùng)
+  const mixed = (group: Run[], fillers: (left: Map<Run, number>) => Run[], min = MIN_SUP, loose = false) => {
+    const below = levels[levels.length - 1]
+    const lead = group.find(r => r.left > 0)!
+    const same = (r: Run) => (r.l === lead.l && r.w === lead.w) || (r.l === lead.w && r.w === lead.l)
+    const near = (rs: Run[], left: Map<Run, number>) => rs.filter(r => left.get(r)! > 0).sort((a, b) => Math.abs(a.h - lead.h) - Math.abs(b.h - lead.h))
+    const okFor = (r: Run) => (p: Rect) => supportOn(below, p) >= min && (loose || ownOn(below, p, r.itemId) <= maxOf(r.itemId))
+    const k = Math.min(lead.per, group.filter(r => r.left > 0 && same(r)).reduce((s, r) => s + r.left, 0))
+    const fullP = patOf(lead).filter(inDeck)
+    const compact = patOf(lead, k)
+    const toCorner = (pat: Rect[], cx: number, cy: number) => {
+      if (!pat.length) return pat
+      const x0 = Math.min(...pat.map(s => s.x)), x1 = Math.max(...pat.map(s => s.x + s.l))
+      const y0 = Math.min(...pat.map(s => s.y)), y1 = Math.max(...pat.map(s => s.y + s.w))
+      const dx = cx ? Math.max(0, L - x1) : -Math.max(0, x0), dy = cy ? Math.max(0, W - y1) : -Math.max(0, y0)
+      return pat.map(s => ({ ...s, x: s.x + dx, y: s.y + dy }))
+    }
+    const orders: ((a: Rect, b: Rect) => number)[] = [(a, b) => a.y - b.y || a.x - b.x, (a, b) => b.y - a.y || b.x - a.x, (a, b) => a.x - b.x || a.y - b.y, (a, b) => b.x - a.x || b.y - a.y]
+    const slotSets = new Map<string, Rect[]>()
+    for (const s of [...orders.map(o => [...fullP].sort(o)), compact, ...[[0, 0], [1, 0], [0, 1], [1, 1]].map(([a, b]) => toCorner(compact, a, b))]) {
+      const ok = s.filter(p => inFoot(p) && supportOn(below, p) >= min)
+      slotSets.set(JSON.stringify(ok.map(p => [p.x, p.y, p.l])), ok)
+    }
+    const sim = (slots: Rect[], align: Rect[] | null | 'none') => {
+      const left = new Map(runs.map(r => [r, r.left]))
+      let free: Rect[] = [{ x: 0, y: 0, l: L, w: W }]
+      const lv: Box[] = []
+      const add = (r: Run, p: Rect) => { lv.push({ itemId: r.itemId, ...p, h: r.h, k: ownOn(below, p, r.itemId) }); free = cutFree(free, p); left.set(r, left.get(r)! - 1) }
+      const put = (r: Run) => { const ok = okFor(r); while (left.get(r)! > 0) { const p = fitIn(free, r.l, r.w, ok, below); if (!p) break; add(r, p) } }
+      let sl = [...slots]
+      for (const r of [lead, ...near(group, left).filter(r => r !== lead && same(r))]) {
+        const ok = okFor(r)
+        sl = sl.filter(s => { if (left.get(r)! > 0 && ok(s)) { add(r, s); return false } return true })
+      }
+      for (const r of near(group, left)) put(r)
+      const fs = align === 'none' ? [] : near(fillers(left), left)
+      for (const r of fs) {
+        const ok = okFor(r)
+        if (align && align !== 'none' && r === fs[0]) for (const p of align) if (left.get(r)! > 0 && inDeck(p) && ok(p) && !lv.some(b => hit(b, p))) add(r, p)
+        put(r)
+      }
+      return { lv, left }
+    }
+    type Cand = ReturnType<typeof sim> & { key: number[] }
+    const cands: Cand[] = []
+    for (const slots of slotSets.values()) {
+      const probe = sim(slots, 'none')
+      const f0 = near(fillers(probe.left), probe.left)[0]
+      const aligns: (Rect[] | null | 'none')[] = f0 ? ['none', null, ...flips(patOf(f0, Math.min(f0.per, f0.left)))] : ['none']
+      for (const a of aligns) {
+        const c = a === 'none' ? probe : sim(slots, a)
+        if (!c.lv.length) continue
+        const placed = group.reduce((s, r) => s + r.left - c.left.get(r)!, 0)
+        // lớp kế: mã nặng còn ⇒ chưa biết mẫu; hết ⇒ mẫu của mã nhẹ đầu tiên còn thùng — tổng phần THIẾU ĐỠ của các ô
+        // (dưới 70%) ở bản lật tốt nhất; ô vượt số lớp tính như hẫng hẳn
+        const nx = group.some(r => c.left.get(r)! > 0 && !light.has(r.itemId)) ? null : runs.find(r => light.has(r.itemId) && c.left.get(r)! > 0)
+        const bad = nx ? Math.min(...flips(patOf(nx, Math.min(nx.per, c.left.get(nx)!)))
+          .map(p => p.reduce((t, q) => t + (ownOn(c.lv, q, nx.itemId) > maxOf(nx.itemId) ? 1 : Math.max(0, MIN_SUP - supportOn(c.lv, q))), 0))) : 0
+        const area = c.lv.reduce((s, b) => s + overlap(b, { x: 0, y: 0, l: L, w: W }), 0)
+        const bx = (Math.max(...c.lv.map(b => b.x + b.l)) - Math.min(...c.lv.map(b => b.x))) * (Math.max(...c.lv.map(b => b.y + b.w)) - Math.min(...c.lv.map(b => b.y)))
+        cands.push({ ...c, key: [-placed, bad, -area, bx] })
       }
     }
-    const lead = group.find(r => r.left > 0)!
-    const near = (rs: Run[]) => rs.filter(r => r.left > 0).sort((a, b) => Math.abs(a.h - lead.h) - Math.abs(b.h - lead.h))
-    // ô của MẪU LỚP ĐỦ của mã đầu (trong chân): mã đầu + các mã CÙNG CỠ ĐÁY thùng chia nhau các ô này — lớp ghép
-    // vẫn đủ 10 thùng 420×255 như lớp một mã (xếp tự do chỉ được 8)
-    const same = (r: Run) => (r.l === lead.l && r.w === lead.w) || (r.l === lead.w && r.w === lead.l)
-    const slots = (runPattern(spec, { n: lead.per, per: lead.per, l: lead.l, w: lead.w }) ?? [])
-      .filter(s => s.x >= 0 && s.y >= 0 && s.x + s.l <= L && s.y + s.w <= W && ok(s)).sort((a, b) => a.y - b.y || a.x - b.x)
-    for (const r of [lead, ...near(group).filter(same)]) {
-      while (r.left > 0 && slots.length) { const s = slots.shift()!; lv.push({ itemId: r.itemId, ...s, h: r.h }); free = cutFree(free, s); r.left-- }
-    }
-    for (const r of near(group)) put(r)
-    for (const r of near(fillers())) put(r)
-    if (!lv.length) return false
-    // cụm thùng dời về GIỮA chân (thùng thừa không nằm mép) — xa nhất mà mọi thùng vẫn đủ chỗ đỡ
+    if (!cands.length) return false
+    const pick = cands.reduce((a, b) => { for (let i = 0; i < a.key.length; i++) if (a.key[i] !== b.key[i]) return b.key[i] < a.key[i] ? b : a; return a })
+    for (const r of runs) r.left = pick.left.get(r)!
+    const lv = pick.lv
+    // lớp TRÊN CÙNG (không còn gì xếp lên): cụm thùng dời về GIỮA chân (thùng thừa không nằm mép) — xa nhất mà mọi
+    // thùng vẫn đủ chỗ đỡ. Lớp còn hàng đè lên thì giữ nguyên chỗ (đúng ô mẫu lớp trên)
+    if (runs.some(r => r.left > 0)) { levels.push(lv); return true }
     const cx = Math.floor((L - Math.min(...lv.map(b => b.x)) - Math.max(...lv.map(b => b.x + b.l))) / 2)
     const cy = Math.floor((W - Math.min(...lv.map(b => b.y)) - Math.max(...lv.map(b => b.y + b.w))) / 2)
     const shift = (f: number) => lv.map(b => ({ ...b, x: b.x + Math.round(cx * f), y: b.y + Math.round(cy * f) }))
     const base = lv.map(supportOf)
-    const f = [1, 0.75, 0.5, 0.25].find(k => shift(k).every((b, i) => supportOf(b) >= Math.min(min, base[i]))) ?? 0
-    levels.push(shift(f))
+    const f = [1, 0.75, 0.5, 0.25].find(k => shift(k).every((b, i) => supportOf(b) >= Math.min(min, base[i]) && (loose || ownOn(below, b, b.itemId) <= maxOf(b.itemId)))) ?? 0
+    levels.push(shift(f).map(b => ({ ...b, k: ownOn(below, b, b.itemId) })))
     return true
   }
-  for (const r of heavy) full(r)
+  // từng nhóm: lớp đủ của từng mã (mẫu đặt trọn được) rồi lớp ghép phần lẻ, lặp tới hết
+  const stage = (group: Run[], fillers: (left: Map<Run, number>) => Run[], bridge = false) => {
+    while (group.some(r => r.left > 0)) {
+      for (const r of group) { full(r); if (bridge) full(r, true) }
+      if (!group.some(r => r.left > 0)) break
+      if (!(mixed(group, fillers) || mixed(group, fillers, 0) || mixed(group, fillers, 0, true))) break
+    }
+  }
   // hàng thường hết trong lớp này thì hàng nhẹ mới được lấp (không để hàng thường đè lên hàng nhẹ)
-  const liteIfDone = () => (heavy.some(r => r.left > 0) ? [] : lite)
-  while (heavy.some(r => r.left > 0) && (mixed(heavy, liteIfDone) || mixed(heavy, liteIfDone, 0))) { /* lớp kế */ }
-  for (const r of lite) full(r)
-  while (lite.some(r => r.left > 0) && (mixed(lite, () => []) || mixed(lite, () => [], 0))) { /* lớp kế */ }
+  stage(heavy, left => (heavy.some(r => left.get(r)! > 0) ? [] : lite))
+  stage(lite, () => [], true)
 
-  let x0 = 0, y0 = 0, x1 = L, y1 = W
+  let x0 = fx0, y0 = fy0, x1 = fx1, y1 = fy1
   for (const b of levels.flat()) { x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); x1 = Math.max(x1, b.x + b.l); y1 = Math.max(y1, b.y + b.w) }
   const out: PalletCarton[] = []
   let z = 0
   for (const lv of levels) {
-    for (const b of lv) out.push({ ...b, x: b.x - x0, y: b.y - y0, z })
+    for (const b of lv) out.push({ itemId: b.itemId, x: b.x - x0, y: b.y - y0, z, l: b.l, w: b.w, h: b.h })
     z += Math.max(...lv.map(b => b.h))
   }
   return { cartons: out, deck: { x: -x0, y: -y0, l: L, w: W } }
@@ -329,10 +415,11 @@ export function computeTrip(input: TripInput): TripResult {
       warnings.push(`Chưa khai số thùng/pallet: ${[...new Set(missing.map(g => g.label))].join(', ')} — đang tạm tính mỗi mã 1 pallet.`) // i18n-ok
     const srcByKey = new Map(toPal.map(g => [g.key, g]))
     const lightIds = new Set(allLines.filter(l => l.item.light).map(l => l.item.id))
+    const maxLayers = new Map(allLines.filter(l => l.item.maxLayers).map(l => [l.item.id, l.item.maxLayers!]))
     const palGroups: G[] = res.groups.map(pg => {
       // ruột từ lõi (lớp thùng thật, dưới lên) — khoá dòng hàng ⇒ mã hàng
       const ls: PalletLayer[] | undefined = pg.contents?.map(c => ({ itemId: srcByKey.get(c.key)?.meta.itemId ?? c.key, l: c.l, w: c.w, h: c.h, n: c.n, per: c.per }))
-      const packed = ls ? packPallet(spec, ls, lightIds) : null
+      const packed = ls ? packPallet(spec, ls, lightIds, maxLayers) : null
       const ids = [...new Set((ls ?? []).map(x => x.itemId))]
       // pallet chẵn `|full` / pallet lẻ riêng `|plt` của 1 mã; khối gộp mà ruột chỉ 1 mã cũng mang tên + màu mã đó
       const src = srcByKey.get(pg.key.replace(/\|(full|plt)$/, '')) ?? (ids.length === 1 ? toPal.find(g => g.doKey === pg.doKey && g.meta.itemId === ids[0]) : undefined)
@@ -342,6 +429,8 @@ export function computeTrip(input: TripInput): TripResult {
       })) : undefined
       return {
         ...pg,
+        // cao khối = đỉnh thùng thật đã xếp (lớp ghép phần lẻ có thể thấp hơn lõi ước)
+        ...(packed?.cartons.length ? { h: spec.baseH + Math.max(...packed.cartons.map(c => c.z + c.h)) } : {}),
         meta: {
           label: !src ? pg.label
             : srcByKey.has(pg.key.replace(/\|(full|plt)$/, '')) ? `${src.label}${pg.key.endsWith('|plt') ? ' (pallet lẻ)' : ''}` // i18n-ok

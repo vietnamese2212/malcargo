@@ -55,6 +55,8 @@ const cases = [
   ['Chuyến mẫu · xe pallet 8 tấn', trucks['adm-v-p8t'], sample],
   ['1 mã 1000 thùng · xe 15 tấn', trucks['adm-v-15t'], [{ id: 'x', name: 'Đơn X', place: '', lines: [{ item: items['adm-i-st110'], qty: 1000 }] }]],
   ['Toàn hàng nhẹ · xe pallet', trucks['adm-v-p15t'], [{ id: 'y', name: 'Đơn Y', place: '', lines: [{ item: items['adm-i-tui110'], qty: 50 }] }]],
+  ['Chuyến mẫu · Container 20ft', trucks['adm-v-c20'], sample],
+  ['Chuyến mẫu ×4 · Container 40ft chở pallet', { ...trucks['adm-v-c40'], kind: 'pallet' }, sample.map(o => ({ ...o, lines: o.lines.map(l => ({ ...l, qty: l.qty * 4 })) }))],
 ]
 for (const [name, truck, orders] of cases) {
   const t0 = performance.now()
@@ -96,15 +98,30 @@ for (const [name, truck, orders] of cases) {
       // thùng trong khối; khối = chân + phần chờm, chờm mỗi bên ≤ 60mm
       ok(d && cs.every(c => c.x >= -0.5 && c.y >= -0.5 && c.x + c.l <= g.l + 0.5 && c.y + c.w <= g.w + 0.5)
         && Math.max(d.x, d.y, g.l - d.x - d.l, g.w - d.y - d.w) <= 60, `${name}: ${m.label} có thùng ra ngoài khối pallet / chờm quá 60mm`)
-      // đủ thùng (không rơi thùng nào khi xếp lớp) + CHỖ ĐỠ: thùng không nằm sát mặt pallet phải được đỡ ≥ 60% đáy
-      // (thùng dưới thấp hơn ≤ 35mm vẫn tính — lớp trộn thùng cao 130 / 100); user 28/10: "phía dưới phải phủ hết"
+      // đủ thùng (không rơi thùng nào khi xếp lớp) + CHỖ ĐỠ (user 28/10: "phía dưới phải phủ hết"): thùng không nằm
+      // sát mặt pallet được đỡ ≥ 70% đáy, hoặc ≥ 50% mà trọng tâm nằm trên thùng dưới (mẫu chờm mép); hàng nhẹ gác qua
+      // khe lớp ghép ≥ 30% (thùng dưới thấp hơn ≤ 35mm vẫn tính — lớp trộn thùng cao 130 / 100)
       ok(cs.length === (m.layers ?? []).reduce((s, l) => s + l.n, 0), `${name}: ${m.label} xếp ${cs.length} thùng ≠ ruột ${(m.layers ?? []).reduce((s, l) => s + l.n, 0)}`)
+      const under = c => cs.filter(d => d.z < c.z && d.z + d.h <= c.z + 1 && d.z + d.h >= c.z - 36)
       const weak = cs.filter(c => c.z >= 1).map(c => {
         let s = 0
-        for (const d of cs) if (d.z < c.z && d.z + d.h <= c.z + 1 && d.z + d.h >= c.z - 36) s += Math.max(0, Math.min(c.x + c.l, d.x + d.l) - Math.max(c.x, d.x)) * Math.max(0, Math.min(c.y + c.w, d.y + d.w) - Math.max(c.y, d.y))
-        return { c, s: s / (c.l * c.w) }
-      }).filter(x => x.s < 0.6)
-      ok(!weak.length, `${name}: ${m.label} có ${weak.length} thùng đỡ dưới 60% đáy (vd ${weak[0] && `${weak[0].c.itemId} z${weak[0].c.z} ${Math.round(weak[0].s * 100)}%`})`)
+        for (const d of under(c)) s += Math.max(0, Math.min(c.x + c.l, d.x + d.l) - Math.max(c.x, d.x)) * Math.max(0, Math.min(c.y + c.w, d.y + d.w) - Math.max(c.y, d.y))
+        const cx = c.x + c.l / 2, cy = c.y + c.w / 2
+        return { c, s: s / (c.l * c.w), cog: under(c).some(d => cx > d.x && cx < d.x + d.l && cy > d.y && cy < d.y + d.w) }
+      }).filter(x => (lightIds.has(x.c.itemId) ? x.s < 0.3 : x.s < 0.5 || (x.s < 0.7 && !x.cog)))
+      ok(!weak.length, `${name}: ${m.label} có ${weak.length} thùng đỡ kém (vd ${weak[0] && `${weak[0].c.itemId} z${weak[0].c.z} ${Math.round(weak[0].s * 100)}%`})`)
+      // SỐ LỚP (user 28/10 tối: thạch túi chồng thành tháp 11 lớp, "sai nguyên tắc số lớp"): không nhiều lớp hơn lõi
+      // tính; mỗi cột thùng CÙNG MÃ không quá số lớp tối đa của mã; không cao quá trần pallet; khối cao đúng đỉnh thùng
+      const zs = [...new Set(cs.map(c => c.z))].sort((a, b) => a - b)
+      if (cs.length) {
+        ok(zs.length <= (m.layers ?? []).length, `${name}: ${m.label} xếp ${zs.length} lớp > ${(m.layers ?? []).length} lớp lõi tính (tháp)`)
+        const k = new Map()
+        for (const z of zs) for (const c of cs.filter(c => c.z === z)) k.set(c, 1 + Math.max(0, ...under(c).filter(d => d.itemId === c.itemId && Math.min(c.x + c.l, d.x + d.l) > Math.max(c.x, d.x) && Math.min(c.y + c.w, d.y + d.w) > Math.max(c.y, d.y)).map(d => k.get(d))))
+        const over = cs.find(c => items[c.itemId].maxLayers && k.get(c) > items[c.itemId].maxLayers)
+        ok(!over, `${name}: ${m.label} có cột ${over && items[over.itemId].name} chồng ${over && k.get(over)} lớp > ${over && items[over.itemId].maxLayers}`)
+        const top = Math.max(...cs.map(c => c.z + c.h))
+        ok(top <= P.maxH - P.baseH + 0.5 && Math.abs(g.h - P.baseH - top) < 0.5, `${name}: ${m.label} đỉnh thùng ${top} (trần ${P.maxH - P.baseH}), khối cao ${g.h}`)
+      }
       const it = m.itemId ? items[m.itemId] : null
       if (it && cs.length === it.perPallet) {
         const per = Math.ceil(it.perPallet / it.maxLayers), top = Math.max(...cs.map(c => c.z + c.h))
@@ -157,6 +174,13 @@ for (const [name, truck, orders] of cases) {
     const mx = r.meta.find(m => m.mix)
     const bottom = mx ? mx.cartons.filter(c => c.z < 1).reduce((s, c) => s + c.l * c.w, 0) / (P.l * P.w) : 0
     ok(bottom >= 0.85, `pallet · lớp phủ kín · ${nm}: lớp đáy pallet gộp chỉ phủ ${Math.round(bottom * 100)}% mặt pallet`)
+  }
+  // Ảnh chủ dự án 28/10 tối: phần lẻ hàng thường chỉ vài thùng + gần đủ pallet thạch túi (8 lớp) — trước đây thạch
+  // chồng 9-11 lớp thành tháp đỉnh lởm chởm; nay lớp đủ 27 thùng, cột thạch ≤ 8 lớp (palletChecks đo)
+  for (const [nm, q] of [['Sữa 110 lẻ 5 + 190 túi', { 'adm-i-st110': 145, 'adm-i-tui110': 190 }], ['Sữa 110 lẻ 8 + 160 túi', { 'adm-i-st110': 148, 'adm-i-tui110': 160 }],
+    ['Sữa 180 lẻ 2 + Sữa 110 lẻ 8 + 180 túi', { 'adm-i-st180': 112, 'adm-i-st110': 148, 'adm-i-tui110': 180 }], ['vừa trần 1,65m', { 'adm-i-st180': 150, 'adm-i-st110': 158, 'adm-i-tui110': 160 }]]) {
+    const o = sample.map(x => ({ ...x, lines: x.lines.map(l => ({ ...l, qty: q[l.item.id] ?? (l.item.id === 'adm-i-c100' ? 144 : l.item.id === 'adm-i-scu180' ? 110 : l.qty) })) }))
+    palletChecks(`pallet · thạch không thành tháp · ${nm}`, E.computeTrip({ truck: { ...trucks['adm-v-5t'], kind: 'pallet', payloadKg: 9000 }, orders: o, pallet: P }))
   }
   const a = E.computeTrip({ truck: trucks['adm-v-p8t'], orders: os, pallet: P })
   palletChecks('pallet · phần lẻ dồn', a)
