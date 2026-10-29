@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "node scripts/check-engine.mjs && node scripts/check-data.mjs && node scripts/check-i18n.mjs",
+    "test": "node scripts/check-engine.mjs && node scripts/check-data.mjs && node scripts/check-import.mjs && node scripts/check-i18n.mjs",
     "check:ui": "npm run build && node scripts/ui-shots.mjs && node scripts/ui-flow.mjs && node scripts/ui-bulk.mjs && node scripts/ui-keyboard.mjs && node scripts/ui-tools.mjs && node scripts/ui-cut.mjs && node scripts/ui-cut.mjs --en"
   },
   "dependencies": {

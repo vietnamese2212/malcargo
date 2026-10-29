@@ -1,5 +1,6 @@
 // Nhập từ Excel: chọn loại (Mã hàng / Xe / Đơn hàng / Chuyến) → tải file mẫu CỦA LOẠI ĐÓ → điền → nạp file, hoặc chép
-// bảng dán vào. Nạp được nhiều loại rồi nhập một lần (đơn dùng mã vừa nạp). Xem trước rồi mới nhập; dòng lỗi bị bỏ, báo kèm số dòng.
+// bảng dán vào. Nạp được nhiều loại rồi nhập một lần (đơn dùng mã vừa nạp). Xem trước rồi mới nhập; còn một lỗi là KHÔNG
+// nhập gì (báo từng lỗi kèm số dòng), tiêu đề cột sai mẫu ⇒ từ chối cả file.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Download, FileSpreadsheet, Upload, X } from 'lucide-react'
 import { useAllItems, useAllVehicles, useData } from '../data/store'
@@ -32,18 +33,22 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
   const src = useMemo(() => Object.fromEntries(SHEETS.map(s => [s.key, text[s.key]?.trim() ? splitPasted(text[s.key]!) : files[s.key]?.rows ?? []])), [text, files])
   const res = useMemo(() => parseImport(src, { items, vehicles, orders, trips }), [src, items, vehicles, orders, trips])
   const n = { items: res.items.length, vehicles: res.vehicles.length, orders: res.orders.length, trips: res.trips.length }
-  const total = n.items + n.vehicles + n.orders + n.trips
+  const total = n.items + n.vehicles + n.orders + n.trips, errs = res.errors.length
   const def = SHEETS.find(s => s.key === tab)!
   const name = t(def.title), file = files[tab]
 
-  // file mang trang của loại khác (vd file mẫu Mã hàng nạp lúc đang ở Đơn hàng) ⇒ vào đúng loại đó, chuyển sang xem
+  // tiêu đề cột sai mẫu ⇒ từ chối CẢ file. File mang trang của loại khác (vd file mẫu Mã hàng nạp lúc đang ở Đơn hàng)
+  // ⇒ vào đúng loại đó, chuyển sang xem
   const onFile = async (f?: File) => {
     if (!f) return
     try {
-      const got = await readWorkbook(f, tab), keys = SHEETS.map(s => s.key).filter(k => got[k])
-      setFiles(x => ({ ...x, ...Object.fromEntries(keys.map(k => [k, { name: f.name, rows: got[k]! }])) }))
-      if (keys.length && !keys.includes(tab)) setTab(keys[0])
-      setMsg(null)
+      const { rows: got, errors } = await readWorkbook(f, tab), keys = SHEETS.map(s => s.key).filter(k => got[k])
+      if (errors.length) setMsg([t('Không nhận file {file} — tiêu đề cột không đúng mẫu:', { file: f.name }), ...errors].join('\n'))
+      else {
+        setFiles(x => ({ ...x, ...Object.fromEntries(keys.map(k => [k, { name: f.name, rows: got[k]! }])) }))
+        if (keys.length && !keys.includes(tab)) setTab(keys[0])
+        setMsg(null)
+      }
     } catch { setMsg(t('Không đọc được file. Hãy dùng file mẫu .xlsx.')) }
     if (fileRef.current) fileRef.current.value = ''
   }
@@ -64,7 +69,10 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
     <Sheet open={open} onClose={onClose} wide title={t('Nhập từ Excel')}
       footer={<div className="flex gap-2">
         <Button className="flex-1" onClick={onClose}>{t('Huỷ')}</Button>
-        <Button variant="primary" className="flex-[2]" disabled={!total} onClick={save}>{total ? t('Nhập {n} dòng dữ liệu', { n: fmtInt(total) }) : t('Chưa có gì để nhập')}</Button>
+        {/* còn một lỗi là không nhập gì — sửa file rồi nạp lại */}
+        <Button variant="primary" className="flex-[2]" disabled={!total || !!errs} onClick={save}>
+          {errs ? t('Còn {n} lỗi, chưa nhập được', { n: fmtInt(errs) }) : total ? t('Nhập {n} dòng dữ liệu', { n: fmtInt(total) }) : t('Chưa có gì để nhập')}
+        </Button>
       </div>}>
       {trip && <p className="mb-3 rounded-md bg-brand-50 px-3 py-2 text-[13px] text-brand-900">{t('Đơn nhập vào sẽ thêm vào {trip}.', { trip: tx(trip.name) })}</p>}
       {/* chọn loại trước: file mẫu, file nạp, ô dán bên dưới đều của loại này — cách điền nằm trong file mẫu, không giải thích thêm */}
@@ -85,7 +93,7 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
         placeholder={`${t('Hoặc dán bảng từ Excel')}\n${sampleRows(def).map(r => r.join('\t')).join('\n')}`}
         className="mt-3 w-full rounded-md border border-slate-300 p-2.5 font-mono text-base outline-none sm:text-[13px] placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
 
-      {msg && <p className="mt-3 text-sm text-red-700">{msg}</p>}
+      {msg && <p className="mt-3 whitespace-pre-line text-sm text-red-700">{msg}</p>}
       {total > 0 && (
         <div className="mt-4 grid grid-cols-4 divide-x divide-slate-200 rounded-lg border border-slate-200">
           {SHEETS.map(s => (
@@ -97,10 +105,10 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
         </div>
       )}
       {res.updated > 0 && <p className="mt-2 text-[13px] text-slate-700">{t('{n} dòng trùng với dữ liệu đã có sẽ được cập nhật.', { n: fmtInt(res.updated) })}</p>}
-      {!!res.errors.length && (
-        <ul className="mt-2 space-y-1 rounded-md bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
-          {res.errors.slice(0, 8).map(e => <li key={e} className="flex gap-1.5"><AlertTriangle size={14} className="mt-0.5 shrink-0" />{e}</li>)}
-          {res.errors.length > 8 && <li>{t('… và {n} dòng khác', { n: fmtInt(res.errors.length - 8) })}</li>}
+      {!!errs && (
+        <ul data-errors className="mt-2 space-y-1 rounded-md bg-red-50 px-3 py-2 text-[13px] text-red-800">
+          {res.errors.slice(0, 20).map((e, i) => <li key={i} className="flex gap-1.5"><AlertTriangle size={14} className="mt-0.5 shrink-0" />{e}</li>)}
+          {errs > 20 && <li>{t('… và {n} lỗi khác', { n: fmtInt(errs - 20) })}</li>}
         </ul>
       )}
     </Sheet>

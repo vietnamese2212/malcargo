@@ -1,0 +1,94 @@
+// Kiểm đọc file nhập Excel ngoài trình duyệt: tiêu đề cột đúng mẫu, số trong khoảng hợp lý (kích thước + kg cho số lẻ,
+// số thùng / thùng-pallet / lớp phải nguyên), trùng trong file, mỗi lỗi báo đúng dòng. Chạy: npm test
+import { buildSync } from 'esbuild'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { pathToFileURL } from 'node:url'
+
+const dir = mkdtempSync(join(tmpdir(), 'malcargo-'))
+const out = join(dir, 'importer.mjs')
+buildSync({ stdin: { contents: "export * from './src/data/importer'; export { useLang } from './src/i18n'", resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', outfile: out, logLevel: 'error' })
+const I = await import(pathToFileURL(out).href)
+rmSync(dir, { recursive: true, force: true })
+I.useLang.getState().setLang('vi')
+
+let fail = 0
+const ok = (cond, msg) => { console.log(cond ? '  ✓' : '  ✗', msg); if (!cond) fail++ }
+const none = { items: [], vehicles: [], orders: [], trips: [] }
+const head = k => I.SHEETS.find(s => s.key === k).cols.map(c => c.label + (c.req ? ' *' : ''))
+const parse = (src, have = none) => I.parseImport(src, have)
+// lỗi đúng dòng: "Mã hàng, dòng 3: …"
+const has = (r, line, re) => r.errors.some(e => e.includes(`dòng ${line}:`) && re.test(e))
+
+console.log('• Tiêu đề cột')
+for (const k of ['items', 'vehicles', 'orders', 'trips']) ok(I.headError(k, head(k)) === null, `${k}: tiêu đề file mẫu tiếng Việt đúng mẫu`)
+ok(I.headError('orders', ['Order name *', 'Delivery point', 'Code *', 'Cartons *']) === null, 'tiêu đề tiếng Anh, có dấu * ⇒ đúng mẫu')
+ok(I.headError('items', ['mã hàng', 'TÊN HÀNG', 'Dài (mm)', 'Rộng (mm)', 'Cao (mm)', 'Kg/thùng', 'Thùng/pallet', 'Chồng tối đa (lớp)', 'Hàng nhẹ (x)', 'Ghi chú']) === null, 'hoa / thường, không dấu *, thừa cột ở cuối ⇒ vẫn đúng mẫu')
+ok(I.headError('trips', ['Tên chuyến', 'Xe (tên hoặc biển số)', 'Tên đơn']) === null, 'file mẫu Chuyến đời trước (cột C "Tên đơn") ⇒ vẫn nhận')
+const swap = I.headError('items', ['Mã hàng', 'Tên hàng', 'Rộng (mm)', 'Dài (mm)', 'Cao (mm)', 'Kg/thùng', 'Thùng/pallet', 'Chồng tối đa (lớp)', 'Hàng nhẹ (x)'])
+ok(/cột C/.test(swap ?? '') && /Dài \(mm\)/.test(swap ?? ''), `đảo cột ⇒ sai mẫu: ${swap}`)
+const miss = I.headError('vehicles', ['Tên xe', 'Biển số', 'Cách chở (Thùng rời / Pallet)', 'Dài lòng thùng (mm)'])
+ok(/thiếu cột E/.test(miss ?? ''), `thiếu cột ⇒ sai mẫu: ${miss}`)
+let r = parse({ items: [['Mã hàng', 'Tên hàng', 'Rộng (mm)', 'Dài (mm)'], ['SP1', 'A', 400, 300, 200]] })
+ok(!r.items.length && has(r, 1, /cột C/), 'bảng dán có tiêu đề sai mẫu ⇒ báo dòng 1, không nhận dòng nào')
+r = parse({ items: [['SP1', 'A', 400, 300, 200]] })
+ok(r.items.length === 1 && !r.errors.length, 'bảng dán không có tiêu đề ⇒ đọc theo vị trí cột như cũ')
+
+console.log('• Mã hàng')
+const tpl = k => [head(k), ...I.SHEETS.find(s => s.key === k).sample]
+r = parse({ items: tpl('items'), vehicles: tpl('vehicles'), orders: tpl('orders'), trips: tpl('trips') })
+ok(!r.errors.length && r.items.length === 2 && r.vehicles.length === 2 && r.orders.length === 2 && r.trips.length === 1, `dòng ví dụ của 4 file mẫu ⇒ không lỗi (${r.errors.join(' | ')})`)
+r = parse({ items: [head('items'), ['SP1', 'Hộp lẻ', '420,5', '255.5', 100, '9,85', '', '', ''], ['SP2', 'Thạch', 310, 130, 130, 3.08, 216, 8, 'x']] })
+const sp1 = r.items.find(i => i.code === 'SP1')
+ok(!r.errors.length && sp1?.l === 420.5 && sp1?.w === 255.5 && sp1?.kg === 9.85 && sp1?.perPallet === null, 'kích thước + kg số lẻ (dấu phẩy hay chấm) ⇒ nhận; ô không bắt buộc để trống ⇒ trống')
+ok(r.items.find(i => i.code === 'SP2')?.light === true, 'Hàng nhẹ ghi x ⇒ hàng nhẹ')
+r = parse({ items: [head('items'),
+  ['A1', 'Thùng to', 4200, 255, 100], ['A2', 'Ghi cm', 42, 25.5, 10], ['A3', 'Kg âm', 420, 255, 100, -1], ['A4', 'Thùng lẻ', 420, 255, 100, 6, 12.5],
+  ['A5', 'Lớp chữ', 420, 255, 100, 6, 100, 'abc'], ['A6', 'Nhẹ lạ', 420, 255, 100, 6, 100, 10, 'có lẽ'], ['A7', 'Thiếu cao', 420, 255, ''], ['A1', 'Trùng', 420, 255, 100]]
+})
+ok(!r.items.length, `mọi dòng sai ⇒ không nhận dòng nào (${r.errors.length} lỗi)`)
+ok(has(r, 2, /Dài \(mm\) phải từ 10 đến 3\.000/), 'cạnh 4.200 mm ⇒ ngoài khoảng 10–3.000')
+ok(has(r, 3, /ghi cm/), 'cả 3 cạnh dưới 100 mm ⇒ hỏi có phải ghi cm')
+ok(has(r, 4, /Kg\/thùng phải từ 0,01/), 'kg âm ⇒ lỗi')
+ok(has(r, 5, /Thùng\/pallet phải là số nguyên/), 'thùng/pallet 12,5 ⇒ phải là số nguyên')
+ok(has(r, 6, /Chồng tối đa \(lớp\) phải là số/), 'số lớp là chữ ⇒ phải là số')
+ok(has(r, 7, /Hàng nhẹ \(x\): ghi x/), 'cột hàng nhẹ ghi lạ ⇒ lỗi')
+ok(has(r, 8, /thiếu Cao \(mm\)/), 'thiếu cao ⇒ lỗi')
+ok(has(r, 9, /mã "A1" trùng dòng 2/), 'mã ghi hai lần trong file ⇒ lỗi ở dòng sau, chỉ dòng trước')
+
+console.log('• Xe')
+r = parse({ vehicles: [head('vehicles'),
+  ['Xe 1', '29C1', 'Thùng rời', 5700, 2000, 2000, 5000], ['Xe 2', '29C2', 'Ba gác', 5700, 2000, 2000], ['Xe 3', '29C3', '', 5.7, 2000, 2000],
+  ['Xe 4', '29C4', 'Pallet', 7400, 2350, 2300, 999999], ['Xe 1b', '29c1', '', 5700, 2000, 2000]]
+})
+ok(r.vehicles.length === 1 && r.vehicles[0].kind === 'loose', 'xe đúng ⇒ nhận (thùng rời)')
+ok(has(r, 3, /cách chở phải là/), 'cách chở ghi lạ ⇒ lỗi')
+ok(has(r, 4, /Dài lòng thùng \(mm\) phải từ 500 đến 20\.000/), 'lòng thùng ghi mét (5,7) ⇒ ngoài khoảng')
+ok(has(r, 5, /Tải trọng \(kg\) phải từ 100 đến 60\.000/), 'tải trọng quá lớn ⇒ lỗi')
+ok(has(r, 6, /xe "29C1" trùng dòng 2/), 'biển số ghi hai lần (khác hoa thường) ⇒ lỗi')
+
+console.log('• Đơn hàng')
+const items = [{ id: 'i1', owner: 'me', code: 'SP1', name: 'A', l: 400, w: 300, h: 200, kg: 5, perPallet: null, maxLayers: null, light: false, updatedAt: 0 },
+  { id: 'i2', owner: 'me', code: 'SP2', name: 'B', l: 400, w: 300, h: 200, kg: 5, perPallet: null, maxLayers: null, light: false, updatedAt: 0 }]
+r = parse({ orders: [head('orders'), ['Đ1', 'Kho A', 'SP1', 10], ['Đ1', '', 'SP2', 5], ['Đ1', 'Kho A', 'SP1', 3]] }, { ...none, items })
+ok(!r.errors.length && r.orders.length === 1 && r.orders[0].lines.map(l => `${l.itemId}:${l.qty}`).join() === 'i1:13,i2:5', 'đơn nhiều mã; cùng mã ghi hai dòng ⇒ cộng dồn (không lỗi)')
+r = parse({ orders: [head('orders'), ['Đ1', '', 'SP1', 12.5], ['Đ2', '', 'SP1', 0], ['Đ3', '', 'SP9', 4], ['Đ4', 'Kho A', 'SP1', 4], ['Đ4', 'Kho B', 'SP2', 4]] }, { ...none, items })
+ok(has(r, 2, /Số thùng phải là số nguyên/), 'số thùng 12,5 ⇒ phải là số nguyên')
+ok(has(r, 3, /Số thùng phải từ 1/), 'số thùng 0 ⇒ lỗi')
+ok(has(r, 4, /không thấy mã hàng "SP9"/), 'mã chưa có ⇒ lỗi')
+ok(has(r, 6, /điểm giao khác dòng 5/), 'một đơn hai điểm giao ⇒ lỗi')
+
+console.log('• Chuyến')
+const orders = [{ id: 'o1', name: 'Đ1', place: '', lines: [], updatedAt: 0 }, { id: 'o2', name: 'Đ2', place: '', lines: [], updatedAt: 0 }]
+const vehicles = [{ id: 'v1', owner: 'me', name: 'Xe 1', plate: '29C1', kind: 'loose', l: 5700, w: 2000, h: 2000, payloadKg: null, updatedAt: 0 },
+  { id: 'v2', owner: 'me', name: 'Xe 2', plate: '29C2', kind: 'loose', l: 5700, w: 2000, h: 2000, payloadKg: null, updatedAt: 0 }]
+r = parse({ trips: [['Tên chuyến', 'Xe (tên hoặc biển số)', 'Tên đơn'], ['C1', '29C1', 'Đ2'], ['C1', '', 'Đ1']] }, { ...none, orders, vehicles })
+ok(!r.errors.length && r.trips[0]?.vehicleId === 'v1' && r.trips[0].orderIds.join() === 'o2,o1', 'thứ tự dòng = thứ tự giao; dòng sau để trống xe ⇒ không lỗi')
+r = parse({ trips: [head('trips'), ['C1', 'Xe 9', 'Đ1'], ['C2', '29C1', 'Đ1'], ['C2', '29C2', 'Đ2'], ['C3', '', 'Đ1'], ['C3', '', 'Đ1']] }, { ...none, orders, vehicles })
+ok(has(r, 2, /không thấy xe "Xe 9"/), 'xe không có ⇒ lỗi (trước đây vẫn nhập, chưa gán xe)')
+ok(has(r, 4, /xe khác dòng 3/), 'một chuyến hai xe ⇒ lỗi')
+ok(has(r, 6, /đơn "Đ1" đã ghi ở dòng 5/), 'một đơn ghi hai lần trong chuyến ⇒ lỗi')
+
+console.log(fail ? `\nĐỎ — ${fail} lỗi` : '\nXANH')
+process.exit(fail ? 1 : 0)

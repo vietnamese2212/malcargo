@@ -171,23 +171,46 @@ for (const dev of [DEVICES[1], { ...DEVICES[1], name: 'phone-ngang', viewport: {
     ok(btn > 0 && !(await sheet.locator('li svg.lucide-triangle-alert, li svg.lucide-alert-triangle').count()), `[${l}] thêm file Đơn hàng (${other}) ⇒ 2 mã + 2 đơn nhập một lần, không lỗi dòng`)
     await p.keyboard.press('Escape'); await p.waitForTimeout(200)
   }
-  // file 4 trang đời trước ⇒ đọc đủ 4 loại; file tự làm (trang "Sheet1") ⇒ thành loại đang chọn
+  // file 4 trang đời trước (có trang Hướng dẫn, cột C Chuyến "Tên đơn") ⇒ đọc đủ 4 loại; trang tên lạ ("Sheet1") nhận
+  // theo dòng tiêu đề; tiêu đề sai / không có ⇒ từ chối cả file, báo cột nào; còn một dòng lỗi ⇒ không nhập được gì
   if ((await lang()) !== 'vi') await flip()
-  const old = join(OUT, 'old-4-sheets.xlsx'), own = join(OUT, 'own-sheet1.xlsx')
-  await writeXlsxFile([
-    { sheet: 'Mã hàng', data: [['Mã hàng *'], ['OLD1', 'Hàng cũ 1', 400, 300, 200], ['OLD2', 'Hàng cũ 2', 300, 200, 100]] },
-    { sheet: 'Xe', data: [['Tên xe *'], ['Xe cũ', '29C00001', '', 5700, 2000, 2000, 5000]] },
-    { sheet: 'Đơn hàng', data: [['Tên đơn *'], ['Đơn cũ', '', 'OLD1', 10]] },
-    { sheet: 'Chuyến', data: [['Tên chuyến *'], ['Chuyến cũ', 'Xe cũ', 'Đơn cũ']] },
-  ]).toFile(old)
-  await writeXlsxFile([{ sheet: 'Sheet1', data: [['Đơn tự làm', 'Kho B', 'MAU-ST180', 12], ['Đơn tự làm', 'Kho B', 'MAU-ST110', 4]] }]).toFile(own)
-  await open()
-  await sheet.locator('input[type=file]').setInputFiles(old); await p.waitForTimeout(800)
+  const OLD_HEAD = {
+    items: ['Mã hàng *', 'Tên hàng *', 'Dài (mm) *', 'Rộng (mm) *', 'Cao (mm) *', 'Kg/thùng', 'Thùng/pallet', 'Chồng tối đa (lớp)', 'Hàng nhẹ (x)'],
+    vehicles: ['Tên xe *', 'Biển số', 'Cách chở (Thùng rời / Pallet)', 'Dài lòng thùng (mm) *', 'Rộng (mm) *', 'Cao (mm) *', 'Tải trọng (kg)'],
+    orders: ['Tên đơn *', 'Điểm giao', 'Mã hàng *', 'Số thùng *'], trips: ['Tên chuyến *', 'Xe (tên hoặc biển số)', 'Tên đơn *'],
+  }
+  const xlsx = async (name, sheets) => { const f = join(OUT, name); await writeXlsxFile(sheets).toFile(f); return f }
+  const old = await xlsx('old-4-sheets.xlsx', [
+    { sheet: 'Hướng dẫn', data: [['MalCargo — file mẫu nhập dữ liệu']] },
+    { sheet: 'Mã hàng', data: [OLD_HEAD.items, ['OLD1', 'Hàng cũ 1', 400, 300, 200], ['OLD2', 'Hàng cũ 2', 300, 200, 100]] },
+    { sheet: 'Xe', data: [OLD_HEAD.vehicles, ['Xe cũ', '29C00001', '', 5700, 2000, 2000, 5000]] },
+    { sheet: 'Đơn hàng', data: [OLD_HEAD.orders, ['Đơn cũ', '', 'OLD1', 10]] },
+    { sheet: 'Chuyến', data: [OLD_HEAD.trips, ['Chuyến cũ', 'Xe cũ', 'Đơn cũ']] },
+  ])
+  const own = await xlsx('own-sheet1.xlsx', [{ sheet: 'Sheet1', data: [OLD_HEAD.orders, ['Đơn tự làm', 'Kho B', 'MAU-ST180', 12], ['Đơn tự làm', 'Kho B', 'MAU-ST110', 4]] }])
+  const noHead = await xlsx('no-head.xlsx', [{ sheet: 'Sheet1', data: [['Đơn tự làm', 'Kho B', 'MAU-ST180', 12]] }])
+  const swapped = await xlsx('swapped.xlsx', [{ sheet: 'Mã hàng', data: [['Mã hàng', 'Tên hàng', 'Rộng (mm)', 'Dài (mm)', 'Cao (mm)'], ['X1', 'A', 400, 300, 200]] }])
+  const badRows = await xlsx('bad-rows.xlsx', [{ sheet: 'Mã hàng', data: [OLD_HEAD.items, ['B1', 'Đúng', 420.5, 255, 100, 9.85], ['B2', 'Ghi cm', 42, 25, 10], ['B1', 'Trùng', 420, 255, 100]] }])
+  const load = async f => { await sheet.locator('input[type=file]').setInputFiles(f); await p.waitForTimeout(800) }
+  await open(); await load(old)
   ok(await sheet.getByRole('button', { name: 'Nhập 5 dòng dữ liệu' }).count() > 0, 'file 4 trang đời trước ⇒ đọc đủ 2 mã + 1 xe + 1 đơn + 1 chuyến')
   await p.keyboard.press('Escape'); await p.waitForTimeout(200)
+  await open(); await load(own)
+  ok(await tab('orders').getAttribute('aria-pressed') === 'true' && await sheet.getByRole('button', { name: 'Nhập 1 dòng dữ liệu' }).count() > 0, 'trang "Sheet1" có tiêu đề Đơn hàng ⇒ đọc thành Đơn hàng (1 đơn 2 mã)')
+  await p.keyboard.press('Escape'); await p.waitForTimeout(200)
+  await open(); await load(noHead)
+  ok(await sheet.getByText(/Không nhận file no-head\.xlsx/).count() > 0 && await sheet.getByText(/cột A là "Đơn tự làm", mẫu là "Tên đơn"/).count() > 0
+    && await sheet.getByRole('button', { name: 'Chưa có gì để nhập' }).isDisabled(), 'file không có dòng tiêu đề ⇒ từ chối, báo cột A')
+  await load(swapped)
+  ok(await sheet.getByText(/cột C là "Rộng \(mm\)", mẫu là "Dài \(mm\)"/).count() > 0 && !(await tab('items').innerText()).includes('·'), 'file đảo cột ⇒ từ chối cả file, báo cột C')
+  await load(badRows)
+  const rowErrs = await sheet.locator('[data-errors] li').allInnerTexts()
+  const blockBtn = sheet.getByRole('button', { name: 'Còn 2 lỗi, chưa nhập được' })
+  ok(await blockBtn.count() > 0 && await blockBtn.isDisabled(), `còn lỗi ⇒ nút Nhập khoá: ${rowErrs.join(' | ')}`)
+  ok(rowErrs.some(e => /dòng 3: B2: cả 3 cạnh dưới 100 mm/.test(e)) && rowErrs.some(e => /dòng 4: mã "B1" trùng dòng 2/.test(e)), 'báo đúng dòng: ghi cm, mã trùng')
+  await p.screenshot({ path: `${OUT}/import-errors.png` })
+  await p.keyboard.press('Escape'); await p.waitForTimeout(200)
   await open()
-  await sheet.locator('input[type=file]').setInputFiles(own); await p.waitForTimeout(800)
-  ok(await tab('orders').getAttribute('aria-pressed') === 'true' && await sheet.getByRole('button', { name: 'Nhập 1 dòng dữ liệu' }).count() > 0, 'file tự làm, trang "Sheet1" ⇒ đọc thành Đơn hàng (1 đơn 2 mã)')
   // Huỷ ở hộp Lưu thành… ⇒ không tải gì, không báo lỗi; máy không có hộp ⇒ tải về như thường
   await p.evaluate(() => { window.__cancel = true })
   let dl = null
