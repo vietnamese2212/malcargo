@@ -20,7 +20,7 @@ import type { ViewPreset } from '../three/TruckScene'
 import { groupColor, itemColors, tint } from '../three/colors'
 import {
   Badge, BoxGlyph, Button, Confirm, Empty, Field, IconButton, KeyboardShield, LiveNum, MenuItem, Popover, SearchInput, SectionBand, Segmented, Sheet,
-  TextInput, cx, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3, useViewportBox, useVisualView,
+  TextInput, cx, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3, usePhone, useViewportBox, useVisualView,
 } from '../ui/kit'
 import { Logo, PageHeader, Panel } from '../ui/Shell'
 import { TruckGlyph } from './VehiclesPage'
@@ -31,6 +31,7 @@ import { LangSwitch } from '../ui/LangSwitch'
 import { t, tx } from '../i18n'
 import { ItemPicker } from '../ui/ItemPicker'
 import { ImportSheet } from '../ui/ImportSheet'
+import { saveFile } from '../ui/saveFile'
 import { go, replaceRoute } from '../ui/route'
 import ItemsPage from './ItemsPage'
 import VehiclesPage from './VehiclesPage'
@@ -92,6 +93,7 @@ export default function TripPage({ id }: { id: string }) {
   const [explain, setExplain] = useState(false)   // popup bảng diễn giải từng mã (nút trên khung 3D)
   const [panel, setPanel] = useState<PanelName | null>(null)
   const [importing, setImporting] = useState<'menu' | 'trip' | null>(null)   // 'trip' = nút nhập đơn trên bàn ⇒ đơn vào chuyến này
+  const phone = usePhone()   // điện thoại không có phần nhập Excel
   const [unlink, setUnlink] = useState<Order | null>(null)
   const [editVehicle, setEditVehicle] = useState<{ v: Vehicle | null } | null>(null)
   const [pickOrders, setPickOrders] = useState(false)
@@ -359,7 +361,7 @@ export default function TripPage({ id }: { id: string }) {
                 <p className="text-sm text-slate-700">{t('Xe chở hàng gì? Chọn mã hàng rồi nhập số thùng, hàng hiện lên xe ngay.')}</p>
                 <div className="mt-3 flex flex-wrap justify-center gap-2">
                   <Button variant="primary" onClick={addCargo}><Plus size={18} />{t('Thêm hàng')}</Button>
-                  <Button onClick={() => setImporting('trip')}><Upload size={17} />{t('Nhập đơn từ Excel')}</Button>
+                  {!phone && <Button onClick={() => setImporting('trip')}><Upload size={17} />{t('Nhập đơn từ Excel')}</Button>}
                 </div>
               </div>
             ) : (
@@ -420,9 +422,11 @@ export default function TripPage({ id }: { id: string }) {
                 <button onClick={() => setPickOrders(true)} className="tap flex w-full items-center justify-center gap-2 rounded-lg border-[1.5px] border-dashed border-slate-400 px-4 text-[13px] font-semibold text-slate-700 hover:border-slate-500 hover:bg-white">
                   <Plus size={16} />{t('Thêm đơn / điểm giao khác')}
                 </button>
-                <button onClick={() => setImporting('trip')} className="tap flex w-full items-center justify-center gap-2 rounded-lg border-[1.5px] border-dashed border-slate-400 px-4 text-[13px] font-semibold text-slate-700 hover:border-slate-500 hover:bg-white">
-                  <Upload size={16} />{t('Nhập đơn từ Excel')}
-                </button>
+                {!phone && (
+                  <button onClick={() => setImporting('trip')} className="tap flex w-full items-center justify-center gap-2 rounded-lg border-[1.5px] border-dashed border-slate-400 px-4 text-[13px] font-semibold text-slate-700 hover:border-slate-500 hover:bg-white">
+                    <Upload size={16} />{t('Nhập đơn từ Excel')}
+                  </button>
+                )}
               </div>
             )}
           </Block>
@@ -547,6 +551,7 @@ function TripSwitcher({ trip, trips, onRename, onDelete, onAll, onNew }: {
 // ── Nút Danh mục 3 vạch (góc trái): mở các danh mục ngay trên bàn xếp xe ─────────────
 function MainMenu({ onPanel, onImport }: { onPanel: (p: PanelName) => void; onImport: () => void }) {
   const isAdmin = useAuth(s => s.isAdmin)
+  const phone = usePhone()
   return (
     <Popover className="shrink-0" panelClass="w-[270px] max-w-[calc(100vw-16px)] overflow-hidden py-1"
       trigger={({ open, toggle }) => (
@@ -559,7 +564,7 @@ function MainMenu({ onPanel, onImport }: { onPanel: (p: PanelName) => void; onIm
             <MenuItem key={mn.p} icon={<mn.icon size={18} strokeWidth={1.75} />} onClick={() => { close(); onPanel(mn.p) }}>{t(mn.label)}</MenuItem>
           ))}
           <div className="my-1 border-t border-slate-200" />
-          <MenuItem icon={<FileSpreadsheet size={18} strokeWidth={1.75} />} onClick={() => { close(); onImport() }}>{t('Nhập từ Excel')}</MenuItem>
+          {!phone && <MenuItem icon={<FileSpreadsheet size={18} strokeWidth={1.75} />} onClick={() => { close(); onImport() }}>{t('Nhập từ Excel')}</MenuItem>}
           <MenuItem icon={<UserRound size={18} strokeWidth={1.75} />} onClick={() => { close(); onPanel('account') }}>{t('Tài khoản & dữ liệu')}</MenuItem>
           {isAdmin && (
             <MenuItem icon={<Users size={18} strokeWidth={1.75} />} onClick={() => { close(); onPanel('vehicles') }}>
@@ -1170,12 +1175,11 @@ function CountSheet({ r, colors, focus, onFocus, tripName, vehicle, onToast }: {
     try { await navigator.clipboard.writeText(lines.join('\n')); onToast(t('Đã chép bảng đếm chân')) }
     catch { onToast(t('Trình duyệt chặn chép, hãy chụp màn hình')) }
   }
-  const snap = () => {
+  const snap = async () => {
     const c = document.querySelector<HTMLCanvasElement>('[data-scene] canvas')
     if (!c) return
-    const a = document.createElement('a')
-    a.href = c.toDataURL('image/png'); a.download = `so-do-${tripName.replace(/\s+/g, '-').toLowerCase()}.png`; a.click()
-    onToast(t('Đã lưu ảnh sơ đồ'))
+    const png = c.toDataURL('image/png')   // chụp ngay lúc bấm, trước khi hộp "Lưu thành…" mở
+    if (await saveFile(`so-do-${tripName.replace(/\s+/g, '-').toLowerCase()}.png`, () => fetch(png).then(r => r.blob()))) onToast(t('Đã lưu ảnh sơ đồ'))
   }
   return (
     <section className="pt-3">

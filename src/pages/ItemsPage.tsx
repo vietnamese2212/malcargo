@@ -3,7 +3,7 @@ import { ClipboardPaste, Package, Plus } from 'lucide-react'
 import { useAllItems, useData } from '../data/store'
 import { useAuth } from '../data/cloud'
 import type { Item } from '../data/types'
-import { Badge, BoxGlyph, Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SearchInput, SelectBar, SummaryBand, Tabs, cx, fmtDec, fmtDims, fmtInt, useSelection } from '../ui/kit'
+import { Badge, BoxGlyph, Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SearchInput, SelectBar, SummaryBand, Tabs, cx, fmtDec, fmtDims, fmtInt, usePhone, useSelection } from '../ui/kit'
 import { ListCard, Page, PageHeader } from '../ui/Shell'
 import { ItemSheet } from '../ui/ItemSheet'
 import { ImportSheet } from '../ui/ImportSheet'
@@ -18,6 +18,7 @@ export default function ItemsPage() {
   const [edit, setEdit] = useState<{ item: Item | null; sample?: boolean } | null>(null)
   const isAdmin = useAuth(s => s.isAdmin)
   const [paste, setPaste] = useState(false)
+  const phone = usePhone()   // điện thoại không có phần nhập Excel
   const mine = all.filter(i => i.owner === 'me')
   const inTab = all.filter(i => i.owner === tab)
   const list = useMemo(() => {
@@ -37,7 +38,7 @@ export default function ItemsPage() {
     <>
       <PageHeader title={t('Mã hàng')} subtitle={t('Kích thước thùng, khối lượng, cách xếp')}
         actions={<>
-          <Button className="hidden sm:inline-flex" onClick={() => setPaste(true)}><ClipboardPaste size={17} />{t('Dán từ Excel')}</Button>
+          {!phone && <Button onClick={() => setPaste(true)}><ClipboardPaste size={17} />{t('Dán từ Excel')}</Button>}
           {tab === 'admin' && isAdmin
             ? <Button variant="primary" aria-label={t('Thêm mã mẫu')} onClick={() => setEdit({ item: null, sample: true })}><Plus size={18} /><span className="hidden sm:inline">{t('Thêm mã mẫu')}</span></Button>
             : <Button variant="primary" aria-label={t('Thêm mã')} onClick={() => setEdit({ item: null })}><Plus size={18} /><span className="hidden sm:inline">{t('Thêm mã')}</span></Button>}
@@ -48,10 +49,10 @@ export default function ItemsPage() {
       <Page flush={!(tab === 'me' && !mine.length)}>
         {tab === 'me' && !mine.length ? (
           <Empty icon={<Package size={28} strokeWidth={1.5} />} title={t('Chưa có mã hàng nào của bạn')}
-            body={t('Thêm từng mã, dán cả danh sách từ Excel, hoặc mở tab Mẫu chung và sao một mẫu về để sửa.')}
+            body={phone ? t('Thêm từng mã, hoặc mở tab Mẫu chung và sao một mẫu về để sửa.') : t('Thêm từng mã, dán cả danh sách từ Excel, hoặc mở tab Mẫu chung và sao một mẫu về để sửa.')}
             action={<div className="flex flex-wrap justify-center gap-2">
               <Button variant="primary" onClick={() => setEdit({ item: null })}><Plus size={18} />{t('Thêm mã hàng')}</Button>
-              <Button onClick={() => setPaste(true)}><ClipboardPaste size={17} />{t('Dán từ Excel')}</Button>
+              {!phone && <Button onClick={() => setPaste(true)}><ClipboardPaste size={17} />{t('Dán từ Excel')}</Button>}
             </div>} />
         ) : (
           <ListCard>
@@ -63,7 +64,6 @@ export default function ItemsPage() {
             ]} />
             <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-2.5">
               <SearchInput className="min-w-0 flex-1 sm:max-w-xs" placeholder={t('Tìm theo mã hoặc tên')} value={q} onChange={e => setQ(e.target.value)} aria-label={t('Tìm mã hàng')} />
-              <Button className="sm:hidden" onClick={() => setPaste(true)} aria-label={t('Dán từ Excel')}><ClipboardPaste size={17} />{t('Dán')}</Button>
             </div>
             {!list.length ? (
               <p className="px-4 py-8 text-sm text-slate-600">{t('Không có mã nào khớp “{q}”.', { q })}</p>

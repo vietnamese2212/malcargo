@@ -4,6 +4,7 @@ import { exportBackup, parseBackup, useData, type BackupData } from '../data/sto
 import { DEFAULT_PALLET_SETTINGS } from '../data/catalog'
 import { Button, Confirm, Field, NumInput, SectionBand, fmtInt } from '../ui/kit'
 import { ListCard, Page, PageHeader } from '../ui/Shell'
+import { saveFile } from '../ui/saveFile'
 import { t } from '../i18n'
 
 /** Một nhóm cài đặt: band tiêu đề + câu giải thích nhìn thấy ngay + phần điều khiển. */
@@ -26,13 +27,8 @@ export default function AccountPage() {
   const [msg, setMsg] = useState<string | null>(null)
   const [askReset, setAskReset] = useState(false)
 
-  const download = () => {
-    const blob = new Blob([JSON.stringify(exportBackup(), null, 1)], { type: 'application/json' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `malcargo-sao-luu-${new Date().toLocaleDateString('en-CA')}.json`
-    a.click(); URL.revokeObjectURL(a.href)
-  }
+  const download = () => saveFile(`malcargo-sao-luu-${new Date().toLocaleDateString('en-CA')}.json`,
+    () => new Blob([JSON.stringify(exportBackup(), null, 1)], { type: 'application/json' }))
   const onFile = async (f: File | undefined) => {
     if (!f) return
     const r = parseBackup(await f.text())

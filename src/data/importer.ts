@@ -1,13 +1,15 @@
-// Nhập từ Excel: MỘT file mẫu 4 trang (Mã hàng · Xe · Đơn hàng · Chuyến). Người dùng điền rồi nạp cả file,
-// hoặc chép từng bảng dán vào. Trùng tên / mã với cái đã có ⇒ GHI ĐÈ (giữ id cũ), chưa có ⇒ thêm mới.
+// Nhập từ Excel: MỖI LOẠI một file mẫu riêng (Mã hàng · Xe · Đơn hàng · Chuyến), một trang. Người dùng điền rồi nạp
+// file, hoặc chép bảng dán vào. Trùng tên / mã với cái đã có ⇒ GHI ĐÈ (giữ id cũ), chưa có ⇒ thêm mới.
 import type { Item, Order, Trip, Vehicle } from './types'
 import { newId, type ImportBatch } from './store'
 import { getLang, t, tx } from '../i18n'
 import { EN } from '../i18n/en'
+import { saveFile } from '../ui/saveFile'
 
 export type SheetKey = 'items' | 'vehicles' | 'orders' | 'trips'
-/** `text`: chữ hiện trên giao diện tiếng Anh khi nghĩa cột khác chữ dịch của `label` (vd cột "Mã hàng" = mã, không phải danh mục). */
-export interface SheetDef { key: SheetKey; title: string; cols: { label: string; text?: string; req?: boolean; w: number }[]; note: string; sample: (string | number)[][] }
+/** `text`: chữ hiện trên giao diện tiếng Anh khi nghĩa cột khác chữ dịch của `label` (vd cột "Mã hàng" = mã, không phải danh mục).
+ *  `file`: tên file mẫu của loại này. */
+export interface SheetDef { key: SheetKey; title: string; file: string; cols: { label: string; text?: string; req?: boolean; w: number }[]; note: string; sample: (string | number)[][] }
 
 // Thứ tự cột = thứ tự trong file mẫu. Đổi ở đây là đổi cả file mẫu lẫn cách đọc.
 // File mẫu theo ngôn ngữ giao diện: tên trang + tiêu đề cột tiếng Việt (`title`, `label`) hoặc bản tiếng Anh
@@ -15,7 +17,7 @@ export interface SheetDef { key: SheetKey; title: string; cols: { label: string;
 // được); cột đọc theo VỊ TRÍ. Dòng ví dụ là dữ liệu, dịch lúc hiện bằng tx() (`sampleRows`).
 export const SHEETS: SheetDef[] = [
   {
-    key: 'items', title: 'Mã hàng', // i18n-key
+    key: 'items', title: 'Mã hàng', file: 'malcargo-mau-ma-hang.xlsx', // i18n-key
     cols: [
       { label: 'Mã hàng', text: 'Mã', req: true, w: 14 }, { label: 'Tên hàng', req: true, w: 30 }, { label: 'Dài (mm)', req: true, w: 10 }, // i18n-key
       { label: 'Rộng (mm)', req: true, w: 10 }, { label: 'Cao (mm)', req: true, w: 10 }, { label: 'Kg/thùng', w: 10 }, // i18n-key
@@ -25,7 +27,7 @@ export const SHEETS: SheetDef[] = [
     sample: [['SP001', 'Sữa 110ml x48', 420, 255, 100, 6.2, 140, 14, ''], ['SP002', 'Thạch túi 110ml x24', 310, 130, 130, 3.08, 216, 8, 'x']], // i18n-ok
   },
   {
-    key: 'vehicles', title: 'Xe', // i18n-key
+    key: 'vehicles', title: 'Xe', file: 'malcargo-mau-xe.xlsx', // i18n-key
     cols: [
       { label: 'Tên xe', req: true, w: 20 }, { label: 'Biển số', w: 12 }, { label: 'Cách chở (Thùng rời / Pallet)', w: 26 }, // i18n-key
       { label: 'Dài lòng thùng (mm)', req: true, w: 18 }, { label: 'Rộng (mm)', req: true, w: 10 }, { label: 'Cao (mm)', req: true, w: 10 }, // i18n-key
@@ -35,13 +37,13 @@ export const SHEETS: SheetDef[] = [
     sample: [['Xe 5 tấn số 1', '29C12345', 'Thùng rời', 5700, 2000, 2000, 5000], ['Xe pallet 8 tấn', '29C67890', 'Pallet', 7400, 2350, 2300, 8000]], // i18n-ok
   },
   {
-    key: 'orders', title: 'Đơn hàng', // i18n-key
+    key: 'orders', title: 'Đơn hàng', file: 'malcargo-mau-don-hang.xlsx', // i18n-key
     cols: [{ label: 'Tên đơn', req: true, w: 18 }, { label: 'Điểm giao', w: 24 }, { label: 'Mã hàng', text: 'Mã', req: true, w: 14 }, { label: 'Số thùng', req: true, w: 10 }], // i18n-key
-    note: 'Mỗi dòng một mã hàng; đơn nhiều mã thì lặp lại tên đơn. Mã hàng lấy ở trang Mã hàng hoặc mã đã có trong app.', // i18n-key
+    note: 'Mỗi dòng một mã hàng; đơn nhiều mã thì lặp lại tên đơn. Mã hàng phải có sẵn trong app, hoặc nạp file Mã hàng cùng lúc.', // i18n-key
     sample: [['Đơn 101', 'Cửa hàng A', 'SP001', 120], ['Đơn 101', 'Cửa hàng A', 'SP002', 30], ['Đơn 102', 'Cửa hàng B', 'SP001', 80]], // i18n-ok
   },
   {
-    key: 'trips', title: 'Chuyến', // i18n-key
+    key: 'trips', title: 'Chuyến', file: 'malcargo-mau-chuyen.xlsx', // i18n-key
     cols: [{ label: 'Tên chuyến', req: true, w: 18 }, { label: 'Xe (tên hoặc biển số)', w: 22 }, { label: 'Tên đơn', req: true, w: 18 }], // i18n-key
     note: 'Mỗi dòng một đơn, ghi theo THỨ TỰ GIAO: đơn giao trước ghi trước (được xếp sát cửa).', // i18n-key
     sample: [['Chuyến sáng 28/10', '29C12345', 'Đơn 101'], ['Chuyến sáng 28/10', '29C12345', 'Đơn 102']], // i18n-ok
@@ -173,37 +175,33 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
   return out
 }
 
-/** File mẫu .xlsx: trang Hướng dẫn + 4 trang dữ liệu, mỗi trang có dòng tiêu đề và 2–3 dòng ví dụ — tất cả theo ngôn ngữ. */
-export async function downloadTemplate() {
-  const { default: writeXlsxFile } = await import('write-excel-file/browser')
-  const head = (label: string, req?: boolean) => ({ value: req ? `${label} *` : label, fontWeight: 'bold' as const, textColor: '#ffffff', backgroundColor: req ? '#1a66ff' : '#0b1424' })
-  const guide = [
-    [{ value: t('MalCargo — file mẫu nhập dữ liệu'), fontWeight: 'bold' as const, fontSize: 14 }],
-    [''],
-    [t('Điền các trang Mã hàng, Xe, Đơn hàng, Chuyến (trang nào không cần thì để trống), rồi trong app chọn Menu → Nhập từ Excel → Nạp file.')],
-    [t('Cột có dấu * là bắt buộc. Xoá các dòng ví dụ trước khi nạp. Giữ nguyên dòng tiêu đề.')],
-    [''],
-    ...SHEETS.map(s => [`${sheetName(s)}: ${t(s.note)}`]),
-  ]
-  await writeXlsxFile([
-    { sheet: t('Hướng dẫn'), data: guide, columns: [{ width: 120 }] },
-    ...SHEETS.map(s => ({
+/** File mẫu .xlsx của MỘT loại: một trang, dòng tiêu đề + 2–3 dòng ví dụ, theo ngôn ngữ. Có hộp "Lưu thành…" thì người
+ *  dùng chọn chỗ lưu (`saveFile`). Trả về false khi bấm Huỷ. */
+export function saveTemplate(k: SheetKey) {
+  const s = SHEETS.find(x => x.key === k)!
+  return saveFile(t(s.file), async () => {
+    const { default: writeXlsxFile } = await import('write-excel-file/browser')
+    const head = (label: string, req?: boolean) => ({ value: req ? `${label} *` : label, fontWeight: 'bold' as const, textColor: '#ffffff', backgroundColor: req ? '#1a66ff' : '#0b1424' })
+    return writeXlsxFile([{
       sheet: sheetName(s), stickyRowsCount: 1, columns: s.cols.map(c => ({ width: Math.max(c.w, colHead(c).length + 4) })),
       data: [s.cols.map(c => head(colHead(c), c.req)), ...sampleRows(s)],
-    })),
-  ], { fontFamily: 'Arial', fontSize: 11 }).toFile(t('malcargo-mau-nhap-du-lieu.xlsx'))
+    }], { fontFamily: 'Arial', fontSize: 11 }).toBlob()
+  })
 }
 
-/** Đọc file .xlsx đã điền: lấy 4 trang theo TÊN trang, tiếng Việt hay tiếng Anh (không phân biệt hoa thường). */
-export async function readWorkbook(file: File): Promise<Partial<Record<SheetKey, Rows>>> {
+/** Đọc file .xlsx đã điền. Trang mang tên một loại (tiếng Việt hay tiếng Anh, không phân biệt hoa thường) ⇒ đọc thành
+ *  loại đó — file mẫu, kể cả file 4 trang đời trước; không trang nào mang tên loại nào ⇒ trang ĐẦU là loại `k` đang chọn. */
+export async function readWorkbook(file: File, k: SheetKey): Promise<Partial<Record<SheetKey, Rows>>> {
   const { default: readXlsxFile } = await import('read-excel-file/browser')
   const sheets = await readXlsxFile(file)
-  const out: Partial<Record<SheetKey, Rows>> = {}
   // ô ngày (vd tên chuyến "28/10" Excel tự hiểu là ngày) → chữ ngày/tháng/năm cố định: là DỮ LIỆU, không theo ngôn ngữ giao diện
+  const cells = (data: unknown[][]): Rows => data.map(r => r.map(c => (c instanceof Date ? c.toLocaleDateString('vi-VN') : (c as string | number | boolean | null))))
+  const out: Partial<Record<SheetKey, Rows>> = {}
   for (const s of SHEETS) {
     const names = titles(s).map(key)
     const hit = sheets.find(x => names.includes(key(x.sheet)))
-    if (hit) out[s.key] = hit.data.map(r => r.map(c => (c instanceof Date ? c.toLocaleDateString('vi-VN') : (c as string | number | boolean | null))))
+    if (hit) out[s.key] = cells(hit.data)
   }
+  if (!Object.keys(out).length && sheets[0]) out[k] = cells(sheets[0].data)
   return out
 }

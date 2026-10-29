@@ -1,7 +1,10 @@
 // Bàn xếp xe: nút toàn màn hình khung 3D (máy tính / điện thoại dọc / ngang) + nút "Nhập đơn từ Excel" (đơn vào đúng
-// chuyến đang mở) + file mẫu nhập Excel theo ngôn ngữ (tên trang, tiêu đề cột) nạp lại được ở ngôn ngữ kia.
+// chuyến đang mở; điện thoại không có phần nhập Excel) + file mẫu MỖI LOẠI một file một trang, theo ngôn ngữ, lưu qua
+// hộp "Lưu thành…" (giả lập — headless không có hộp thật; Huỷ / máy không có hộp ⇒ tải về), nạp lại ở ngôn ngữ kia.
 // Chạy sau `npm run build`: node scripts/ui-tools.mjs
 import readXlsxFile from 'read-excel-file/node'
+import writeXlsxFile from 'write-excel-file/node'
+import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DEVICES, OUT, T, launch, startPreview, watchErrors } from './ui-lib.mjs'
 
@@ -48,7 +51,7 @@ const paste = async (p, text, n) => {
   await sheet.getByRole('textbox', { name: T('Dán bảng {name}', { name: T('Đơn hàng') }) }).fill(text)
   await sheet.getByRole('button', { name: T('Nhập {n} dòng dữ liệu', { n }) }).click(); await p.waitForTimeout(800)
 }
-for (const dev of [DEVICES[0], { ...DEVICES[1], name: 'small', viewport: { width: 360, height: 760 } }]) {
+for (const dev of [DEVICES[0], { ...DEVICES[1], name: 'tablet', viewport: { width: 820, height: 1180 } }]) {
   console.log(dev.name + ' — nhập đơn vào chuyến')
   const ctx = await b.newContext(dev)
   const p = await ctx.newPage()
@@ -81,42 +84,122 @@ for (const dev of [DEVICES[0], { ...DEVICES[1], name: 'small', viewport: { width
   await ctx.close()
 }
 
-// ── 3. File mẫu theo ngôn ngữ: tải bản Việt + bản Anh, mỗi bản nạp lại ở ngôn ngữ KIA vẫn đủ dòng
+// ── 3. Điện thoại (dọc, ngang): không có nút nhập Excel nào — bàn xếp xe (chuyến trống + có hàng), menu, danh mục Mã hàng
+for (const dev of [DEVICES[1], { ...DEVICES[1], name: 'phone-ngang', viewport: { width: 844, height: 390 } }]) {
+  console.log(dev.name + ' — không có phần nhập Excel')
+  const ctx = await b.newContext(dev)
+  const p = await ctx.newPage()
+  const errs = watchErrors(p)
+  const none = async (name, where) => ok(!(await p.getByRole('button', { name: T(name) }).count()), `không có nút "${T(name)}" — ${where}`)
+  await p.goto(srv.base + '#/trip/sample-t1', { waitUntil: 'networkidle' }); await p.waitForTimeout(2500)
+  await none('Nhập đơn từ Excel', 'chuyến có hàng')
+  await p.getByRole('button', { name: T('Danh mục') }).click(); await p.waitForTimeout(300)
+  await none('Nhập từ Excel', 'menu')
+  await p.getByRole('button', { name: T('Mã hàng'), exact: true }).first().click(); await p.waitForTimeout(500)
+  await none('Dán từ Excel', 'danh mục Mã hàng')
+  await p.screenshot({ path: `${OUT}/no-import-${dev.name}.png` })
+  await p.keyboard.press('Escape'); await p.waitForTimeout(300)
+  await p.getByRole('button', { name: T('Chuyến mới'), exact: true }).click(); await p.waitForTimeout(500)
+  await none('Nhập đơn từ Excel', 'chuyến trống')
+  ok(await p.getByRole('button', { name: T('Thêm hàng') }).first().isVisible(), 'chuyến trống vẫn có nút Thêm hàng')
+  ok(!errs.length, 'không lỗi trình duyệt' + (errs.length ? ': ' + errs.join(' | ') : ''))
+  await ctx.close()
+}
+
+// ── 4. File mẫu MỖI LOẠI: một file một trang, đúng tên theo ngôn ngữ, lưu qua hộp "Lưu thành…"; nạp lại ở ngôn ngữ KIA,
+// file của loại khác tự vào đúng loại, nạp nhiều loại rồi nhập một lần; file 4 trang đời trước + file trang "Sheet1"
 {
-  console.log('pc — file mẫu hai ngôn ngữ')
+  console.log('pc — file mẫu từng loại, hộp Lưu thành…')
   const ctx = await b.newContext({ ...DEVICES[0], acceptDownloads: true })
+  // hộp "Lưu thành…" giả: ghi lại tên gợi ý + nội dung; __cancel ⇒ người dùng bấm Huỷ
+  await ctx.addInitScript(() => {
+    window.__saved = []
+    window.showSaveFilePicker = async o => {
+      if (window.__cancel) throw new DOMException('Huỷ', 'AbortError')
+      const rec = { name: o.suggestedName, ext: Object.values(o.types?.[0]?.accept ?? {}).flat(), bytes: null }
+      window.__saved.push(rec)
+      const parts = []
+      return { createWritable: async () => ({ write: async x => { parts.push(x) }, close: async () => { rec.bytes = [...new Uint8Array(await new Blob(parts).arrayBuffer())] } }) }
+    }
+  })
   const p = await ctx.newPage()
   const errs = watchErrors(p)
   await p.goto(srv.base + '#/trip/sample-t1', { waitUntil: 'networkidle' }); await p.waitForTimeout(2000)
+  const sheet = p.locator('[data-sheet]')
   const lang = () => p.evaluate(() => JSON.parse(localStorage.getItem('malcargo-lang-v1')).state.lang)
   const flip = async () => { await p.locator('header').getByRole('button', { name: /tiếng|Vietnamese|English/i }).click(); await p.waitForTimeout(600) }
   const open = async () => { await p.locator('aside').getByRole('button', { name: /^(Nhập đơn từ Excel|Import orders from Excel)$/ }).click(); await p.waitForTimeout(400) }
-  const files = {}
+  const TAB = { items: 'Mã hàng|Items', vehicles: 'Xe|Trucks', orders: 'Đơn hàng|Orders', trips: 'Chuyến|Trips' }
+  const tab = k => sheet.getByRole('button', { name: new RegExp(`^(${TAB[k]})(\\s*· \\d+)?$`) })
+  const WANT = {
+    vi: { items: ['malcargo-mau-ma-hang.xlsx', 'Mã hàng', 'Mã hàng *'], vehicles: ['malcargo-mau-xe.xlsx', 'Xe', 'Tên xe *'], orders: ['malcargo-mau-don-hang.xlsx', 'Đơn hàng', 'Tên đơn *'], trips: ['malcargo-mau-chuyen.xlsx', 'Chuyến', 'Tên chuyến *'] },
+    en: { items: ['malcargo-items-template.xlsx', 'Items', 'Code *'], vehicles: ['malcargo-trucks-template.xlsx', 'Trucks', 'Truck name *'], orders: ['malcargo-orders-template.xlsx', 'Orders', 'Order name *'], trips: ['malcargo-trips-template.xlsx', 'Trips', 'Trip name *'] },
+  }
+  const files = { vi: {}, en: {} }
   for (let i = 0; i < 2; i++) {
     const l = await lang()
     await open()
-    const [dl] = await Promise.all([p.waitForEvent('download'), p.locator('[data-sheet]').getByRole('button', { name: /\.xlsx$/ }).first().click()])
-    files[l] = join(OUT, `template-${l}.xlsx`); await dl.saveAs(files[l])
+    ok(await tab('orders').getAttribute('aria-pressed') === 'true', `[${l}] mở từ nút nhập đơn ⇒ đang chọn Đơn hàng`)
+    for (const k of Object.keys(TAB)) {
+      await tab(k).click(); await p.waitForTimeout(150)
+      const n = await p.evaluate(() => window.__saved.length)
+      await sheet.getByRole('button', { name: /\.xlsx$/ }).click(); await p.waitForTimeout(700)
+      const rec = await p.evaluate(i => window.__saved[i], n)
+      const [fname, sname, head] = WANT[l][k]
+      if (!rec?.bytes) { ok(false, `[${l}] ${k}: không lưu qua hộp Lưu thành…`); continue }
+      files[l][k] = join(OUT, `template-${l}-${k}.xlsx`); writeFileSync(files[l][k], Buffer.from(rec.bytes))
+      const wb = await readXlsxFile(files[l][k])
+      ok(rec.name === fname && rec.ext.includes('.xlsx') && wb.length === 1 && wb[0].sheet === sname && wb[0].data[0][0] === head && wb[0].data.length >= 3,
+        `[${l}] ${k}: hộp Lưu thành… gợi ý ${rec.name}, 1 trang "${wb[0].sheet}" [${wb[0].data[0].join(' | ')}] + ${wb[0].data.length - 1} dòng ví dụ`)
+      if (l === 'en') ok(!/[à-ỹđ]/i.test(JSON.stringify([wb[0].sheet, wb[0].data[0]])), `[en] ${k}: tên trang / tiêu đề không còn chữ tiếng Việt`)
+    }
+    if (i === 0) await p.screenshot({ path: `${OUT}/import-sheet-${l}.png` })
     await p.keyboard.press('Escape'); await p.waitForTimeout(200)
     await flip()
   }
-  const vi = await readXlsxFile(files.vi), en = await readXlsxFile(files.en)
-  const heads = s => s.map(x => `${x.sheet}[${x.data[0]?.[0] ?? ''}]`).join(' · ')
-  console.log('    vi:', heads(vi)); console.log('    en:', heads(en))
-  ok(vi.map(s => s.sheet).join() === 'Hướng dẫn,Mã hàng,Xe,Đơn hàng,Chuyến' && vi[1].data[0][0] === 'Mã hàng *', 'file mẫu tiếng Việt: tên trang + tiêu đề cột tiếng Việt')
-  ok(en.map(s => s.sheet).join() === 'Guide,Items,Trucks,Orders,Trips' && en[1].data[0][0] === 'Code *' && en[3].data[0].join() === 'Order name *,Delivery point,Code *,Cartons *', 'file mẫu tiếng Anh: tên trang + tiêu đề cột tiếng Anh')
-  ok(!/[à-ỹđ]/i.test(JSON.stringify(en.map(s => [s.sheet, s.data[0]]))), 'file tiếng Anh không còn chữ tiếng Việt ở tên trang / tiêu đề')
-  // nạp chéo: đang ở ngôn ngữ nào cũng đọc được file ngôn ngữ kia (2 mã + 2 xe + 2 đơn + 1 chuyến = 7 dòng)
+  // nạp chéo: đang ở Đơn hàng nạp file Mã hàng (ngôn ngữ kia) ⇒ tự chuyển sang Mã hàng · 2; rồi nạp file Đơn hàng ⇒ 2 mã + 2 đơn
   for (const l of ['vi', 'en']) {
     const other = l === 'vi' ? 'en' : 'vi'
     if ((await lang()) !== l) await flip()
     await open()
-    await p.locator('[data-sheet] input[type=file]').setInputFiles(files[other]); await p.waitForTimeout(800)
-    const btn = await p.locator('[data-sheet] footer, [data-sheet]').getByRole('button', { name: /^(Nhập 7 dòng dữ liệu|Import 7 rows)/ }).count()
-    if (!btn) console.log('    nút:', await p.locator('[data-sheet]').getByRole('button').allInnerTexts())
-    ok(btn > 0, `giao diện ${l}, nạp file mẫu ${other} ⇒ đọc đủ 7 dòng`)
+    await sheet.locator('input[type=file]').setInputFiles(files[other].items); await p.waitForTimeout(800)
+    ok(await tab('items').getAttribute('aria-pressed') === 'true' && /2$/.test(await tab('items').innerText()), `[${l}] nạp file Mã hàng (${other}) lúc đang ở Đơn hàng ⇒ vào Mã hàng, đọc 2 mã`)
+    await tab('orders').click(); await p.waitForTimeout(150)
+    await sheet.locator('input[type=file]').setInputFiles(files[other].orders); await p.waitForTimeout(800)
+    const btn = await sheet.getByRole('button', { name: /^(Nhập 4 dòng dữ liệu|Import 4 rows)$/ }).count()
+    if (!btn) console.log('    nút:', await sheet.getByRole('button').allInnerTexts())
+    ok(btn > 0 && !(await sheet.locator('li svg.lucide-triangle-alert, li svg.lucide-alert-triangle').count()), `[${l}] thêm file Đơn hàng (${other}) ⇒ 2 mã + 2 đơn nhập một lần, không lỗi dòng`)
     await p.keyboard.press('Escape'); await p.waitForTimeout(200)
   }
+  // file 4 trang đời trước ⇒ đọc đủ 4 loại; file tự làm (trang "Sheet1") ⇒ thành loại đang chọn
+  if ((await lang()) !== 'vi') await flip()
+  const old = join(OUT, 'old-4-sheets.xlsx'), own = join(OUT, 'own-sheet1.xlsx')
+  await writeXlsxFile([
+    { sheet: 'Mã hàng', data: [['Mã hàng *'], ['OLD1', 'Hàng cũ 1', 400, 300, 200], ['OLD2', 'Hàng cũ 2', 300, 200, 100]] },
+    { sheet: 'Xe', data: [['Tên xe *'], ['Xe cũ', '29C00001', '', 5700, 2000, 2000, 5000]] },
+    { sheet: 'Đơn hàng', data: [['Tên đơn *'], ['Đơn cũ', '', 'OLD1', 10]] },
+    { sheet: 'Chuyến', data: [['Tên chuyến *'], ['Chuyến cũ', 'Xe cũ', 'Đơn cũ']] },
+  ]).toFile(old)
+  await writeXlsxFile([{ sheet: 'Sheet1', data: [['Đơn tự làm', 'Kho B', 'MAU-ST180', 12], ['Đơn tự làm', 'Kho B', 'MAU-ST110', 4]] }]).toFile(own)
+  await open()
+  await sheet.locator('input[type=file]').setInputFiles(old); await p.waitForTimeout(800)
+  ok(await sheet.getByRole('button', { name: 'Nhập 5 dòng dữ liệu' }).count() > 0, 'file 4 trang đời trước ⇒ đọc đủ 2 mã + 1 xe + 1 đơn + 1 chuyến')
+  await p.keyboard.press('Escape'); await p.waitForTimeout(200)
+  await open()
+  await sheet.locator('input[type=file]').setInputFiles(own); await p.waitForTimeout(800)
+  ok(await tab('orders').getAttribute('aria-pressed') === 'true' && await sheet.getByRole('button', { name: 'Nhập 1 dòng dữ liệu' }).count() > 0, 'file tự làm, trang "Sheet1" ⇒ đọc thành Đơn hàng (1 đơn 2 mã)')
+  // Huỷ ở hộp Lưu thành… ⇒ không tải gì, không báo lỗi; máy không có hộp ⇒ tải về như thường
+  await p.evaluate(() => { window.__cancel = true })
+  let dl = null
+  const onDl = d => { dl = d }
+  p.on('download', onDl)
+  const n0 = await p.evaluate(() => window.__saved.length)
+  await sheet.getByRole('button', { name: /\.xlsx$/ }).click(); await p.waitForTimeout(800)
+  ok(!dl && (await p.evaluate(() => window.__saved.length)) === n0 && !(await sheet.getByText('Không tạo được file mẫu.').count()), 'bấm Huỷ ở hộp Lưu thành… ⇒ không tải, không báo lỗi')
+  p.off('download', onDl)
+  await p.evaluate(() => { window.showSaveFilePicker = undefined })
+  const [d2] = await Promise.all([p.waitForEvent('download', { timeout: 5000 }), sheet.getByRole('button', { name: /\.xlsx$/ }).click()])
+  ok(d2.suggestedFilename() === 'malcargo-mau-don-hang.xlsx', `trình duyệt không có hộp Lưu thành… ⇒ tải về ${d2.suggestedFilename()}`)
   ok(!errs.length, 'không lỗi trình duyệt' + (errs.length ? ': ' + errs.join(' | ') : ''))
   await ctx.close()
 }

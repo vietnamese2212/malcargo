@@ -67,11 +67,13 @@ for (const dev of DEVICES) {
     await p.getByRole('button', { name: /^Kết quả:/ }).click(); await p.waitForTimeout(300)
     await p.screenshot({ path: `${OUT}/${dev.name}-titleblock.jpg`, type: 'jpeg', quality: 78 })
     await p.getByRole('button', { name: /^Kết quả:/ }).click()
-    // nhập từ Excel (mở từ nút Danh mục)
-    await p.getByRole('button', { name: 'Danh mục' }).click(); await p.waitForTimeout(200)
-    await p.getByRole('button', { name: 'Nhập từ Excel' }).click(); await p.waitForTimeout(400)
-    await p.screenshot({ path: `${OUT}/${dev.name}-import.jpg`, type: 'jpeg', quality: 78 })
-    await p.keyboard.press('Escape'); await p.waitForTimeout(150)
+    // nhập từ Excel (mở từ nút Danh mục) — điện thoại không có
+    if (!dev.isMobile) {
+      await p.getByRole('button', { name: 'Danh mục' }).click(); await p.waitForTimeout(200)
+      await p.getByRole('button', { name: 'Nhập từ Excel' }).click(); await p.waitForTimeout(400)
+      await p.screenshot({ path: `${OUT}/${dev.name}-import.jpg`, type: 'jpeg', quality: 78 })
+      await p.keyboard.press('Escape'); await p.waitForTimeout(150)
+    }
   }
   if (errs.length) { bad++; console.log(`✗ ${dev.name} lỗi trình duyệt:`, errs) }
   await ctx.close()

@@ -85,26 +85,28 @@ export const SHEETS: Record<string, string> = {
   // ── nhập từ Excel (màn) ──
   '{n} mã hàng': '{n} {n:item|items}',
   '{n} đơn hàng': '{n} {n:order|orders}',
-  'Không đọc được file. Hãy dùng file .xlsx tải từ nút "Tải file mẫu".': 'Cannot read the file. Use the .xlsx from the "Download template" button.',
+  'Không đọc được file. Hãy dùng file .xlsx tải ở bước 1.': 'Cannot read the file. Use the .xlsx downloaded in step 1.',
   'Đã nhập {list}': 'Imported {list}',
-  'Mã hàng · Xe · Đơn hàng · Chuyến, trong một file mẫu': 'Items · Trucks · Orders · Trips, in one template',
+  'Mỗi loại dữ liệu một file mẫu riêng': 'One template per type of data',
   'Nhập {n} dòng dữ liệu': 'Import {n} {n:row|rows}',
   'Chưa có gì để nhập': 'Nothing to import yet',
-  'Tải file mẫu': 'Download the template',
-  '4 trang Mã hàng, Xe, Đơn hàng, Chuyến. Mỗi trang có tiêu đề cột (dấu * là bắt buộc) và dòng ví dụ.':
-    '4 sheets: items, trucks, orders, trips. Each has column headers in Vietnamese (* = required) and example rows.',
+  'Nhập gì?': 'What to import?',
+  'Tải file mẫu {name}': 'Download the {name} template',
+  'Một trang {name}: tiêu đề cột (dấu * là bắt buộc) và vài dòng ví dụ — xoá dòng ví dụ trước khi nạp.':
+    'One {name} sheet: column headers (* = required) and a few example rows — delete the examples before loading.',
+  'Tải {file}': 'Download {file}',
   'Không tạo được file mẫu.': 'Could not create the template.',
-  'Tải file mẫu .xlsx': 'Download template .xlsx',
-  'Điền xong thì nạp cả file': 'Fill it in, then load the whole file',
-  'App đọc đủ 4 trang một lần. Trang nào để trống thì bỏ qua.': 'The app reads all 4 sheets at once. Empty sheets are skipped.',
+  'Điền xong thì nạp file': 'Fill it in, then load the file',
+  'Cần nhập thêm loại khác thì chọn ở trên rồi nạp tiếp, cuối cùng bấm Nhập một lần.':
+    'To import another type as well, pick it above and load its file too, then press Import once.',
   'Bỏ file': 'Remove file',
-  'Nạp file .xlsx': 'Load .xlsx file',
-  'Hoặc chép từng bảng trong Excel rồi dán vào đây:': 'Or copy each table in Excel and paste it here:',
+  'Nạp file {name}': 'Load {name} file',
+  'Hoặc chép bảng {name} trong Excel rồi dán vào đây:': 'Or copy the {name} table in Excel and paste it here:',
   'Dán bảng {name}': 'Paste the {name} table',
   '{n} dòng trùng với dữ liệu đã có sẽ được cập nhật.': '{n} {n:row matches|rows match} existing data and will be updated.',
   '… và {n} dòng khác': '… and {n} more',
 
-  // ── nhập từ Excel: tiêu đề cột (hiện trên màn; trong file vẫn tiếng Việt) ──
+  // ── nhập từ Excel: tiêu đề cột (trên màn + file mẫu tiếng Anh) ──
   'Dài (mm)': 'Length (mm)',
   'Rộng (mm)': 'Width (mm)',
   'Cao (mm)': 'Height (mm)',
@@ -121,8 +123,8 @@ export const SHEETS: Record<string, string> = {
     'CARTON size, measured outside, in mm. Light goods: put x. A code that already exists ⇒ updated.',
   'Đo LÒNG thùng (bên trong), tính mm. Cách chở bỏ trống = Thùng rời. Biển số (hoặc tên) trùng xe đã có ⇒ cập nhật.':
     'Measure the INSIDE of the cargo box, in mm. Blank loading mode = loose cartons. A plate (or name) that already exists ⇒ updated.',
-  'Mỗi dòng một mã hàng; đơn nhiều mã thì lặp lại tên đơn. Mã hàng lấy ở trang Mã hàng hoặc mã đã có trong app.':
-    'One item per row; repeat the order name for more items. Use codes from the items sheet or items already in the app.',
+  'Mỗi dòng một mã hàng; đơn nhiều mã thì lặp lại tên đơn. Mã hàng phải có sẵn trong app, hoặc nạp file Mã hàng cùng lúc.':
+    'One item per row; repeat the order name for more items. Codes must already be in the app, or load an Items file at the same time.',
   'Mỗi dòng một đơn, ghi theo THỨ TỰ GIAO: đơn giao trước ghi trước (được xếp sát cửa).':
     'One order per row, in DELIVERY ORDER: first delivery first (loaded nearest the door).',
 
@@ -139,15 +141,12 @@ export const SHEETS: Record<string, string> = {
   'không thấy đơn "{name}"': 'order "{name}" not found',
   'không thấy xe "{name}" (chuyến vẫn nhập, chưa gán xe)': 'truck "{name}" not found (trip imported without a truck)',
 
-  // ── file mẫu .xlsx: trang Hướng dẫn + tên file (tên trang + tiêu đề cột lấy bản dịch của SHEETS trong importer.ts) ──
-  'MalCargo — file mẫu nhập dữ liệu': 'MalCargo — data import template',
-  'Điền các trang Mã hàng, Xe, Đơn hàng, Chuyến (trang nào không cần thì để trống), rồi trong app chọn Menu → Nhập từ Excel → Nạp file.':
-    'Fill in the sheets Items, Trucks, Orders, Trips (leave any you do not need empty), then in the app choose Menu → Import from Excel → Load .xlsx file.',
-  'Cột có dấu * là bắt buộc. Xoá các dòng ví dụ trước khi nạp. Giữ nguyên dòng tiêu đề.':
-    'Columns marked * are required. Delete the example rows before loading. Keep the sheet names and header rows as they are.',
+  // ── file mẫu .xlsx: tên file từng loại (tên trang + tiêu đề cột lấy bản dịch của SHEETS trong importer.ts) ──
   'Đơn nhập vào (chưa thuộc chuyến nào) sẽ thêm vào {trip}.': 'Imported orders (not already in a trip) will be added to {trip}.',
-  'Hướng dẫn': 'Guide',
-  'malcargo-mau-nhap-du-lieu.xlsx': 'malcargo-import-template.xlsx',
+  'malcargo-mau-ma-hang.xlsx': 'malcargo-items-template.xlsx',
+  'malcargo-mau-xe.xlsx': 'malcargo-trucks-template.xlsx',
+  'malcargo-mau-don-hang.xlsx': 'malcargo-orders-template.xlsx',
+  'malcargo-mau-chuyen.xlsx': 'malcargo-trips-template.xlsx',
 
   // ── dòng ví dụ file mẫu (dữ liệu, dịch bằng tx() — các tên mẫu khác đã có ở EN_NAMES) ──
   'Đơn 101': 'Order 101',

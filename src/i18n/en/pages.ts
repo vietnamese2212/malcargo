@@ -26,13 +26,13 @@ export const PAGES: Record<string, string> = {
   // Mã hàng
   'Kích thước thùng, khối lượng, cách xếp': 'Carton size, weight, stacking',
   'Dán từ Excel': 'Paste from Excel',
-  'Dán': 'Paste',
   'Thêm mã mẫu': 'Add sample item',
   'Thêm mã hàng': 'Add item',
   'Của tôi · {n}': 'Mine · {n}',
   'Chưa có mã hàng nào của bạn': 'You have no items yet',
   'Thêm từng mã, dán cả danh sách từ Excel, hoặc mở tab Mẫu chung và sao một mẫu về để sửa.':
     'Add items one by one, paste a whole list from Excel, or open the Shared tab and copy a sample to edit.',
+  'Thêm từng mã, hoặc mở tab Mẫu chung và sao một mẫu về để sửa.': 'Add items one by one, or open the Shared tab and copy a sample to edit.',
   'Chưa khai kg': 'No kg set',
   'Chưa có thùng/pallet': 'No cartons/pallet',
   'Tìm theo mã hoặc tên': 'Search by code or name',

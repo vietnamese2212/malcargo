@@ -346,6 +346,13 @@ export function useViewportBox(on: boolean): CSSProperties | undefined {
   return on && v.height && !v.zoom ? { top: v.top, height: v.height, bottom: 'auto' } : undefined
 }
 
+// ── Điện thoại: màn hẹp (dọc), hoặc máy cảm ứng nằm ngang (thấp). Xoay máy / kéo cửa sổ ⇒ cập nhật ──────────
+const PHONE = '(max-width: 639px), (pointer: coarse) and (max-height: 499px)'
+/** Đúng trên điện thoại — dùng để giấu việc của máy tính (nhập file Excel). */
+export const usePhone = () => useSyncExternalStore(
+  f => { const m = window.matchMedia(PHONE); m.addEventListener('change', f); return () => m.removeEventListener('change', f) },
+  () => window.matchMedia(PHONE).matches, () => false)
+
 /** Phủ phần màn nằm DƯỚI phần còn thấy (sau thanh gợi ý của bàn phím) — đặt trong khung đã bám `useViewportBox`.
  *  Chạm vào đó chỉ cất bàn phím, không bấm trúng gì của trang phía sau. */
 export function KeyboardShield({ className = 'bg-navy-950/45' }: { className?: string }) {
