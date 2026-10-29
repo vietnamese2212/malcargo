@@ -1,9 +1,9 @@
 // Nhập từ Excel: chọn loại (Mã hàng / Xe / Đơn hàng / Chuyến) → tải file mẫu CỦA LOẠI ĐÓ → điền → nạp file, hoặc chép
-// bảng dán vào. Nạp được nhiều loại rồi nhập một lần (đơn dùng mã vừa nạp). Xem trước rồi mới nhập.
+// bảng dán vào. Nạp được nhiều loại rồi nhập một lần (đơn dùng mã vừa nạp). Xem trước rồi mới nhập; dòng lỗi bị bỏ, báo kèm số dòng.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Download, FileSpreadsheet, Upload, X } from 'lucide-react'
 import { useAllItems, useAllVehicles, useData } from '../data/store'
-import { SHEETS, colHead, parseImport, readWorkbook, sampleRows, saveTemplate, splitPasted, type Rows, type SheetKey } from '../data/importer'
+import { SHEETS, parseImport, readWorkbook, sampleRows, saveTemplate, splitPasted, type Rows, type SheetKey } from '../data/importer'
 import { t, tx } from '../i18n'
 import { Button, Sheet, Tabs, cx, fmtInt } from './kit'
 
@@ -44,7 +44,7 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
       setFiles(x => ({ ...x, ...Object.fromEntries(keys.map(k => [k, { name: f.name, rows: got[k]! }])) }))
       if (keys.length && !keys.includes(tab)) setTab(keys[0])
       setMsg(null)
-    } catch { setMsg(t('Không đọc được file. Hãy dùng file .xlsx tải ở bước 1.')) }
+    } catch { setMsg(t('Không đọc được file. Hãy dùng file mẫu .xlsx.')) }
     if (fileRef.current) fileRef.current.value = ''
   }
   const template = () => saveTemplate(tab).catch(() => setMsg(t('Không tạo được file mẫu.')))
@@ -61,62 +61,29 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
   }
 
   return (
-    <Sheet open={open} onClose={onClose} wide title={t('Nhập từ Excel')} subtitle={t('Mỗi loại dữ liệu một file mẫu riêng')}
+    <Sheet open={open} onClose={onClose} wide title={t('Nhập từ Excel')}
       footer={<div className="flex gap-2">
         <Button className="flex-1" onClick={onClose}>{t('Huỷ')}</Button>
         <Button variant="primary" className="flex-[2]" disabled={!total} onClick={save}>{total ? t('Nhập {n} dòng dữ liệu', { n: fmtInt(total) }) : t('Chưa có gì để nhập')}</Button>
       </div>}>
-      {trip && <p className="mb-3 rounded-md bg-brand-50 px-3 py-2 text-[13px] text-brand-900">{t('Đơn nhập vào (chưa thuộc chuyến nào) sẽ thêm vào {trip}.', { trip: tx(trip.name) })}</p>}
-      {/* chọn loại trước: file mẫu, file nạp, ô dán bên dưới đều của loại này */}
-      <p className="text-[13px] font-medium text-slate-700">{t('Nhập gì?')}</p>
-      <Tabs value={tab} onChange={setTab} className="mt-0.5"
+      {trip && <p className="mb-3 rounded-md bg-brand-50 px-3 py-2 text-[13px] text-brand-900">{t('Đơn nhập vào sẽ thêm vào {trip}.', { trip: tx(trip.name) })}</p>}
+      {/* chọn loại trước: file mẫu, file nạp, ô dán bên dưới đều của loại này — cách điền nằm trong file mẫu, không giải thích thêm */}
+      <Tabs value={tab} onChange={setTab}
         options={SHEETS.map(s => ({ value: s.key, label: <>{t(s.title)}{n[s.key] ? <span className="num ml-1 text-brand-700">· {n[s.key]}</span> : null}</> }))} />
-      <div className="mt-3 flex flex-wrap gap-1">
-        {def.cols.map((c, i) => (
-          <span key={c.label} className={cx('num rounded border px-1.5 py-0.5 text-[12px]', c.req ? 'border-brand-200 bg-brand-50 font-semibold text-brand-800' : 'border-slate-200 bg-slate-50 text-slate-700')}>
-            {String.fromCharCode(65 + i)} · {colHead(c)}{c.req && ' *'}
-          </span>
-        ))}
+      <div className="mt-3 flex gap-2">
+        <Button className="flex-1" onClick={template}><Download size={17} />{t('Tải file mẫu')}</Button>
+        <Button variant="primary" className="flex-1" onClick={() => fileRef.current?.click()}><Upload size={17} />{t('Nạp file')}</Button>
+        <input ref={fileRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={e => onFile(e.target.files?.[0])} />
       </div>
-      <p className="mt-1.5 text-[12px] text-slate-600">{t(def.note)}</p>
-
-      <ol className="mt-3 space-y-3">
-        <li className="rounded-lg border border-slate-200 p-3">
-          <div className="flex items-start gap-3">
-            <Step n={1} />
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold text-slate-900">{t('Tải file mẫu {name}', { name })}</div>
-              <p className="text-[13px] text-slate-600">{t('Một trang {name}: tiêu đề cột (dấu * là bắt buộc) và vài dòng ví dụ — xoá dòng ví dụ trước khi nạp.', { name })}</p>
-            </div>
-          </div>
-          <Button className="mt-2.5 w-full" onClick={template}><Download size={17} />{t('Tải {file}', { file: t(def.file) })}</Button>
-        </li>
-        <li className="rounded-lg border border-slate-200 p-3">
-          <div className="flex items-start gap-3">
-            <Step n={2} />
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold text-slate-900">{t('Điền xong thì nạp file')}</div>
-              <p className="text-[13px] text-slate-600">{t('Cần nhập thêm loại khác thì chọn ở trên rồi nạp tiếp, cuối cùng bấm Nhập một lần.')}</p>
-            </div>
-          </div>
-          {file ? (
-            <div className="mt-2.5 flex items-center gap-2 rounded-md bg-brand-50 px-3 py-2 text-sm">
-              <FileSpreadsheet size={18} className="shrink-0 text-brand-700" /><span className="min-w-0 flex-1 break-all font-medium text-slate-900">{file.name}</span>
-              <button onClick={() => setFiles(x => ({ ...x, [tab]: undefined }))} aria-label={t('Bỏ file')} className="grid h-8 w-8 shrink-0 place-items-center rounded text-slate-600 hover:bg-white"><X size={16} /></button>
-            </div>
-          ) : (
-            <Button variant="primary" className="mt-2.5 w-full" onClick={() => fileRef.current?.click()}><Upload size={17} />{t('Nạp file {name}', { name })}</Button>
-          )}
-          <input ref={fileRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={e => onFile(e.target.files?.[0])} />
-        </li>
-      </ol>
-
-      <div className="mt-4 rounded-lg border border-slate-200 p-3">
-        <p className="text-[13px] text-slate-700">{t('Hoặc chép bảng {name} trong Excel rồi dán vào đây:', { name })}</p>
-        <textarea value={text[tab] ?? ''} onChange={e => setText(x => ({ ...x, [tab]: e.target.value }))} rows={6} aria-label={t('Dán bảng {name}', { name })}
-          placeholder={sampleRows(def).map(r => r.join('\t')).join('\n')}
-          className="mt-2 w-full rounded-md border border-slate-300 p-2.5 font-mono text-base outline-none sm:text-[13px] placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
-      </div>
+      {file && (
+        <div className="mt-2 flex items-center gap-2 rounded-md bg-brand-50 px-3 py-1.5 text-sm">
+          <FileSpreadsheet size={18} className="shrink-0 text-brand-700" /><span className="min-w-0 flex-1 break-all font-medium text-slate-900">{file.name}</span>
+          <button onClick={() => setFiles(x => ({ ...x, [tab]: undefined }))} aria-label={t('Bỏ file')} className="grid h-8 w-8 shrink-0 place-items-center rounded text-slate-600 hover:bg-white"><X size={16} /></button>
+        </div>
+      )}
+      <textarea value={text[tab] ?? ''} onChange={e => setText(x => ({ ...x, [tab]: e.target.value }))} rows={5} aria-label={t('Dán bảng {name}', { name })}
+        placeholder={`${t('Hoặc dán bảng từ Excel')}\n${sampleRows(def).map(r => r.join('\t')).join('\n')}`}
+        className="mt-3 w-full rounded-md border border-slate-300 p-2.5 font-mono text-base outline-none sm:text-[13px] placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
 
       {msg && <p className="mt-3 text-sm text-red-700">{msg}</p>}
       {total > 0 && (
@@ -139,5 +106,3 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
     </Sheet>
   )
 }
-
-const Step = ({ n }: { n: number }) => <span className="num grid h-6 w-6 shrink-0 place-items-center rounded-full bg-navy-950 text-[12px] font-semibold text-white">{n}</span>

@@ -143,7 +143,7 @@ for (const dev of [DEVICES[1], { ...DEVICES[1], name: 'phone-ngang', viewport: {
     for (const k of Object.keys(TAB)) {
       await tab(k).click(); await p.waitForTimeout(150)
       const n = await p.evaluate(() => window.__saved.length)
-      await sheet.getByRole('button', { name: /\.xlsx$/ }).click(); await p.waitForTimeout(700)
+      await sheet.getByRole('button', { name: /^(Tải file mẫu|Download template)$/ }).click(); await p.waitForTimeout(700)
       const rec = await p.evaluate(i => window.__saved[i], n)
       const [fname, sname, head] = WANT[l][k]
       if (!rec?.bytes) { ok(false, `[${l}] ${k}: không lưu qua hộp Lưu thành…`); continue }
@@ -194,11 +194,11 @@ for (const dev of [DEVICES[1], { ...DEVICES[1], name: 'phone-ngang', viewport: {
   const onDl = d => { dl = d }
   p.on('download', onDl)
   const n0 = await p.evaluate(() => window.__saved.length)
-  await sheet.getByRole('button', { name: /\.xlsx$/ }).click(); await p.waitForTimeout(800)
+  await sheet.getByRole('button', { name: /^(Tải file mẫu|Download template)$/ }).click(); await p.waitForTimeout(800)
   ok(!dl && (await p.evaluate(() => window.__saved.length)) === n0 && !(await sheet.getByText('Không tạo được file mẫu.').count()), 'bấm Huỷ ở hộp Lưu thành… ⇒ không tải, không báo lỗi')
   p.off('download', onDl)
   await p.evaluate(() => { window.showSaveFilePicker = undefined })
-  const [d2] = await Promise.all([p.waitForEvent('download', { timeout: 5000 }), sheet.getByRole('button', { name: /\.xlsx$/ }).click()])
+  const [d2] = await Promise.all([p.waitForEvent('download', { timeout: 5000 }), sheet.getByRole('button', { name: /^(Tải file mẫu|Download template)$/ }).click()])
   ok(d2.suggestedFilename() === 'malcargo-mau-don-hang.xlsx', `trình duyệt không có hộp Lưu thành… ⇒ tải về ${d2.suggestedFilename()}`)
   ok(!errs.length, 'không lỗi trình duyệt' + (errs.length ? ': ' + errs.join(' | ') : ''))
   await ctx.close()

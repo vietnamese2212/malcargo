@@ -9,7 +9,7 @@ import { saveFile } from '../ui/saveFile'
 export type SheetKey = 'items' | 'vehicles' | 'orders' | 'trips'
 /** `text`: chữ hiện trên giao diện tiếng Anh khi nghĩa cột khác chữ dịch của `label` (vd cột "Mã hàng" = mã, không phải danh mục).
  *  `file`: tên file mẫu của loại này. */
-export interface SheetDef { key: SheetKey; title: string; file: string; cols: { label: string; text?: string; req?: boolean; w: number }[]; note: string; sample: (string | number)[][] }
+export interface SheetDef { key: SheetKey; title: string; file: string; cols: { label: string; text?: string; req?: boolean; w: number }[]; sample: (string | number)[][] }
 
 // Thứ tự cột = thứ tự trong file mẫu. Đổi ở đây là đổi cả file mẫu lẫn cách đọc.
 // File mẫu theo ngôn ngữ giao diện: tên trang + tiêu đề cột tiếng Việt (`title`, `label`) hoặc bản tiếng Anh
@@ -23,7 +23,6 @@ export const SHEETS: SheetDef[] = [
       { label: 'Rộng (mm)', req: true, w: 10 }, { label: 'Cao (mm)', req: true, w: 10 }, { label: 'Kg/thùng', w: 10 }, // i18n-key
       { label: 'Thùng/pallet', w: 12 }, { label: 'Chồng tối đa (lớp)', w: 16 }, { label: 'Hàng nhẹ (x)', w: 12 }, // i18n-key
     ],
-    note: 'Kích thước THÙNG, đo mặt ngoài, tính mm. Hàng nhẹ ghi x. Mã trùng mã đã có ⇒ cập nhật.', // i18n-key
     sample: [['SP001', 'Sữa 110ml x48', 420, 255, 100, 6.2, 140, 14, ''], ['SP002', 'Thạch túi 110ml x24', 310, 130, 130, 3.08, 216, 8, 'x']], // i18n-ok
   },
   {
@@ -33,19 +32,16 @@ export const SHEETS: SheetDef[] = [
       { label: 'Dài lòng thùng (mm)', req: true, w: 18 }, { label: 'Rộng (mm)', req: true, w: 10 }, { label: 'Cao (mm)', req: true, w: 10 }, // i18n-key
       { label: 'Tải trọng (kg)', w: 14 }, // i18n-key
     ],
-    note: 'Đo LÒNG thùng (bên trong), tính mm. Cách chở bỏ trống = Thùng rời. Biển số (hoặc tên) trùng xe đã có ⇒ cập nhật.', // i18n-key
     sample: [['Xe 5 tấn số 1', '29C12345', 'Thùng rời', 5700, 2000, 2000, 5000], ['Xe pallet 8 tấn', '29C67890', 'Pallet', 7400, 2350, 2300, 8000]], // i18n-ok
   },
   {
     key: 'orders', title: 'Đơn hàng', file: 'malcargo-mau-don-hang.xlsx', // i18n-key
     cols: [{ label: 'Tên đơn', req: true, w: 18 }, { label: 'Điểm giao', w: 24 }, { label: 'Mã hàng', text: 'Mã', req: true, w: 14 }, { label: 'Số thùng', req: true, w: 10 }], // i18n-key
-    note: 'Mỗi dòng một mã hàng; đơn nhiều mã thì lặp lại tên đơn. Mã hàng phải có sẵn trong app, hoặc nạp file Mã hàng cùng lúc.', // i18n-key
     sample: [['Đơn 101', 'Cửa hàng A', 'SP001', 120], ['Đơn 101', 'Cửa hàng A', 'SP002', 30], ['Đơn 102', 'Cửa hàng B', 'SP001', 80]], // i18n-ok
   },
   {
     key: 'trips', title: 'Chuyến', file: 'malcargo-mau-chuyen.xlsx', // i18n-key
-    cols: [{ label: 'Tên chuyến', req: true, w: 18 }, { label: 'Xe (tên hoặc biển số)', w: 22 }, { label: 'Tên đơn', req: true, w: 18 }], // i18n-key
-    note: 'Mỗi dòng một đơn, ghi theo THỨ TỰ GIAO: đơn giao trước ghi trước (được xếp sát cửa).', // i18n-key
+    cols: [{ label: 'Tên chuyến', req: true, w: 18 }, { label: 'Xe (tên hoặc biển số)', w: 22 }, { label: 'Tên đơn (giao trước ghi trước)', req: true, w: 30 }], // i18n-key
     sample: [['Chuyến sáng 28/10', '29C12345', 'Đơn 101'], ['Chuyến sáng 28/10', '29C12345', 'Đơn 102']], // i18n-ok
   },
 ]
@@ -58,7 +54,7 @@ export const sampleRows = (s: SheetDef) => s.sample.map(r => r.map(c => (typeof 
 const titles = (s: SheetDef) => [s.title, EN[s.title] ?? s.title]
 const heads = (c: SheetDef['cols'][number]) => [c.label, EN[c.text ?? c.label] ?? c.label]
 const sheetName = (s: SheetDef) => titles(s)[getLang() === 'vi' ? 0 : 1]
-export const colHead = (c: SheetDef['cols'][number]) => heads(c)[getLang() === 'vi' ? 0 : 1]
+const colHead = (c: SheetDef['cols'][number]) => heads(c)[getLang() === 'vi' ? 0 : 1]
 
 export type Rows = (string | number | boolean | null | undefined)[][]
 export interface ImportResult extends ImportBatch { errors: string[]; updated: number }
