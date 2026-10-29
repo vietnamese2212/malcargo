@@ -114,5 +114,15 @@ r = parse({
 ok(!r.errors.length && r.trips.find(x => x.name === 'C7')?.vehicleId === 'v2', 'chuyến không ghi xe ⇒ lấy dòng xe của đơn ĐẦU có ghi (Đ8)')
 ok(r.trips.find(x => x.name === 'C8')?.vehicleId === 'v1', 'chuyến có ghi xe ⇒ giữ xe của chuyến')
 
+console.log('• Mã hàng ghi "Mã - Tên" như danh sách chọn của file mẫu')
+const named = [...items, { ...items[0], id: 'i3', code: 'MAU-ST180', name: 'Sữa 180ml x48', owner: 'admin' }, { ...items[0], id: 'i4', code: 'A - 1', name: 'Gạch' }]
+r = parse({ orders: [head('orders'), ['Đ1', '', 'SP1 - A', 1], ['Đ2', '', 'MAU-ST180 - Milk 180ml x48', 1], ['Đ3', '', 'SP2 - Tên đã đổi', 1], ['Đ4', '', 'SP2', 1], ['Đ5', '', 'A - 1 - Gạch', 1], ['Đ6', '', 'SP9 - Không có', 1]] }, { ...none, items: named })
+const it = n => r.orders.find(o => o.name === n)?.lines[0]?.itemId
+ok(it('Đ1') === 'i1' && it('Đ2') === 'i3', '"Mã - Tên" (tên mẫu tiếng Việt hay tiếng Anh) ⇒ đúng mã')
+ok(it('Đ3') === 'i2', 'tên hàng đã đổi sau khi tải file ⇒ vẫn nhận theo phần mã')
+ok(it('Đ4') === 'i2', 'ghi mã không ⇒ vẫn nhận')
+ok(it('Đ5') === 'i4', 'mã có chứa " - " ⇒ vẫn đúng mã')
+ok(has(r, 7, /không thấy mã hàng "SP9 - Không có"/), 'mã không có ⇒ lỗi, báo nguyên giá trị đã ghi')
+
 console.log(fail ? `\nĐỎ — ${fail} lỗi` : '\nXANH')
 process.exit(fail ? 1 : 0)

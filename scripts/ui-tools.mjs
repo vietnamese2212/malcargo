@@ -168,7 +168,9 @@ for (const dev of [DEVICES[1], { ...DEVICES[1], name: 'phone-ngang', viewport: {
         vehicles: ['B:custom', 'C:list', 'D:decimal', 'E:decimal', 'F:decimal', 'G:decimal'],
         orders: ['C:list@list', 'D:whole', 'E:list@list'], trips: ['B:list@list', 'C:list@list'],
       }[k]
-      const listOk = k === 'orders' ? lists.includes('MAU-ST180') && lists.includes(truck5) : k === 'trips' ? lists.includes(truck5) && lists.length > 2 : !lists.length
+      const milk = `MAU-ST180 - ${l === 'vi' ? 'Sữa 180ml x48' : 'Milk 180ml x48'}`   // mã hàng hiện "Mã - Tên"
+      const listOk = k === 'orders' ? lists.includes(milk) && lists.includes(truck5) && wb[0].data[1][2] === `SP001 - ${l === 'vi' ? 'Sữa 110ml x48' : 'Milk 110ml x48'}`
+        : k === 'trips' ? lists.includes(truck5) && lists.length > 2 : !lists.length
       ok(dvs.join() === want.join() && listOk && (lists.length ? /name="_lists" state="hidden"/.test(wbx) : true),
         `[${l}] ${k}: ràng buộc ô ${dvs.join(' ')}${lists.length ? ` · danh sách ẩn ${lists.length} giá trị từ app` : ''}`)
     }

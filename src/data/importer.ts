@@ -56,7 +56,7 @@ export const SHEETS: SheetDef[] = [
     // trống / không có trong app ⇒ bỏ qua, app tự gợi ý xe như thường
     key: 'orders', title: 'Đơn hàng', file: 'malcargo-mau-don-hang.xlsx', // i18n-key
     cols: [
-      { label: 'Tên đơn', req: true, w: 18 }, { label: 'Điểm giao', w: 24 }, { label: 'Mã hàng', text: 'Mã', req: true, w: 14, pick: 'codes' }, // i18n-key
+      { label: 'Tên đơn', req: true, w: 18 }, { label: 'Điểm giao', w: 24 }, { label: 'Mã hàng', text: 'Mã', req: true, w: 34, pick: 'codes' }, // i18n-key
       { label: 'Số thùng', req: true, w: 10, rule: QTY }, { label: 'Dòng xe', w: 22, pick: 'trucks', late: true }, // i18n-key
     ],
     sample: [['Đơn 101', 'Cửa hàng A', 'SP001', 120, 'Xe tải 5 tấn'], ['Đơn 101', 'Cửa hàng A', 'SP002', 30, 'Xe tải 5 tấn'], ['Đơn 102', 'Cửa hàng B', 'SP001', 80, '']], // i18n-ok
@@ -73,7 +73,18 @@ export const SHEETS: SheetDef[] = [
 
 /** Dòng ví dụ theo ngôn ngữ đang chọn: tên mẫu dịch bằng tx(); mã, biển số, số giữ nguyên (tên đơn dịch giống nhau ở
  *  trang Đơn hàng và Chuyến nên vẫn khớp; cách chở không chứa "pallet" vẫn là thùng rời). */
-export const sampleRows = (s: SheetDef) => s.sample.map(r => r.map(c => (typeof c === 'string' ? tx(c) : c)))
+export const sampleRows = (s: SheetDef) => s.sample.map(r => r.map((c, i) => {
+  if (typeof c !== 'string') return c
+  if (s.cols[i].pick !== 'codes') return tx(c)
+  // mã hàng hiện như trong danh sách chọn: "Mã - Tên" (tên lấy ở dòng ví dụ của file Mã hàng)
+  const it = SHEETS.find(x => x.key === 'items')!.sample.find(x => x[0] === c)
+  return it ? itemLabel(c, tx(String(it[1]))) : c
+}))
+
+/** Mã hàng trong danh sách chọn của file mẫu: "Mã - Tên" — người dùng nhớ tên hàng, không nhớ mã (chủ dự án 29/10).
+ *  Nạp lại thì tách lấy mã (`parseImport`); ghi mã không cũng nhận. */
+const SEP = ' - '
+const itemLabel = (code: string, name: string) => `${code}${SEP}${name}`
 
 /** Tên trang / tiêu đề cột trong file mẫu, cả hai ngôn ngữ (`[vi, en]`); `sheetName` / `colHead` theo ngôn ngữ đang dùng. */
 const titles = (s: SheetDef) => [s.title, EN[s.title] ?? s.title]
@@ -191,7 +202,10 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
   // ── Đơn hàng (gom dòng theo tên đơn; cùng mã ghi hai dòng thì cộng dồn; một đơn chỉ một điểm giao;
   // dòng xe: lấy dòng đầu có ghi xe có trong app, ghi sai thì bỏ qua — không chặn)
   const allItems = [...out.items, ...have.items]
-  const findItem = (code: string) => allItems.find(i => key(i.code) === key(code)) ?? allItems.find(i => key(i.code) === key(`MAU-${code}`))
+  // mã → "Mã - Tên" như danh sách chọn (tên mẫu tiếng Việt hay tiếng Anh) → phần trước " - " (tên hàng đã đổi sau khi tải file)
+  const byCode = (c: string) => allItems.find(i => key(i.code) === key(c)) ?? allItems.find(i => key(i.code) === key(`MAU-${c}`))
+  const findItem = (s: string) => byCode(s) ?? allItems.find(i => [i.name, txEn(i.name)].some(n => key(itemLabel(i.code, n)) === key(s)))
+    ?? (s.includes(SEP) ? byCode(s.slice(0, s.indexOf(SEP))) : undefined)
   const orderMap = new Map<string, Order>(), placeAt = new Map<string, [string, number]>()
   for (const [ln, r] of body(src.orders ?? [], 'orders', (l, m) => err('orders', l, m), 3)) {
     const name = str(r[0]), place = str(r[1]), code = str(r[2]), truck = str(r[4])
@@ -270,7 +284,7 @@ type Have = { items: Item[]; vehicles: Vehicle[]; orders: Order[] }
 function checks(s: SheetDef, have: Have): { xml: string; lists: string[][] } {
   const uniq = (l: string[]) => [...new Set(l.filter(Boolean))]
   const pick: Record<Pick, string[]> = {
-    codes: uniq(have.items.map(i => i.code)), orders: uniq(have.orders.map(o => tx(o.name))),
+    codes: uniq(have.items.map(i => itemLabel(i.code, tx(i.name)))), orders: uniq(have.orders.map(o => tx(o.name))),
     trucks: uniq(have.vehicles.flatMap(v => [tx(v.name), v.plate])),   // tên (tên mẫu theo ngôn ngữ) + biển số
     modes: [tx('Thùng rời'), 'Pallet'], x: ['x'], // i18n-ok — giá trị ghi trong file
   }
