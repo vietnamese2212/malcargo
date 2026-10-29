@@ -1,8 +1,9 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { Download, LogIn, MessageCircle, RotateCcw, Upload } from 'lucide-react'
 import { exportBackup, parseBackup, useData, type BackupData } from '../data/store'
+import { signInGoogle, useAuth } from '../data/cloud'
 import { DEFAULT_PALLET_SETTINGS } from '../data/catalog'
-import { Button, Confirm, Field, NumInput, SectionBand, fmtInt } from '../ui/kit'
+import { Button, Confirm, LiveNum, SectionBand, fmtInt } from '../ui/kit'
 import { ListCard, Page, PageHeader } from '../ui/Shell'
 import { saveFile } from '../ui/saveFile'
 import { t } from '../i18n'
@@ -26,6 +27,7 @@ export default function AccountPage() {
   const [pending, setPending] = useState<BackupData | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [askReset, setAskReset] = useState(false)
+  const auth = useAuth()
 
   const download = () => saveFile(`malcargo-sao-luu-${new Date().toLocaleDateString('en-CA')}.json`,
     () => new Blob([JSON.stringify(exportBackup(), null, 1)], { type: 'application/json' }))
@@ -43,8 +45,11 @@ export default function AccountPage() {
       <PageHeader title={t('Tài khoản & dữ liệu')} />
       <Page flush className="space-y-4">
         <ListCard>
+          {/* cùng nút Login trên thanh trên (trước đây ghi "sắp có" trong khi Login đã chạy — thử 29/10) */}
           <Group first title={t('Dữ liệu trên máy này')}
-            desc={t('Mọi thứ bạn nhập đang lưu trong trình duyệt của máy này. Đăng nhập để dùng trên máy khác và chia sẻ cho người khác — tính năng sắp có.')}>
+            desc={auth.status === 'in' && auth.user ? t('Đã đăng nhập {email} — dữ liệu trên máy tự đồng bộ lên tài khoản.', { email: auth.user.email })
+              : auth.status === 'off' ? t('Mọi thứ bạn nhập đang lưu trong trình duyệt của máy này.')
+              : t('Mọi thứ bạn nhập đang lưu trong trình duyệt của máy này. Đăng nhập Google để dùng cùng dữ liệu trên máy khác.')}>
             <div className="grid grid-cols-4 divide-x divide-slate-200 rounded-md border border-slate-200">
               {counts.map(([n, label]) => (
                 <div key={label} className="px-3 py-2">
@@ -53,7 +58,9 @@ export default function AccountPage() {
                 </div>
               ))}
             </div>
-            <Button className="mt-3 w-full sm:w-auto" disabled title={t('Sắp có')}><LogIn size={17} />{t('Đăng nhập bằng Google hoặc email — sắp có')}</Button>
+            {auth.status === 'out' && (
+              <Button className="mt-3 w-full sm:w-auto" onClick={() => signInGoogle().catch(e => setMsg(String(e?.message ?? e)))}><LogIn size={17} />{t('Tiếp tục với Google')}</Button>
+            )}
           </Group>
 
           <Group title={t('Sao lưu')}
@@ -69,11 +76,12 @@ export default function AccountPage() {
           <Group title={t('Pallet dùng khi chở xe pallet')}
             desc={t('Áp cho mọi chuyến xe pallet. Pallet hàng nguyên cao theo số thùng/pallet của từng mã; pallet gộp hàng lẻ không cao quá mức dưới.')}>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              <Field label={t('Dài chân')}><NumInput value={p.l} onChange={v => v && s.setPallet({ ...p, l: v })} suffix="mm" /></Field>
-              <Field label={t('Rộng chân')}><NumInput value={p.w} onChange={v => v && s.setPallet({ ...p, w: v })} suffix="mm" /></Field>
-              <Field label={t('Cao tối đa pallet lẻ')}><NumInput value={p.maxH} onChange={v => v && s.setPallet({ ...p, maxH: v })} suffix="mm" /></Field>
-              <Field label={t('Cao đế pallet')}><NumInput value={p.baseH} onChange={v => v && s.setPallet({ ...p, baseH: v })} suffix="mm" /></Field>
-              <Field label={t('Nặng pallet rỗng')}><NumInput value={p.kg} onChange={v => v != null && s.setPallet({ ...p, kg: v })} suffix="kg" /></Field>
+              {/* cùng khoảng số với bảng Thùng xe — số vô lý (chân 10 mm, đế 2 m) không được lưu, ô đỏ */}
+              <LiveNum label={t('Dài chân')} value={p.l} valid={n => n >= 400 && n <= 2000} suffix="mm" onCommit={v => v && s.setPallet({ ...p, l: v })} />
+              <LiveNum label={t('Rộng chân')} value={p.w} valid={n => n >= 400 && n <= 2000} suffix="mm" onCommit={v => v && s.setPallet({ ...p, w: v })} />
+              <LiveNum label={t('Cao tối đa pallet lẻ')} value={p.maxH} valid={n => n >= 500 && n <= 3000} suffix="mm" onCommit={v => v && s.setPallet({ ...p, maxH: v })} />
+              <LiveNum label={t('Cao đế pallet')} value={p.baseH} valid={n => n >= 50 && n <= 300} suffix="mm" onCommit={v => v && s.setPallet({ ...p, baseH: v })} />
+              <LiveNum label={t('Nặng pallet rỗng')} value={p.kg} valid={n => n >= 0 && n <= 100} suffix="kg" onCommit={v => v != null && s.setPallet({ ...p, kg: v })} />
             </div>
             <button className="tap mt-2 text-[13px] font-medium text-brand-700 hover:text-brand-600" onClick={() => s.setPallet(DEFAULT_PALLET_SETTINGS)}>{t('Về mặc định 1200 × 1000')}</button>
           </Group>

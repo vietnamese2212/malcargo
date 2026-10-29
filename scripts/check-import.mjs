@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url'
 
 const dir = mkdtempSync(join(tmpdir(), 'malcargo-'))
 const out = join(dir, 'importer.mjs')
-buildSync({ stdin: { contents: "export * from './src/data/importer'; export { useLang, tx } from './src/i18n'", resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', outfile: out, logLevel: 'error' })
+buildSync({ stdin: { contents: "export * from './src/data/importer'; export { useLang, tx } from './src/i18n'; export { parseNum } from './src/ui/kit'", resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', outfile: out, logLevel: 'error' })
 const I = await import(pathToFileURL(out).href)
 rmSync(dir, { recursive: true, force: true })
 I.useLang.getState().setLang('vi')
@@ -126,6 +126,17 @@ ok(it('Đ3') === 'i2', 'tên hàng đã đổi sau khi tải file ⇒ vẫn nh�
 ok(it('Đ4') === 'i2', 'ghi mã không ⇒ vẫn nhận')
 ok(it('Đ5') === 'i4', 'mã có chứa " - " ⇒ vẫn đúng mã')
 ok(has(r, 7, /không thấy mã hàng "SP9 - Không có"/), 'mã không có ⇒ lỗi, báo nguyên giá trị đã ghi')
+
+// ô số trong form (thử 29/10: gõ "8.000" kg ở form Xe lưu thành 8 kg)
+console.log('• Ô số trong form: dấu ngăn hàng nghìn theo ngôn ngữ')
+const P = I.parseNum
+ok(P('8.000') === 8000 && P('5.700') === 5700 && P('1.234.567') === 1234567, 'tiếng Việt: "8.000" = 8000, "5.700" = 5700')
+ok(P('9,85') === 9.85 && P('9.85') === 9.85 && P('12,5') === 12.5 && P('1.234,5') === 1234.5, 'tiếng Việt: "9,85" / "9.85" / "1.234,5" là số lẻ')
+ok(P('1,250') === 1.25, 'tiếng Việt: "1,250" = 1,25 (phẩy là dấu thập phân)')
+I.useLang.getState().setLang('en')
+ok(P('8,000') === 8000 && P('8.000') === 8 && P('1,234.5') === 1234.5 && P('9.85') === 9.85 && P('9,85') === 9.85, 'tiếng Anh: "8,000" = 8000, "8.000" = 8, "9,85" vẫn là 9.85')
+I.useLang.getState().setLang('vi')
+ok(Number.isNaN(P('abc')) && Number.isNaN(P('')) && P('-5') === -5, 'chữ / trống ⇒ không phải số; "-5" vẫn đọc ra (ô tự báo đỏ vì < 0)')
 
 console.log(fail ? `\nĐỎ — ${fail} lỗi` : '\nXANH')
 process.exit(fail ? 1 : 0)

@@ -41,6 +41,14 @@ export default function App() {
     if (!(f && f.from === prev.current && f.to === rid)) tripKey.current = rid
     prev.current = rid
   }
+  // trang đơn mẫu cũng vậy: tách ⇒ đổi id đơn nhưng giữ màn (ô số thùng đang gõ không mất con trỏ)
+  const oid = route.page === 'order' ? route.id : ''
+  const prevO = useRef(oid), orderKey = useRef(oid)
+  if (oid !== prevO.current) {
+    const f = useData.getState().fork
+    if (!(f && prevO.current && f.orders[prevO.current] === oid)) orderKey.current = oid
+    prevO.current = oid
+  }
   // mở app / đổi màn ⇒ dọn chuyến / đơn nháp trống, trừ cái đang mở (Home chuyển thẳng vào một chuyến — dọn khi tới đó)
   const open = route.page === 'trips' ? null
     : route.page === 'trip' ? [route.id] : route.page === 'order' ? [route.id, route.back?.replace(/^trip:/, '') ?? ''] : []
@@ -54,7 +62,7 @@ export default function App() {
       {route.page === 'trips' && <Home />}
       {route.page === 'trip' && <TripPage key={tripKey.current} id={route.id} />}
       {route.page === 'orders' && <OrdersPage />}
-      {route.page === 'order' && <OrderPage key={route.id} id={route.id} back={route.back} />}
+      {route.page === 'order' && <OrderPage key={orderKey.current} id={route.id} back={route.back} />}
       {route.page === 'items' && <ItemsPage />}
       {route.page === 'vehicles' && <VehiclesPage />}
       {route.page === 'account' && <AccountPage />}

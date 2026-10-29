@@ -45,7 +45,9 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample, onUnlink }: 
   const errs = {
     code: !f.code.trim() ? t('Nhập mã hàng') : null,
     name: !f.name.trim() ? t('Nhập tên hàng') : null,
-    dims: !dimsOk ? t('Nhập đủ dài, rộng, cao của thùng') : null,
+    // cùng khoảng với file Excel nhập Mã hàng (cạnh thùng 10–3.000 mm)
+    dims: !dimsOk ? t('Nhập đủ dài, rộng, cao của thùng')
+      : [f.l, f.w, f.h].some(v => v < 10 || v > 3000) ? t('Nhập số từ {min} đến {max}.', { min: fmtInt(10), max: fmtInt(3000) }) : null,
   }
   // Ai cũng có lúc gõ cm vào ô mm — cả 3 số dưới 100 thì hỏi lại
   const looksCm = dimsOk && f.l < 100 && f.w < 100 && f.h < 100

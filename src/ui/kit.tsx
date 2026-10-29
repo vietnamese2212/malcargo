@@ -67,25 +67,44 @@ export function SearchInput({ className, ...rest }: InputHTMLAttributes<HTMLInpu
 }
 
 /** Ô số — giữ chuỗi thô khi đang gõ, báo ra số (hoặc null khi để trống). */
+/** Số người dùng gõ: hiểu dấu ngăn hàng nghìn theo ngôn ngữ — tiếng Việt "8.000" = 8000, tiếng Anh "8,000" = 8000
+ *  (trước đây "8.000" thành 8 kg, lỗi thử 29/10); "9,85" hay "9.85" vẫn là 9,85. Có cả hai dấu ⇒ dấu sau cùng là thập phân. */
+export function parseNum(s: string): number {
+  let v = s.trim().replace(/\s/g, '')
+  const dot = v.includes('.'), comma = v.includes(',')
+  if (dot && comma) {
+    const dec = v.lastIndexOf('.') > v.lastIndexOf(',') ? '.' : ','
+    v = v.split(dec === '.' ? ',' : '.').join('').replace(dec, '.')
+  } else if (dot || comma) {
+    const parts = v.split(dot ? '.' : ',')
+    const thousands = (dot ? '.' : ',') === (numLocale() === 'vi-VN' ? '.' : ',')
+    v = parts.length > 2 || (thousands && parts[1].length === 3 && /^-?\d{1,3}$/.test(parts[0])) ? parts.join('') : parts.join('.')
+  }
+  return v === '' ? NaN : Number(v)
+}
+
 export function NumInput({ value, onChange, suffix, className, min = 0, ...rest }:
   Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'> & { value: number | null; onChange: (v: number | null) => void; suffix?: string; min?: number }) {
   const [raw, setRaw] = useState(value == null ? '' : String(value))
   useEffect(() => {
-    const cur = raw.trim() === '' ? null : Number(raw.replace(',', '.'))
+    const cur = raw.trim() === '' ? null : parseNum(raw)
     if (cur !== value) setRaw(value == null ? '' : String(value))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value])
+  // gõ số không nhận (âm, chữ…) ⇒ ô đỏ — trước đây "-5" vẫn hiện mà lưu thành trống, không ai biết
+  const n = parseNum(raw)
+  const bad = raw.trim() !== '' && !(Number.isFinite(n) && n >= min)
   return (
     <div className={cx('relative', className)}>
-      <input {...rest} inputMode="decimal" value={raw}
+      <input {...rest} inputMode="decimal" value={raw} aria-invalid={bad || undefined}
         onChange={e => {
           const t = e.target.value
           setRaw(t)
           if (t.trim() === '') { onChange(null); return }
-          const n = Number(t.replace(',', '.'))
+          const n = parseNum(t)
           if (Number.isFinite(n) && n >= min) onChange(n)
         }}
-        className={cx(INPUT, 'num', suffix && 'pr-16')} />
+        className={cx(INPUT, 'num', suffix && 'pr-16', bad && 'border-red-400 focus:border-red-500 focus:ring-red-100')} />
       {suffix && <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">{suffix}</span>}
     </div>
   )
@@ -273,12 +292,12 @@ export function BoxGlyph({ w, h, light, color, className }: { w: number; h: numb
 export function LiveNum({ value, onCommit, valid = n => n > 0, suffix, label, className }: {
   value: number | null; onCommit: (v: number | null) => void; valid?: (n: number) => boolean; suffix?: string; label: string; className?: string
 }) {
-  // số thập phân hiện dấu phẩy kiểu Việt Nam (12,5); gõ chấm hay phẩy đều nhận
-  const show = (v: number | null) => (v == null ? '' : String(v).replace('.', ','))
+  // số thập phân theo ngôn ngữ (12,5 tiếng Việt · 12.5 tiếng Anh); gõ chấm hay phẩy đều nhận, kể cả dấu ngăn hàng nghìn
+  const show = (v: number | null) => (v == null ? '' : numLocale() === 'vi-VN' ? String(v).replace('.', ',') : String(v))
   const [raw, setRaw] = useState(show(value))
   const [focused, setFocused] = useState(false)
   useEffect(() => { if (!focused) setRaw(show(value)) }, [value, focused])
-  const parse = (t: string) => (t.trim() === '' ? null : Number(t.replace(/\s/g, '').replace(',', '.')))
+  const parse = (t: string) => (t.trim() === '' ? null : parseNum(t))
   const n = parse(raw)
   const ok = n == null || (Number.isFinite(n) && valid(n))
   // Áp ĐÚNG MỘT LẦN cho mỗi số: hẹn giờ và rời ô cùng gọi được, số đã áp thì bỏ qua
@@ -462,7 +481,7 @@ export function Popover({ trigger, children, align = 'left', up, hover, classNam
       {/* có `hover` + chuột: rê vào đã mở rồi, bấm thì GIỮ mở (đừng đảo lại thành đóng) */}
       {trigger({ open, toggle: () => setOpen(o => (hover && fine() ? true : !o)) })}
       {open && (
-        <div className={cx('absolute z-50 rounded-lg border border-slate-300 bg-white text-slate-900 shadow-pop',
+        <div data-popover className={cx('absolute z-50 rounded-lg border border-slate-300 bg-white text-slate-900 shadow-pop',
           up ? 'bottom-full mb-1.5' : 'top-full mt-1.5', align === 'right' ? 'right-0' : 'left-0', panelClass)}
           style={{ animation: 'fade .12s' }}>
           {children(close)}

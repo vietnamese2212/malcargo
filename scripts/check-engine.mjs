@@ -217,6 +217,17 @@ for (const [name, truck, orders] of cases) {
   ok(s && !trucks[s].container, `gợi ý xe cho hàng gấp đôi chuyến mẫu phải là xe tải, được ${s}`)
   console.log(`• Gợi ý xe cho hàng gấp đôi chuyến mẫu: ${s} (mọi xe: ${E.suggestTruck(big, E.DEFAULT_PALLET_SETTINGS, V.filter(v => v.kind === 'loose'))})`)
 }
+// Mã chưa khai thùng/pallet trên xe pallet (thử 29/10: 2.000 thùng ra "1 pallet · vừa xe") ⇒ ước theo cỡ thùng:
+// 600×400 gọn 5 thùng/lớp trên chân 1200×1000, cao 400 ⇒ 3 lớp dưới trần 1,65 m ⇒ 15 thùng/pallet
+{
+  const it = { id: 'np', owner: 'me', code: 'NP', name: 'Hàng A', l: 600, w: 400, h: 400, kg: null, perPallet: null, maxLayers: null, light: false, updatedAt: 0 }
+  const run = qty => E.computeTrip({ truck: trucks['adm-v-p8t'], orders: [{ id: 'o', name: 'Đơn 1', place: '', lines: [{ item: it, qty }] }], pallet: E.DEFAULT_PALLET_SETTINGS })
+  const big = run(2000), small = run(40)
+  ok(big.totals.pallets === 134 && !big.fits, `chưa khai thùng/pallet: 2.000 thùng phải ra 134 pallet, không vừa xe (được ${big.totals.pallets}, vừa ${big.fits})`)
+  ok(small.totals.pallets === 3 && small.fits && small.plan.placedCount === 3, `chưa khai thùng/pallet: 40 thùng phải ra 3 pallet (được ${small.totals.pallets})`)
+  ok(big.warnings.some(w => w.includes('ước theo cỡ thùng')), 'chưa khai thùng/pallet: có cảnh báo "đang ước theo cỡ thùng"')
+  console.log(`• Chưa khai thùng/pallet: 2.000 thùng → ${big.totals.pallets} pallet · 40 thùng → ${small.totals.pallets} pallet`)
+}
 const t0 = performance.now()
 const sug = E.suggestTruck(sample, E.DEFAULT_PALLET_SETTINGS, E.pickPool(E.ADMIN_VEHICLES, undefined))
 console.log(`• Gợi ý xe cho chuyến mẫu: ${sug} (${Math.round(performance.now() - t0)} ms)`)

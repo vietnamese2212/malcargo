@@ -41,6 +41,21 @@ await p.reload({ waitUntil: 'networkidle' }); await p.waitForTimeout(3500)
 ok(p.url() === url && await p.locator('text=/Vừa xe/').first().isVisible(), 'tải lại trang: chuyến vẫn còn, vẫn tính ra')
 ok(!errs.length, `không lỗi trình duyệt${errs.length ? ': ' + errs.join(' | ') : ''}`)
 
+// Việc ĐẦU TIÊN của người mới: sửa số thùng ở chuyến mẫu (thử 29/10: phím đầu tách chuyến, ô mất con trỏ, "150" → "200"
+// lưu thành 15). Trang đơn mẫu cũng vậy.
+for (const [hash, label, typed] of [['#/trip/sample-t1', 'chuyến mẫu', '200'], ['#/order/sample-o1?back=trip:sample-t1', 'trang đơn mẫu', '175']]) {
+  const q = await (await b.newContext(DEVICES[1])).newPage()
+  await q.goto(srv.base + hash, { waitUntil: 'networkidle' }); await q.waitForTimeout(1200)
+  const box = q.locator('input[inputmode=numeric]').first()
+  await box.click(); await box.press('End')
+  for (let i = 0; i < 3; i++) await box.press('Backspace')
+  await box.pressSequentially(typed, { delay: 60 }); await q.waitForTimeout(400)
+  const st = await q.evaluate(() => JSON.parse(localStorage.getItem('malcargo-data-v1')).state)
+  const qty = st.orders.filter(o => !o.id.startsWith('sample-')).flatMap(o => o.lines).find(l => /st180/.test(l.itemId))?.qty
+  const still = await q.evaluate(() => document.activeElement?.getAttribute('inputmode') === 'numeric')
+  ok(String(qty) === typed && still && st.trips.length === 2, `${label}: gõ "${typed}" ⇒ tách 1 chuyến mới, lưu ${qty}, ô vẫn đang gõ: ${still}`)
+}
+
 await b.close(); await srv.close()
 console.log(fail ? `${fail} phép HỎNG` : 'XANH')
 process.exit(fail ? 1 : 0)

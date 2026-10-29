@@ -21,6 +21,7 @@ export const TRIP: Record<string, string> = {
   'Đã chép bảng đếm chân': 'Stack count copied',
   'Trình duyệt chặn chép, hãy chụp màn hình': 'The browser blocked copying, take a screenshot instead',
   'Đã lưu ảnh sơ đồ': 'Plan image saved',
+  'so-do-{name}.png': 'loading-plan-{name}.png',
 
   // ── không thấy chuyến ──
   'Không thấy chuyến': 'Trip not found',

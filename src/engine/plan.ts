@@ -3,7 +3,7 @@
 // File này THUẦN (không React) để chạy được trong Web Worker và trong bài kiểm. Chữ sinh ra ở đây (nhãn pallet,
 // cảnh báo) là tiếng Việt gốc — Worker không biết ngôn ngữ; màn hình dịch bằng `tx()` (luật trong src/i18n/en.ts).
 import {
-  computeLoadPlan, palletizeGroups, palletFitError, palletsTooTall, runPattern,
+  cartonsPerLayer, computeLoadPlan, palletizeGroups, palletFitError, palletsTooTall, runPattern,
   palletFloorSlots, type LoadGroup, type LoadPlan, type PalletSpec, type PalletizeInput, type PlacedBox,
 } from './loadPlan'
 import type { Item, PalletSettings, VehicleKind } from '../data/types'
@@ -18,6 +18,7 @@ export interface TripInput {
 export interface PlanGroupMeta {
   label: string
   orderName: string
+  orderId: string            // gom theo đơn bằng id — hai đơn trùng tên trong một chuyến không bị cộng lẫn
   itemId: string | null      // null = pallet gộp nhiều mã
   isPallet: boolean          // khối là 1 PALLET (xe pallet)
   colorKey: string
@@ -37,6 +38,7 @@ export interface CountRow {
   group: number
   label: string
   orderName: string
+  orderId: string
   unit: 'thùng' | 'pallet' // i18n-ok
   placed: number
   total: number
@@ -298,6 +300,16 @@ const LIGHT_POOL = { key: 'light', label: 'hàng nhẹ' } // i18n-ok
 const toSpec = (p: PalletSettings): PalletSpec =>
   ({ l: p.l, w: p.w, h: p.maxH, baseH: p.baseH, baseColor: '#a07a4e', weightKg: p.kg })
 
+/** Số thùng / pallet của mã: đã khai thì dùng; chưa khai thì ƯỚC theo cỡ thùng — số thùng gọn trong chân một
+ *  lớp × số lớp vừa trần chiều cao pallet (≤ số lớp khai). Lõi coi mã thiếu quy cách là "1 pallet / mã" bất kể
+ *  số thùng ⇒ 2.000 thùng vẫn ra 1 pallet, báo vừa xe (lỗi thử 29/10). Thùng không nằm nổi trên chân ⇒ null. */
+export function perPalletOf(item: Item, spec: PalletSpec): number | null {
+  if (item.perPallet) return item.perPallet
+  const per = cartonsPerLayer(spec, { l: item.l, w: item.w })
+  const layers = Math.min(item.maxLayers || Infinity, Math.floor((spec.h - spec.baseH) / item.h))
+  return per > 0 && layers >= 1 ? per * layers : null
+}
+
 type G = LoadGroup & { meta: PlanGroupMeta }
 
 /** Gom đơn thành nhóm (đơn × mã). Đơn GIAO SAU xếp TRƯỚC (vào sâu trong, sát cabin). */
@@ -316,7 +328,7 @@ function cartonGroupsOf(orders: OrderInput[]): G[] {
         key: `${doKey}|${it.id}`, label: it.name || it.code, doKey, doLabel: o.name,
         count: ln.qty, l: it.l, w: it.w, h: it.h, weightKg: it.kg, assumed: false,
         maxLayers: it.maxLayers, onTop: it.light,
-        meta: { label: it.name || it.code, orderName: o.name, itemId: it.id, isPallet: false, colorKey: it.id },
+        meta: { label: it.name || it.code, orderName: o.name, orderId: o.id, itemId: it.id, isPallet: false, colorKey: it.id },
       }
       byItem.set(it.id, g); out.push(g)
     }
@@ -325,21 +337,22 @@ function cartonGroupsOf(orders: OrderInput[]): G[] {
 }
 
 export function orderTotals(lines: { item: Item; qty: number }[], pallet: PalletSettings) {
+  const spec = toSpec(pallet)
   let cartons = 0, kg = 0, m3 = 0, kgKnown = true, palletKnown = true
   for (const { item, qty } of lines) {
     if (!(qty > 0)) continue
     cartons += qty
     m3 += (qty * item.l * item.w * item.h) / 1e9
     if (item.kg == null) kgKnown = false; else kg += qty * item.kg
-    if (!item.perPallet) palletKnown = false
+    if (!perPalletOf(item, spec)) palletKnown = false
   }
   let pallets: number | null = null
   if (cartons > 0 && palletKnown) {
     const res = palletizeGroups(lines.filter(l => l.qty > 0).map(({ item, qty }) => ({
       key: item.id, label: item.name, doKey: 'o', doLabel: 'o', cartons: qty,
-      cartonsPerPallet: item.perPallet, layers: item.maxLayers, isPalletCarrier: false, weightKg: item.kg,
+      cartonsPerPallet: perPalletOf(item, spec), layers: item.maxLayers, isPalletCarrier: false, weightKg: item.kg,
       carton: { l: item.l, w: item.w, h: item.h }, assumed: false, unitless: false,
-    })), toSpec(pallet))
+    })), spec)
     pallets = res.palletCount
   }
   return { cartons, kg, kgKnown, m3, pallets }
@@ -369,7 +382,7 @@ function countSheet(plan: LoadPlan, meta: PlanGroupMeta[]): CountRow[] {
     for (const n of cols.values()) hist.set(n, (hist.get(n) ?? 0) + 1)
     const stacks = [...hist.entries()].sort((a, b) => b[1] - a[1]).map(([layers, n]) => [n, layers] as [number, number])
     rows.push({
-      group: gi, label: meta[gi].label, orderName: meta[gi].orderName,
+      group: gi, label: meta[gi].label, orderName: meta[gi].orderName, orderId: meta[gi].orderId,
       unit: meta[gi].isPallet ? 'pallet' : 'thùng', // i18n-ok
       placed: boxes.length, total: boxes.length + left, stacks, onTopOfOthers: lifted,
       firstStep: boxes.length ? Math.min(...boxes.map(b => b.step)) : Infinity,
@@ -404,15 +417,18 @@ export function computeTrip(input: TripInput): TripResult {
     const toPal = cartons
     const items: PalletizeInput[] = toPal.map(g => ({
       key: g.key, label: g.label, doKey: g.doKey, doLabel: g.doLabel, cartons: g.count,
-      cartonsPerPallet: itemOf(g)?.perPallet ?? null, layers: itemOf(g)?.maxLayers ?? null,
+      cartonsPerPallet: (itemOf(g) && perPalletOf(itemOf(g)!, spec)) ?? null, layers: itemOf(g)?.maxLayers ?? null,
       isPalletCarrier: false, weightKg: g.weightKg, carton: { l: g.l, w: g.w, h: g.h }, assumed: false, unitless: false,
       onTop: g.onTop, remPool: input.lightOwnPallet && g.onTop ? LIGHT_POOL : undefined,
     }))
     const res = palletizeGroups(items, spec)
     palletsUsed = res.palletCount
     const missing = toPal.filter(g => !itemOf(g)?.perPallet)
-    if (missing.length)
-      warnings.push(`Chưa khai số thùng/pallet: ${[...new Set(missing.map(g => g.label))].join(', ')} — đang tạm tính mỗi mã 1 pallet.`) // i18n-ok
+    const names = (gs: G[]) => [...new Set(gs.map(g => g.label))].join(', ')
+    const guessed = missing.filter(g => { const it = itemOf(g); return !!it && !!perPalletOf(it, spec) })
+    const unknown = missing.filter(g => !guessed.includes(g))   // thùng không nằm nổi trên chân pallet
+    if (guessed.length) warnings.push(`Chưa khai số thùng/pallet: ${names(guessed)} — đang ước theo cỡ thùng.`) // i18n-ok
+    if (unknown.length) warnings.push(`Chưa khai số thùng/pallet: ${names(unknown)} — đang tạm tính mỗi mã 1 pallet.`) // i18n-ok
     const srcByKey = new Map(toPal.map(g => [g.key, g]))
     const lightIds = new Set(allLines.filter(l => l.item.light).map(l => l.item.id))
     const maxLayers = new Map(allLines.filter(l => l.item.maxLayers).map(l => [l.item.id, l.item.maxLayers!]))
@@ -435,7 +451,8 @@ export function computeTrip(input: TripInput): TripResult {
           label: !src ? pg.label
             : srcByKey.has(pg.key.replace(/\|(full|plt)$/, '')) ? `${src.label}${pg.key.endsWith('|plt') ? ' (pallet lẻ)' : ''}` // i18n-ok
             : `${src.label} (pallet lẻ)`,   // khối của bể gộp mà ruột chỉ một mã // i18n-ok
-          orderName: pg.doLabel, itemId: src?.meta.itemId ?? null, isPallet: true,
+          // khoá đơn của lõi = "thứ tự|id đơn" (cartonGroupsOf)
+          orderName: pg.doLabel, orderId: pg.doKey.slice(pg.doKey.indexOf('|') + 1), itemId: src?.meta.itemId ?? null, isPallet: true,
           colorKey: src?.meta.itemId ?? `mix|${pg.doKey}`,
           ...(ls && packed ? { layers: ls, cartons: packed.cartons, deck: packed.deck } : {}),
           ...(mixed ? { holds: mix ? mix.map(x => x.itemId) : toPal.filter(g => g.doKey === pg.doKey).map(g => g.meta.itemId!), mix } : {}),
@@ -444,7 +461,8 @@ export function computeTrip(input: TripInput): TripResult {
     })
     groups = palGroups
     if (!fitErr) {
-      const tall = palletsTooTall(palGroups, T)
+      // lõi ghi số kiểu Anh ("cao 4.00m") ⇒ đổi sang dấu phẩy tiếng Việt; bản tiếng Anh đổi lại ở luật dịch
+      const tall = palletsTooTall(palGroups, T).map(s => s.replace(/\(cao (\d+)\.(\d+)m\)$/, '(cao $1,$2 m)'))
       if (tall.length) errors.push(`Pallet cao hơn lòng thùng xe: ${tall.join(', ')}.`) // i18n-ok
     }
   }
@@ -479,6 +497,11 @@ export function computeTrip(input: TripInput): TripResult {
   const payloadPct = truck.payloadKg ? (weightKg / truck.payloadKg) * 100 : null
   const overweight = payloadPct != null && payloadPct > 100
   if (!totals.kgKnown) warnings.push('Có mã chưa khai kg/thùng — tổng khối lượng chưa đủ.') // i18n-ok
+  // thùng to hơn lòng thùng xe (xoay ngang cũng không lọt) — nói thẳng lý do, khỏi khuyên "chia bớt hàng" (thử 29/10)
+  if (truck.kind === 'loose') {
+    const big = cartons.filter(g => g.h > T.height || !((g.l <= T.length && g.w <= T.width) || (g.w <= T.length && g.l <= T.width)))
+    if (big.length) warnings.push(`Thùng to hơn lòng thùng xe: ${[...new Set(big.map(g => g.label))].join(', ')}.`) // i18n-ok
+  }
   if (overweight) warnings.push(`Vượt tải trọng: ${fmtKg(weightKg)} / ${fmtKg(truck.payloadKg!)}.`) // i18n-ok
   const leftCount = plan.leftover.reduce((s, x) => s + x.count, 0)
   return {

@@ -6,7 +6,7 @@ import { removeCatalog, saveCatalog, useAuth } from '../data/cloud'
 import { palletFloorSlots } from '../engine/loadPlan'
 import Scene from '../three/LazyScene'
 import { t, tx } from '../i18n'
-import { Badge, Button, Confirm, Field, NumInput, Segmented, Sheet, TextInput, fmtDec } from './kit'
+import { Badge, Button, Confirm, Field, NumInput, Segmented, Sheet, TextInput, fmtDec, fmtInt } from './kit'
 
 const blank = (owner: Vehicle['owner'] = 'me'): Vehicle => ({ id: newId(), owner, name: '', plate: '', kind: 'loose', l: 0, w: 0, h: 0, payloadKg: null, updatedAt: 0 })
 
@@ -45,8 +45,10 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
   const errs = {
     name: !f.name.trim() && !f.plate.trim() ? t('Đặt tên hoặc nhập biển số') : null,
     dims: !dimsOk ? t('Lòng thùng: dài 0,5–20 m, rộng ≤ 3,5 m, cao ≤ 4,5 m (nhập mm)') : null,
+    // cùng khoảng với bảng Thùng xe + file Excel nhập Xe (trước đây gõ 8 kg vẫn lưu, không báo)
+    payload: f.payloadKg != null && (f.payloadKg < 100 || f.payloadKg > 60000) ? t('Nhập số từ {min} đến {max}.', { min: fmtInt(100), max: fmtInt(60000) }) : null,
   }
-  const valid = !errs.name && !errs.dims
+  const valid = !errs.name && !errs.dims && !errs.payload
   const m3 = dimsOk ? (f.l * f.w * f.h) / 1e9 : 0
   const slots = dimsOk && f.kind === 'pallet' ? palletFloorSlots({ l: pallet.l, w: pallet.w, h: pallet.maxH, baseH: pallet.baseH, baseColor: '' }, { length: f.l, width: f.w, height: f.h }) : 0
 
@@ -79,7 +81,7 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
       </>}>
       <div className="-mx-5 -mt-4 mb-4">
         {dimsOk
-          ? <Scene className="h-[200px] sm:h-[240px]" truck={{ l: f.l, w: f.w, h: f.h, kind: f.kind }} walls="glass" />
+          ? <Scene className="h-[200px] sm:h-[240px]" truck={{ l: f.l, w: f.w, h: f.h, kind: f.kind, container: f.container, plate: f.plate }} walls="glass" />
           : <div className="grid h-[120px] place-items-center bg-[#e7ecf2] text-sm text-slate-600">{t('Nhập lòng thùng để xem trước xe')}</div>}
         {dimsOk && (
           <div className="flex justify-center gap-4 border-b border-slate-200 bg-white py-2 text-[13px] text-slate-600">
@@ -110,7 +112,7 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
             <NumInput value={f.h || null} onChange={v => set('h', v ?? 0)} placeholder={t('Cao')} />
           </div>
         </Field>
-        <Field label={t('Tải trọng cho phép')} hint={t('Để trống thì không kiểm vượt tải')}>
+        <Field label={t('Tải trọng cho phép')} hint={t('Để trống thì không kiểm vượt tải')} error={tried ? errs.payload : null}>
           <NumInput value={f.payloadKg} onChange={v => set('payloadKg', v)} suffix="kg" placeholder="5000" />
         </Field>
       </fieldset>

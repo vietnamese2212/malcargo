@@ -120,10 +120,10 @@ export const PAGES: Record<string, string> = {
   'chuyến': 'trips',
   'Tài khoản & dữ liệu': 'Account & data',
   'Dữ liệu trên máy này': 'Data on this device',
-  'Mọi thứ bạn nhập đang lưu trong trình duyệt của máy này. Đăng nhập để dùng trên máy khác và chia sẻ cho người khác — tính năng sắp có.':
-    "Everything you enter is saved in this device's browser. Sign in to use it on other devices and share it with others — coming soon.",
-  'Sắp có': 'Coming soon',
-  'Đăng nhập bằng Google hoặc email — sắp có': 'Google or email sign-in — coming soon',
+  'Mọi thứ bạn nhập đang lưu trong trình duyệt của máy này. Đăng nhập Google để dùng cùng dữ liệu trên máy khác.':
+    "Everything you enter is saved in this device's browser. Sign in with Google to use the same data on other devices.",
+  'Mọi thứ bạn nhập đang lưu trong trình duyệt của máy này.': "Everything you enter is saved in this device's browser.",
+  'Đã đăng nhập {email} — dữ liệu trên máy tự đồng bộ lên tài khoản.': 'Signed in as {email} — data on this device syncs to your account automatically.',
   'Sao lưu': 'Back up',
   'Xoá dữ liệu trình duyệt hoặc gỡ app là mất dữ liệu trên máy. Tải file sao lưu để giữ, hoặc để chuyển sang máy khác.':
     'Clearing browser data or removing the app deletes the data on this device. Download a backup file to keep it, or to move to another device.',

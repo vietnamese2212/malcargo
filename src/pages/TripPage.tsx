@@ -126,6 +126,13 @@ export default function TripPage({ id }: { id: string }) {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fork, id])
+  // khối đơn / dòng hàng giữ KEY của đơn mẫu gốc sau khi tách: id đơn đổi mà React không dựng lại ô số thùng
+  // ⇒ đang gõ "150" → "200" không bị mất con trỏ sau phím đầu (phím đầu là lúc tách)
+  const keyOf = useMemo(() => {
+    const m = new Map<string, string>()
+    if (fork && fork.to === id) for (const [from, to] of Object.entries(fork.orders)) m.set(to, from)
+    return (oid: string) => m.get(oid) ?? oid
+  }, [fork, id])
 
   const plan = vehicle && hasCargo ? result?.plan ?? null : null
   const stepCount = plan?.stepCount ?? 0
@@ -143,6 +150,12 @@ export default function TripPage({ id }: { id: string }) {
 
   // Màu theo MÃ, cố định — đổi xe / cách chở / số lượng không làm đổi màu hàng đã có
   const colors = useMemo(() => itemColors(tripOrders.flatMap(o => o.lines.map(l => l.item))), [tripOrders])
+  // chữ in trên thùng 3D: tên (mã mẫu theo ngôn ngữ) + mã + cỡ thùng gốc — để thùng xoay vẫn in đúng mặt.
+  // Chỉ đổi khi chính các mã đổi (gõ số thùng không dựng lại hàng hai lần: lúc gõ và lúc sơ đồ tính xong)
+  const printList = tripOrders.flatMap(o => o.lines.map(l => l.item))
+  const printKey = printList.map(i => `${i.id}|${i.code}|${i.name}|${i.l}|${i.w}|${i.h}`).join(';')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const prints = useMemo(() => new Map(printList.map(i => [i.id, { code: i.code, name: tx(i.name), l: i.l, w: i.w, h: i.h }] as const)), [printKey])
   // Đang chọn một đơn / một mã ⇒ các khối của nó trên xe (kể cả pallet gộp chứa phần lẻ của mã);
   // sơ đồ tính lại (bật công tắc, đổi xe…) thì vẫn chỉ đúng nó — xem được hàng dời đi đâu
   const selFocus = useMemo(() => {
@@ -282,12 +295,12 @@ export default function TripPage({ id }: { id: string }) {
             lightOwn={tripOrders.some(o => o.lines.some(l => l.qty > 0 && l.item.light)) ? !!trip.lightOwnPallet : null}
             onLightOwn={v => upsertTrip({ ...trip, lightOwnPallet: v })} />
           <div className="relative min-h-0 flex-1">
-            <Scene className="h-full w-full" truck={vehicle ? { l: vehicle.l, w: vehicle.w, h: vehicle.h, kind: vehicle.kind } : null}
-              plan={plan} meta={result?.meta} colors={colors} step={step} focus={shown} focusItem={sel?.itemId ?? null} view={view} walls={walls} />
+            <Scene className="h-full w-full" truck={vehicle ? { l: vehicle.l, w: vehicle.w, h: vehicle.h, kind: vehicle.kind, container: vehicle.container, plate: vehicle.plate } : null}
+              plan={plan} meta={result?.meta} colors={colors} prints={prints} step={step} focus={shown} focusItem={sel?.itemId ?? null} view={view} walls={walls} />
 
             <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between gap-2">
               <TitleBlock r={r} busy={busy} error={error} hasCargo={hasCargo} vehicle={vehicle} tripName={trip.name}
-                orders={tripOrders.map(o => ({ name: o.name, cartons: orderTotals(o.lines, pallet).cartons }))}
+                orders={tripOrders.map(o => ({ id: o.id, name: o.name, cartons: orderTotals(o.lines, pallet).cartons }))}
                 sug={suggestion && vehicle && suggestion !== vehicle.id ? vehicles.find(v => v.id === suggestion) : undefined}
                 noneFits={!suggestion} onPick={vid => { pickVehicle(vid); setToast(t('Đã đổi xe')) }} />
               {/* điện thoại: nút diễn giải chỉ biểu tượng, xếp dưới nút góc nhìn — dải số liệu bên trái cần đủ bề ngang */}
@@ -308,7 +321,10 @@ export default function TripPage({ id }: { id: string }) {
 
             {/* đáy bản vẽ, xếp chồng không đè nhau: thông báo · nhãn đơn / mã đang chọn · thanh bước xếp */}
             <div className="pointer-events-none absolute inset-x-3 bottom-3 flex flex-col items-center gap-2 lg:inset-x-6 lg:bottom-5">
-              {toast && <div className="flex max-w-full items-center gap-2 rounded-md bg-navy-950 px-4 py-2 text-[13px] font-medium text-white shadow-pop" style={{ animation: 'sheet-up .2s' }}><Check size={16} className="shrink-0" />{toast}</div>}
+              {toast && <div className="flex max-w-full items-center gap-2 rounded-md bg-navy-950 px-4 py-2 text-[13px] font-medium text-white shadow-pop" style={{ animation: 'sheet-up .2s' }}>
+                {/* báo không chở hết thì đừng gắn dấu ✓ */}
+                {toast === t('Không xe nào chở hết, tạm chọn xe lớn nhất') ? <AlertTriangle size={16} className="shrink-0 text-amber-300" /> : <Check size={16} className="shrink-0" />}{toast}
+              </div>}
               {sel && selName && (
                 <div className="pointer-events-auto flex max-w-full items-center gap-2 rounded-md border-[1.5px] border-brand-500 bg-white py-0.5 pl-2.5 text-[13px] text-slate-800 lg:max-w-2xl">
                   <Crosshair size={15} className="shrink-0 text-brand-600" />
@@ -367,7 +383,7 @@ export default function TripPage({ id }: { id: string }) {
             ) : (
               <div className="space-y-3 bg-canvas p-3 sm:rounded-b-lg">
                 {rawOrders.map((o, i) => (
-                  <OrderBlock key={o.id} o={o} i={i} count={rawOrders.length} tot={orderTotals(tripOrders[i].lines, pallet)}
+                  <OrderBlock key={keyOf(o.id)} o={o} i={i} count={rawOrders.length} tot={orderTotals(tripOrders[i].lines, pallet)}
                     selected={sel?.orderId === o.id && !sel.itemId} onSelect={() => pick(o.id)}
                     onEdit={() => setEditOrder(o.id)} onMove={d => moveOrder(i, d)}
                     onOpenPage={() => go({ page: 'order', id: o.id, back: `trip:${trip.id}` })}
@@ -375,16 +391,16 @@ export default function TripPage({ id }: { id: string }) {
                     onAddItem={() => setPickFor(o.id)}>
                     {o.lines.map(l => {
                       const it = byId.get(l.itemId)
-                      const key = `${o.id}:${l.itemId}`
+                      const key = `${o.id}:${l.itemId}`, rk = `${keyOf(o.id)}:${l.itemId}`
                       if (!it) return (
-                        <div key={key} className="flex items-center gap-3 px-4 py-2 text-sm text-red-700">
+                        <div key={rk} className="flex items-center gap-3 px-4 py-2 text-sm text-red-700">
                           <AlertTriangle size={18} /><span className="flex-1">{t('Mã hàng này đã bị xoá')}</span>
                           <IconButton label={t('Bỏ dòng')} onClick={() => toggleLine(o, l.itemId)}><X size={16} /></IconButton>
                         </div>
                       )
                       const isSel = sel?.orderId === o.id && sel.itemId === l.itemId
                       return (
-                        <div key={key} className={cx('border-t border-slate-100', isSel && 'bg-brand-50 shadow-[inset_3px_0_0_#1a66ff]')}>
+                        <div key={rk} className={cx('border-t border-slate-100', isSel && 'bg-brand-50 shadow-[inset_3px_0_0_#1a66ff]')}>
                           {/* tên hàng chiếm trọn dòng trên (xuống dòng được, không cắt chữ) — bấm để chỉ mã trên xe;
                               nút "Sửa" = popup thông tin mã. Dòng dưới: quy cách xếp (thùng/pallet · lớp · kg) + số thùng */}
                           <div className="py-1.5 pl-3 pr-1">
@@ -732,7 +748,7 @@ function SpecStrip({ vehicle, pallet, lightOwn, onOpen, onKind, onLightOwn }: {
 // ── Khung tên GỌN (góc trên trái): một dải mảnh, chạm để mở chi tiết ─────────────
 function TitleBlock({ r, busy, error, hasCargo, vehicle, tripName, orders, sug, noneFits, onPick }: {
   r: TripResult | null; busy: boolean; error: string | null; hasCargo: boolean; vehicle?: Vehicle; tripName: string
-  orders: { name: string; cartons: number }[]
+  orders: { id: string; name: string; cartons: number }[]
   sug?: Vehicle; noneFits: boolean; onPick: (id: string) => void
 }) {
   const [more, setMore] = useState(false)
@@ -773,12 +789,12 @@ function TitleBlock({ r, busy, error, hasCargo, vehicle, tripName, orders, sug, 
           {/* từng đơn trên xe: bao nhiêu thùng, đã lên xe đủ chưa */}
           <div className="border-t border-navy-950 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600">{t('Theo đơn')}</div>
           {orders.map((o, i) => {
-            const rows = r.count.filter(c => c.orderName === o.name)
+            const rows = r.count.filter(c => c.orderId === o.id)
             const sumOf = (u: 'pallet' | 'thùng', k: 'placed' | 'total') => rows.filter(c => c.unit === u).reduce((s, c) => s + c[k], 0) // i18n-ok — đơn vị của thuật toán
             const pp = sumOf('pallet', 'placed'), pt = sumOf('pallet', 'total'), cp = sumOf('thùng', 'placed'), ct = sumOf('thùng', 'total') // i18n-ok
             const short = pp < pt || cp < ct
             return (
-              <div key={o.name + i} className="flex items-center gap-2 border-t border-slate-300 px-2 py-1">
+              <div key={o.id} className="flex items-center gap-2 border-t border-slate-300 px-2 py-1">
                 <span className="num grid h-[18px] min-w-[18px] place-items-center rounded-sm bg-navy-950 px-0.5 text-[11px] font-bold text-white">{i + 1}</span>
                 <span className="min-w-0 flex-1 break-words text-[12px] leading-snug text-slate-800">{tx(o.name)}</span>
                 <span className={cx('num shrink-0 text-right text-[12px] font-semibold', short ? 'text-red-700' : 'text-slate-900')}>
@@ -848,8 +864,9 @@ function useToggleFull(): [boolean, (on: boolean) => void] {
     const html = document.documentElement, overflow = html.style.overflow
     html.style.overflow = 'hidden'   // trang phía sau không cuộn theo ngón tay
     const onFs = () => { if (!document.fullscreenElement) setFull(false) }
-    // Esc: trình duyệt thường tự thoát toàn màn hình thật (⇒ onFs); còn lại thì tự thoát — trừ khi đang mở bảng / hộp hỏi
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !document.querySelector('[role=dialog],[role=alertdialog]')) setFull(false) }
+    // Esc: trình duyệt thường tự thoát toàn màn hình thật (⇒ onFs); còn lại thì tự thoát — trừ khi đang mở bảng / hộp hỏi /
+    // menu nhỏ (Esc đầu chỉ đóng menu Góc nhìn, Esc sau mới thoát toàn màn hình)
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !document.querySelector('[role=dialog],[role=alertdialog],[data-popover]')) setFull(false) }
     document.addEventListener('fullscreenchange', onFs)
     window.addEventListener('keydown', onKey)
     return () => {
@@ -1166,7 +1183,11 @@ function CountSheet({ r, colors, focus, onFocus, tripName, vehicle, onToast }: {
       t('Thứ tự xếp (từ trong cabin ra cửa):'),
       ...r.count.map((c, i) => {
         const mix = c.mix ? ' — ' + t('mỗi pallet gồm {list}', { list: mixText(c) ?? '' }) : ''
-        return `${i + 1}. ${tx(c.label)} [${tx(c.orderName)}]: ${stackText(c)} = ${c.placed}${c.placed < c.total ? `/${c.total}` : ''} ${tx(c.unit)}${c.onTopOfOthers ? onTop : ''}${mix}`
+        // số theo ngôn ngữ, số ít / nhiều đúng ("1 pallet", "935/1.250 thùng"); pallet đủ thì không nhắc lại số
+        const n = c.placed < c.total ? `${fmtInt(c.placed)}/${fmtInt(c.total)}` : fmtInt(c.placed)
+        const pal = c.placed < c.total ? t('{n} pallet', { n }) : ''
+        const sum = c.unit === 'pallet' ? pal : t('{n} thùng', { n })
+        return `${i + 1}. ${tx(c.label)} [${tx(c.orderName)}]: ${stackText(c)}${sum ? ' = ' + sum : ''}${c.onTopOfOthers ? onTop : ''}${mix}`
       }),
       t('Tổng: {placed}/{total} · {kg} · thể tích {pct}%', {
         placed: fmtInt(r.plan.placedCount), total: fmtInt(r.plan.totalCount), kg: fmtKgShort(r.weightKg), pct: fmtDec(r.plan.volumePct, 0),
@@ -1179,7 +1200,8 @@ function CountSheet({ r, colors, focus, onFocus, tripName, vehicle, onToast }: {
     const c = document.querySelector<HTMLCanvasElement>('[data-scene] canvas')
     if (!c) return
     const png = c.toDataURL('image/png')   // chụp ngay lúc bấm, trước khi hộp "Lưu thành…" mở
-    if (await saveFile(`so-do-${tripName.replace(/\s+/g, '-').toLowerCase()}.png`, () => fetch(png).then(r => r.blob()))) onToast(t('Đã lưu ảnh sơ đồ'))
+    const name = t('so-do-{name}.png', { name: tx(tripName).replace(/\s+/g, '-').toLowerCase() })
+    if (await saveFile(name, () => fetch(png).then(r => r.blob()))) onToast(t('Đã lưu ảnh sơ đồ'))
   }
   return (
     <section className="pt-3">

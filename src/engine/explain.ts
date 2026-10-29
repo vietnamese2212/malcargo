@@ -5,7 +5,7 @@ import type { TripResult } from './plan'
 
 /** Xe thùng rời: một KHỐI = hàng của một mã trong một đơn. */
 export interface LooseNote {
-  group: number; label: string; orderName: string; itemId: string | null
+  group: number; label: string; orderName: string; orderId: string; itemId: string | null
   total: number; placed: number
   cols: number                  // số chân (thùng một lớp)
   layers: number                // số lớp của khối (chiều cao phần lớn các chân)
@@ -24,7 +24,7 @@ export interface LooseNote {
 export interface PalletRest { group: number; label: string; n: number; from: number; to: number; of: number; heightMm: number; mixed: boolean }
 /** Xe pallet: một mã trong một đơn. */
 export interface PalletItemNote {
-  itemId: string; label: string; orderName: string
+  itemId: string; label: string; orderName: string; orderId: string
   total: number                 // thùng của mã trong đơn
   full: { group: number; pallets: number; perPallet: number; perLayer: number; layers: number; heightMm: number; left: number } | null
   rest: PalletRest[]            // lẻ — mỗi mã nằm nguyên một pallet nên thường chỉ 1 dòng
@@ -41,7 +41,7 @@ export function explainLoose(r: TripResult): LooseNote[] {
     const m = r.meta[c.group]
     const boxes = r.plan.placed.filter(b => b.group === c.group)
     if (!boxes.length) {
-      out.push({ group: c.group, label: m.label, orderName: m.orderName, itemId: m.itemId, total: c.total, placed: 0, cols: 0, layers: 0, fullCols: 0, low: [], above: 0, aboveLayers: 0, rest: 0, bodyMm: 0, topMm: 0, onTop: false, lenMm: 0, widMm: 0 })
+      out.push({ group: c.group, label: m.label, orderName: m.orderName, orderId: m.orderId, itemId: m.itemId, total: c.total, placed: 0, cols: 0, layers: 0, fullCols: 0, low: [], above: 0, aboveLayers: 0, rest: 0, bodyMm: 0, topMm: 0, onTop: false, lenMm: 0, widMm: 0 })
       continue
     }
     const cols = new Map<string, number>()
@@ -59,7 +59,7 @@ export function explainLoose(r: TripResult): LooseNote[] {
     const x0 = Math.min(...boxes.map(b => b.x)), x1 = Math.max(...boxes.map(b => b.x + b.l))
     const y0 = Math.min(...boxes.map(b => b.y)), y1 = Math.max(...boxes.map(b => b.y + b.w))
     out.push({
-      group: c.group, label: m.label, orderName: m.orderName, itemId: m.itemId, total: c.total, placed: c.placed,
+      group: c.group, label: m.label, orderName: m.orderName, orderId: m.orderId, itemId: m.itemId, total: c.total, placed: c.placed,
       cols: cols.size, layers, fullCols, low, above, aboveLayers: Math.max(...cols.values()) - layers, rest: c.placed - fullCols * layers,
       bodyMm: layers * h, topMm: Math.max(...boxes.map(b => b.z + b.h)), onTop: c.onTopOfOthers,
       lenMm: x1 - x0, widMm: y1 - y0,
@@ -78,8 +78,8 @@ export function explainPallets(r: TripResult): { items: PalletItemNote[]; mixes:
     const zs = [...new Set(cs.map(x => x.z))].sort((a, b) => a - b)
     const fullPallet = g.key.endsWith('|full')
     for (const id of new Set(cs.map(x => x.itemId))) {
-      const key = `${m.orderName}|${id}`
-      const note = items.get(key) ?? { itemId: id, label: m.mix?.find(x => x.itemId === id)?.label ?? m.label, orderName: m.orderName, total: 0, full: null, rest: [] }
+      const key = `${m.orderId}|${id}`
+      const note = items.get(key) ?? { itemId: id, label: m.mix?.find(x => x.itemId === id)?.label ?? m.label, orderName: m.orderName, orderId: m.orderId, total: 0, full: null, rest: [] }
       const mine = cs.filter(x => x.itemId === id)
       note.total += mine.length * g.count
       if (fullPallet) {

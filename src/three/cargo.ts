@@ -1,11 +1,15 @@
-// Hàng trên xe: thùng carton (InstancedMesh mỗi mã) và pallet (đế gỗ + từng THÙNG THẬT đã xếp trên mặt
-// pallet — `PlanGroupMeta.cartons`; khối quấn màng chỉ còn cho pallet không rõ ruột — thùng to hơn chân
-// pallet / chưa khai quy cách).
+// Hàng trên xe: thùng carton IN theo mã (InstancedMesh mỗi mã — tên hàng ở mặt dài, mã hàng ở mặt đầu, băng
+// keo trên nóc) và pallet gỗ thật (ván mặt · ván ngang · 9 cục kê · ván đáy) + từng THÙNG THẬT đã xếp trên mặt
+// pallet — `PlanGroupMeta.cartons`; khối quấn màng chỉ còn cho pallet không rõ ruột (thùng to hơn chân pallet /
+// chưa khai quy cách).
 import * as THREE from 'three'
 import type { LoadPlan, PlacedBox } from '../engine/loadPlan'
 import type { PalletCarton, PlanGroupMeta } from '../engine/plan'
-import { cartonSideTexture, cartonTopTexture, woodTexture, wrappedTexture } from './textures'
+import { boardTexture, cartonFaces, cartonNormal, wrappedTexture, type CartonArt } from './textures'
 import { groupColor } from './colors'
+
+/** Chữ in trên thùng của một mã + cỡ thùng gốc (mm) — để biết thùng đặt xoay hay không. */
+export interface CartonPrint { code: string; name: string; l: number; w: number; h: number }
 
 export interface CargoHandle {
   group: THREE.Group
@@ -29,19 +33,38 @@ function onPallet<T extends { x: number; y: number; l: number; w: number }>(b: P
 }
 
 const upperBound = (a: number[], v: number) => { let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] <= v) lo = m + 1; else hi = m } return lo }
+// lệch rất nhẹ từng thùng (−1..1, cố định theo số thứ tự) — hàng xếp tay không thẳng tắp như máy in
+const jit = (i: number, k: number) => { const s = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return (s - Math.floor(s)) * 2 - 1 }
+const PALLET_PARTS = 22   // 7 ván mặt + 3 ván ngang + 9 cục kê + 3 ván đáy
 
-export function buildCargo(plan: LoadPlan, meta: PlanGroupMeta[], colors: Map<string, string>, floorY: number): CargoHandle {
+// Mặt in + pháp tuyến dùng lại giữa các lần dựng (gõ số thùng ⇒ tính lại sơ đồ ⇒ dựng lại hàng): vẽ chữ lên canvas
+// tốn công, nhất là điện thoại. Giữ ≤ 48 mã gần nhất; bỏ ra thì giải phóng.
+const FACES = new Map<string, ReturnType<typeof cartonFaces>>()
+function facesCached(a: CartonArt) {
+  const k = `${a.hex}|${a.code}|${a.name}|${a.l}|${a.w}|${a.h}`
+  const hit = FACES.get(k)
+  if (hit) { FACES.delete(k); FACES.set(k, hit); return hit }
+  const f = cartonFaces(a)
+  FACES.set(k, f)
+  if (FACES.size > 48) {
+    const [old, v] = FACES.entries().next().value!
+    FACES.delete(old); v.long.dispose(); v.end.dispose(); v.top.dispose()
+  }
+  return f
+}
+let normals: { side: THREE.Texture; top: THREE.Texture } | null = null
+const cartonNormals = () => (normals ??= { side: cartonNormal(false), top: cartonNormal(true) })
+
+export function buildCargo(plan: LoadPlan, meta: PlanGroupMeta[], colors: Map<string, string>, floorY: number, prints?: Map<string, CartonPrint>): CargoHandle {
   const root = new THREE.Group()
   const disposables: { dispose: () => void }[] = []
   const track = <T extends { dispose: () => void }>(x: T) => { disposables.push(x); return x }
   const W = plan.truck.width / 1000
 
-  const topTex = track(cartonTopTexture())
-  const sideTex = track(cartonSideTexture())
+  const { side: sideN, top: topN } = cartonNormals()
   const wrapTex = track(wrappedTexture())
-  const woodTex = track(woodTexture(5))
+  const boardMat = track(new THREE.MeshStandardMaterial({ map: track(boardTexture()), roughness: 0.92 }))
   const unitBox = track(new THREE.BoxGeometry(1, 1, 1))
-  const woodMat = track(new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.85 }))
 
   const groups: GroupMeshes[] = []
   const tmp = new THREE.Object3D()
@@ -59,32 +82,70 @@ export function buildCargo(plan: LoadPlan, meta: PlanGroupMeta[], colors: Map<st
     if (a) a.push(b); else byGroup.set(b.group, [b])
   }
 
-  const place = (mesh: THREE.InstancedMesh, i: number, x: number, y: number, z: number, sx: number, sy: number, sz: number) => {
-    tmp.position.set(x, y, z); tmp.scale.set(sx, sy, sz); tmp.updateMatrix()
-    mesh.setMatrixAt(i, tmp.matrix)
-  }
   const finish = (mesh: THREE.InstancedMesh) => {
     mesh.frustumCulled = false; mesh.castShadow = true; mesh.receiveShadow = true
     mesh.instanceMatrix.needsUpdate = true
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
     root.add(mesh)
   }
-  // THÙNG CARTON (mm, góc x·y·z): nóc có băng keo, hông có nhãn; màu mã pha giấy, lệch sáng tối rất nhẹ
-  // từng thùng — tránh mảng màu phẳng như nhựa. Mỗi lô thùng một mesh + vật liệu riêng (làm mờ riêng được).
+
+  // mặt in của từng mã — dùng chung cho mọi khối / pallet của mã đó (và giữa các lần dựng, xem `facesCached`)
+  const facesFor = (hex: string, pr: CartonPrint | undefined, fb: { l: number; w: number; h: number }) => {
+    const dims: [number, number, number] = pr ? [pr.l, pr.w, pr.h] : [fb.l, fb.w, fb.h]
+    return { ...facesCached({ hex, code: pr?.code ?? '', name: pr?.name ?? '', l: dims[0], w: dims[1], h: dims[2] }), dims }
+  }
+
+  // THÙNG CARTON (mm, góc x·y·z). Thùng đặt xoay ⇒ quay khối 90° (không kéo giãn) để chữ in luôn đúng mặt, đúng tỉ lệ.
+  // Mỗi lô thùng một mesh + vật liệu riêng (làm mờ riêng được khi soi).
   const cartonPart = (list: { x: number; y: number; z: number; l: number; w: number; h: number }[], hex: string, cum: number[], itemId?: string): Part => {
-    const side = track(new THREE.MeshStandardMaterial({ map: sideTex, roughness: 0.88 }))
-    const top = track(new THREE.MeshStandardMaterial({ map: topTex, roughness: 0.8 }))
-    const mesh = new THREE.InstancedMesh(unitBox, [side, side, top, side, side, side], Math.max(1, list.length))
+    const pr = itemId ? prints?.get(itemId) : undefined
+    const f = facesFor(hex, pr, list[0] ?? { l: 400, w: 300, h: 250 })
+    const [L0, W0, H0] = f.dims
+    const mk = (map: THREE.Texture, n: THREE.Texture) => track(new THREE.MeshStandardMaterial({ map, normalMap: n, normalScale: new THREE.Vector2(0.75, 0.75), roughness: 0.88 }))
+    const endM = mk(f.end, sideN), longM = mk(f.long, sideN), topM = mk(f.top, topN)
+    // thứ tự mặt của BoxGeometry: +x −x +y −y +z −z — trục x của khối = cạnh dài thùng
+    const mesh = new THREE.InstancedMesh(unitBox, [endM, endM, topM, topM, longM, longM], Math.max(1, list.length))
     list.forEach((b, i) => {
-      place(mesh, i, (b.x + b.l / 2) / 1000, floorY + (b.z + b.h / 2) / 1000, W / 2 - (b.y + b.w / 2) / 1000,
-        (b.l - 8) / 1000, (b.h - 5) / 1000, (b.w - 8) / 1000)
-      col.set(hex).multiplyScalar(0.94 + ((i * 7919) % 13) / 100)
-      mesh.setColorAt(i, col)
+      let yaw = 0, sx = b.l, sz = b.w
+      if (Math.abs(b.h - H0) <= 2) {
+        if (Math.abs(b.l - L0) <= 2 && Math.abs(b.w - W0) <= 2) { sx = L0; sz = W0 }
+        else if (Math.abs(b.l - W0) <= 2 && Math.abs(b.w - L0) <= 2) { yaw = Math.PI / 2; sx = L0; sz = W0 }
+      }
+      tmp.position.set((b.x + b.l / 2 + jit(i, 1) * 1.4) / 1000, floorY + (b.z + b.h / 2) / 1000, W / 2 - (b.y + b.w / 2 + jit(i, 2) * 1.4) / 1000)
+      tmp.rotation.set(0, yaw + jit(i, 3) * 0.005, 0)
+      tmp.scale.set((sx - 6) / 1000, (b.h - 4) / 1000, (sz - 6) / 1000)
+      tmp.updateMatrix(); mesh.setMatrixAt(i, tmp.matrix)
+      mesh.setColorAt(i, col.setScalar(0.95 + 0.05 * jit(i, 4)))
     })
     finish(mesh)
-    return { mesh, cum, mats: [side, top], itemId }
+    return { mesh, cum, mats: [endM, longM, topM], itemId }
   }
   const upTo = (n: number, k: number) => Array.from({ length: n + 1 }, (_, i) => i * k)
+
+  /** Pallet gỗ kiểu EUR co theo đúng cỡ chân: ván mặt + ván đáy chạy theo cạnh dài, ván ngang chạy theo cạnh ngắn. */
+  const palletBoards = (mesh: THREE.InstancedMesh, i0: number, b: { x: number; y: number; l: number; w: number }, y0: number, bh: number, seed: number) => {
+    const lx = b.l / 1000, lz = b.w / 1000
+    const cx = (b.x + b.l / 2) / 1000, cz = W / 2 - (b.y + b.w / 2) / 1000
+    const alongX = lx >= lz
+    const Lg = alongX ? lx : lz, Sh = alongX ? lz : lx
+    let i = i0
+    // (u dọc cạnh dài, v dọc cạnh ngắn) → toạ độ xe; thớ gỗ (trục x khối đơn vị) theo cạnh dài của tấm
+    const put = (u: number, v: number, y: number, du: number, dy: number, dv: number) => {
+      const ex = alongX ? du : dv, ez = alongX ? dv : du
+      tmp.position.set(alongX ? cx + u : cx + v, y0 + y, alongX ? cz + v : cz + u)
+      if (ex >= ez) { tmp.rotation.set(0, 0, 0); tmp.scale.set(ex, dy, ez) } else { tmp.rotation.set(0, Math.PI / 2, 0); tmp.scale.set(ez, dy, ex) }
+      tmp.updateMatrix(); mesh.setMatrixAt(i, tmp.matrix)
+      mesh.setColorAt(i, col.setScalar(0.86 + 0.12 * jit(seed * 31 + i, 5)))
+      i++
+    }
+    const hb = bh * 0.15, hk = bh * 0.55
+    const bu = Lg * 0.12, bv = Sh * 0.145, bw = Sh * 0.12, tw = Sh * 0.1
+    const us = [-Lg / 2 + bu / 2, 0, Lg / 2 - bu / 2], vs = [-Sh / 2 + bv / 2, 0, Sh / 2 - bv / 2]
+    for (const v of [-Sh / 2 + bw / 2, 0, Sh / 2 - bw / 2]) put(0, v, hb / 2, Lg, hb * 0.96, bw)
+    for (const u of us) for (const v of vs) put(u, v, hb + hk / 2, bu, hk, bv)
+    for (const u of us) put(u, 0, hb + hk + hb / 2, bu, hb * 0.96, Sh)
+    for (let k = 0; k < 7; k++) put(0, -Sh / 2 + tw / 2 + k * (Sh - tw) / 6, 2 * hb + hk + hb / 2, Lg, hb * 0.96, tw)
+  }
 
   for (const [gi, boxesIn] of byGroup) {
     const boxes = [...boxesIn].sort((a, b) => a.step - b.step)
@@ -94,26 +155,19 @@ export function buildCargo(plan: LoadPlan, meta: PlanGroupMeta[], colors: Map<st
     const entry: GroupMeshes = { steps: boxes.map(b => b.step), parts: [] }
 
     if (base) {
-      // PALLET: ván mặt + 9 chân gỗ — đúng cỡ chân pallet (`deck`), thùng chờm mép thì khối rộng hơn tấm gỗ
+      // PALLET đúng cỡ chân (`deck`) — thùng chờm mép thì khối rộng hơn tấm gỗ
       const n = boxes.length
       const L = plan.groups[gi].l
-      const gw = track(woodMat.clone())   // riêng từng nhóm để làm mờ được khi soi mã khác
-      const deck = new THREE.InstancedMesh(unitBox, gw, n)
-      const feet = new THREE.InstancedMesh(unitBox, gw, n * 9)
+      const gw = track(boardMat.clone())   // riêng từng nhóm để làm mờ được khi soi mã khác
+      const wood = new THREE.InstancedMesh(unitBox, gw, n * PALLET_PARTS)
       boxes.forEach((b0, i) => {
         const b = m.deck ? onPallet(b0, L, [m.deck])[0] : b0
-        const l = b.l / 1000, w = b.w / 1000, bh = base.h / 1000
-        const cx = (b.x + b.l / 2) / 1000, cz = W / 2 - (b.y + b.w / 2) / 1000, y0 = floorY + b0.z / 1000
-        place(deck, i, cx, y0 + bh * 0.82, cz, l, bh * 0.36, w)
-        let k = 0
-        for (const fx of [-1, 0, 1]) for (const fz of [-1, 0, 1]) {
-          place(feet, i * 9 + k++, cx + fx * (l / 2 - l * 0.07), y0 + bh * 0.32, cz + fz * (w / 2 - w * 0.07), l * 0.14, bh * 0.64, w * 0.14)
-        }
+        palletBoards(wood, i * PALLET_PARTS, b, floorY + b0.z / 1000, base.h / 1000, gi * 97 + i)
       })
-      finish(deck); finish(feet)
-      entry.parts.push({ mesh: deck, cum: upTo(n, 1), mats: [gw] }, { mesh: feet, cum: upTo(n, 9), mats: [gw] })
+      finish(wood)
+      entry.parts.push({ mesh: wood, cum: upTo(n, PALLET_PARTS), mats: [gw] })
       if (m.cartons?.length) {
-        // thùng thật — mỗi MÃ một mesh: pallet gộp thấy rõ từng mã, đúng cỡ thùng, đúng màu
+        // thùng thật — mỗi MÃ một mesh: pallet gộp thấy rõ từng mã, đúng cỡ thùng, đúng màu, đúng chữ in
         const byItem = new Map<string, { list: PalletCarton[]; cum: number[] }>()
         for (const c of m.cartons) if (!byItem.has(c.itemId)) byItem.set(c.itemId, { list: [], cum: [0] })
         for (const b of boxes) {
@@ -127,7 +181,9 @@ export function buildCargo(plan: LoadPlan, meta: PlanGroupMeta[], colors: Map<st
         const cargo = new THREE.InstancedMesh(unitBox, cargoMat, n)
         boxes.forEach((b, i) => {
           const l = b.l / 1000, w = b.w / 1000, h = b.h / 1000, bh = base.h / 1000
-          place(cargo, i, (b.x + b.l / 2) / 1000, floorY + b.z / 1000 + bh + (h - bh) / 2, W / 2 - (b.y + b.w / 2) / 1000, l * 0.985, h - bh - 0.004, w * 0.985)
+          tmp.position.set((b.x + b.l / 2) / 1000, floorY + b.z / 1000 + bh + (h - bh) / 2, W / 2 - (b.y + b.w / 2) / 1000)
+          tmp.rotation.set(0, 0, 0); tmp.scale.set(l * 0.985, h - bh - 0.004, w * 0.985)
+          tmp.updateMatrix(); cargo.setMatrixAt(i, tmp.matrix)
         })
         finish(cargo)
         entry.parts.push({ mesh: cargo, cum: upTo(n, 1), mats: [cargoMat], itemId: m.itemId ?? undefined })
@@ -149,6 +205,7 @@ export function buildCargo(plan: LoadPlan, meta: PlanGroupMeta[], colors: Map<st
       for (const b of plan.placed) {
         if (b.step !== step) continue
         tmp.position.set((b.x + b.l / 2) / 1000, floorY + (b.z + b.h / 2) / 1000, W / 2 - (b.y + b.w / 2) / 1000)
+        tmp.rotation.set(0, 0, 0)
         tmp.scale.set(b.l / 1000 + 0.012, b.h / 1000 + 0.012, b.w / 1000 + 0.012); tmp.updateMatrix()
         hl.setMatrixAt(h++, tmp.matrix)
       }

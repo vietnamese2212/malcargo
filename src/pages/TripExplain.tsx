@@ -119,7 +119,7 @@ export function ExplainPopup({ open, onClose, r, vehicle, items, colors, tripNam
   const pallet = vehicle.kind === 'pallet'
   const loose = pallet ? [] : explainLoose(r)
   const pal = pallet ? explainPallets(r) : { items: [], mixes: [] }
-  const multiOrder = new Set((pallet ? pal.items : loose).map(x => x.orderName)).size > 1
+  const multiOrder = new Set((pallet ? pal.items : loose).map(x => x.orderId)).size > 1
   const who = (order: string, total: number) => [multiOrder ? tx(order) : null, t('{n} thùng', { n: fmtInt(total) })].filter(Boolean).join(' · ')
 
   const copy = async () => {
@@ -167,7 +167,7 @@ export function ExplainPopup({ open, onClose, r, vehicle, items, colors, tripNam
       ) : <>
         <Table head={[t('Mã hàng'), t('Pallet chẵn'), [t('Cao'), WIDE], t('Lẻ'), [t('Lẻ nằm ở'), WIDE]]} minW="sm:min-w-[600px]">
           {pal.items.map((n, i) => (
-            <Row key={`${n.orderName}|${n.itemId}`} first={i === 0} detail={n.rest.map(restWhere)}>
+            <Row key={`${n.orderId}|${n.itemId}`} first={i === 0} detail={n.rest.map(restWhere)}>
               <NameCell color={colorOf(n.itemId)} name={nameOf(n.itemId, n.label)} sub={who(n.orderName, n.total)} />
               <td className={TD}>
                 {n.full ? <><Num>{t('{p} × {n} thùng', { p: n.full.pallets, n: fmtInt(n.full.perPallet) })}</Num>
