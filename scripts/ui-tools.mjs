@@ -203,7 +203,7 @@ for (const dev of [DEVICES[1], { ...DEVICES[1], name: 'phone-ngang', viewport: {
   const xlsx = async (name, sheets) => { const f = join(OUT, name); await writeXlsxFile(sheets).toFile(f); return f }
   const old = await xlsx('old-4-sheets.xlsx', [
     { sheet: 'Hướng dẫn', data: [['MalCargo — file mẫu nhập dữ liệu']] },
-    { sheet: 'Mã hàng', data: [OLD_HEAD.items, ['OLD1', 'Hàng cũ 1', 400, 300, 200], ['OLD2', 'Hàng cũ 2', 300, 200, 100]] },
+    { sheet: 'Mã hàng', data: [OLD_HEAD.items, ['OLD1', 'Hàng cũ 1', 400, 300, 200, 5, 100, 10], ['OLD2', 'Hàng cũ 2', 300, 200, 100, 3, 200, 12]] },
     { sheet: 'Xe', data: [OLD_HEAD.vehicles, ['Xe cũ', '29C00001', '', 5700, 2000, 2000, 5000]] },
     { sheet: 'Đơn hàng', data: [OLD_HEAD.orders, ['Đơn cũ', '', 'OLD1', 10]] },
     { sheet: 'Chuyến', data: [OLD_HEAD.trips, ['Chuyến cũ', 'Xe cũ', 'Đơn cũ']] },
@@ -211,7 +211,7 @@ for (const dev of [DEVICES[1], { ...DEVICES[1], name: 'phone-ngang', viewport: {
   const own = await xlsx('own-sheet1.xlsx', [{ sheet: 'Sheet1', data: [OLD_HEAD.orders, ['Đơn tự làm', 'Kho B', 'MAU-ST180', 12], ['Đơn tự làm', 'Kho B', 'MAU-ST110', 4]] }])
   const noHead = await xlsx('no-head.xlsx', [{ sheet: 'Sheet1', data: [['Đơn tự làm', 'Kho B', 'MAU-ST180', 12]] }])
   const swapped = await xlsx('swapped.xlsx', [{ sheet: 'Mã hàng', data: [['Mã hàng', 'Tên hàng', 'Rộng (mm)', 'Dài (mm)', 'Cao (mm)'], ['X1', 'A', 400, 300, 200]] }])
-  const badRows = await xlsx('bad-rows.xlsx', [{ sheet: 'Mã hàng', data: [OLD_HEAD.items, ['B1', 'Đúng', 420.5, 255, 100, 9.85], ['B2', 'Ghi cm', 42, 25, 10], ['B1', 'Trùng', 420, 255, 100]] }])
+  const badRows = await xlsx('bad-rows.xlsx', [{ sheet: 'Mã hàng', data: [OLD_HEAD.items, ['B1', 'Đúng', 420.5, 255, 100, 9.85, 140, 14], ['B2', 'Ghi cm', 42, 25, 10, 5, 100, 10], ['B1', 'Trùng', 420, 255, 100]] }])
   const load = async f => { await sheet.locator('input[type=file]').setInputFiles(f); await p.waitForTimeout(800) }
   await open(); await load(old)
   ok(await sheet.getByRole('button', { name: 'Nhập 5 dòng dữ liệu' }).count() > 0, 'file 4 trang đời trước ⇒ đọc đủ 2 mã + 1 xe + 1 đơn + 1 chuyến')

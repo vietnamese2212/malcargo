@@ -32,17 +32,20 @@ const miss = I.headError('vehicles', ['Tên xe', 'Biển số', 'Cách chở (Th
 ok(/thiếu cột E/.test(miss ?? ''), `thiếu cột ⇒ sai mẫu: ${miss}`)
 let r = parse({ items: [['Mã hàng', 'Tên hàng', 'Rộng (mm)', 'Dài (mm)'], ['SP1', 'A', 400, 300, 200]] })
 ok(!r.items.length && has(r, 1, /cột C/), 'bảng dán có tiêu đề sai mẫu ⇒ báo dòng 1, không nhận dòng nào')
-r = parse({ items: [['SP1', 'A', 400, 300, 200]] })
+r = parse({ items: [['SP1', 'A', 400, 300, 200, 5, 100, 10]] })
 ok(r.items.length === 1 && !r.errors.length, 'bảng dán không có tiêu đề ⇒ đọc theo vị trí cột như cũ')
 
 console.log('• Mã hàng')
 const tpl = k => [head(k), ...I.SHEETS.find(s => s.key === k).sample]
 r = parse({ items: tpl('items'), vehicles: tpl('vehicles'), orders: tpl('orders'), trips: tpl('trips') })
 ok(!r.errors.length && r.items.length === 2 && r.vehicles.length === 2 && r.orders.length === 2 && r.trips.length === 1, `dòng ví dụ của 4 file mẫu ⇒ không lỗi (${r.errors.join(' | ')})`)
-r = parse({ items: [head('items'), ['SP1', 'Hộp lẻ', '420,5', '255.5', 100, '9,85', '', '', ''], ['SP2', 'Thạch', 310, 130, 130, 3.08, 216, 8, 'x']] })
+r = parse({ items: [head('items'), ['SP1', 'Hộp lẻ', '420,5', '255.5', 100, '9,85', 140, 14, ''], ['SP2', 'Thạch', 310, 130, 130, 3.08, 216, 8, 'x']] })
 const sp1 = r.items.find(i => i.code === 'SP1')
-ok(!r.errors.length && sp1?.l === 420.5 && sp1?.w === 255.5 && sp1?.kg === 9.85 && sp1?.perPallet === null, 'kích thước + kg số lẻ (dấu phẩy hay chấm) ⇒ nhận; ô không bắt buộc để trống ⇒ trống')
+ok(!r.errors.length && sp1?.l === 420.5 && sp1?.w === 255.5 && sp1?.kg === 9.85 && sp1?.perPallet === 140 && sp1?.light === false, 'kích thước + kg số lẻ (dấu phẩy hay chấm) ⇒ nhận; hàng nhẹ để trống ⇒ không nhẹ')
 ok(r.items.find(i => i.code === 'SP2')?.light === true, 'Hàng nhẹ ghi x ⇒ hàng nhẹ')
+r = parse({ items: [head('items'), ['SP3', 'Thiếu', 420, 255, 100, '', '', '', '']] })
+ok(!r.items.length && ['Kg/thùng', 'Thùng/pallet', 'Chồng tối đa \\(lớp\\)'].every(c => has(r, 2, new RegExp(`thiếu ${c}`))) && !r.errors.some(e => /Hàng nhẹ/.test(e)),
+  'nhập file: thiếu kg / thùng-pallet / số lớp ⇒ lỗi; hàng nhẹ để trống thì không')
 r = parse({ items: [head('items'),
   ['A1', 'Thùng to', 4200, 255, 100], ['A2', 'Ghi cm', 42, 25.5, 10], ['A3', 'Kg âm', 420, 255, 100, -1], ['A4', 'Thùng lẻ', 420, 255, 100, 6, 12.5],
   ['A5', 'Lớp chữ', 420, 255, 100, 6, 100, 'abc'], ['A6', 'Nhẹ lạ', 420, 255, 100, 6, 100, 10, 'có lẽ'], ['A7', 'Thiếu cao', 420, 255, ''], ['A1', 'Trùng', 420, 255, 100]]

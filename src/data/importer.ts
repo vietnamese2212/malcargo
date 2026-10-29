@@ -37,8 +37,9 @@ export const SHEETS: SheetDef[] = [
     key: 'items', title: 'Mã hàng', file: 'malcargo-mau-ma-hang.xlsx', // i18n-key
     cols: [
       { label: 'Mã hàng', text: 'Mã', req: true, w: 14, uniq: true }, { label: 'Tên hàng', req: true, w: 30 }, { label: 'Dài (mm)', req: true, w: 10, rule: DIM }, // i18n-key
-      { label: 'Rộng (mm)', req: true, w: 10, rule: DIM }, { label: 'Cao (mm)', req: true, w: 10, rule: DIM }, { label: 'Kg/thùng', w: 10, rule: KG }, // i18n-key
-      { label: 'Thùng/pallet', w: 12, rule: PER_PALLET }, { label: 'Chồng tối đa (lớp)', w: 16, rule: LAYERS }, { label: 'Hàng nhẹ (x)', w: 12, pick: 'x' }, // i18n-key
+      // nhập file: mọi cột bắt buộc trừ Hàng nhẹ (trống = không nhẹ) — chủ dự án 29/10; form Mã hàng vẫn cho để trống kg / pallet / lớp
+      { label: 'Rộng (mm)', req: true, w: 10, rule: DIM }, { label: 'Cao (mm)', req: true, w: 10, rule: DIM }, { label: 'Kg/thùng', req: true, w: 10, rule: KG }, // i18n-key
+      { label: 'Thùng/pallet', req: true, w: 12, rule: PER_PALLET }, { label: 'Chồng tối đa (lớp)', req: true, w: 16, rule: LAYERS }, { label: 'Hàng nhẹ (x)', w: 12, pick: 'x' }, // i18n-key
     ],
     sample: [['SP001', 'Sữa 110ml x48', 420, 255, 100, 6.2, 140, 14, ''], ['SP002', 'Thạch túi 110ml x24', 310, 130, 130, 3.08, 216, 8, 'x']], // i18n-ok
   },
@@ -169,9 +170,10 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     const [l, w, h, kg, pp, ml] = [2, 3, 4, 5, 6, 7].map(i => cell('items', ln, r, i))
     const light = str(r[8]), badLight = !!light && !YES.test(light) && !NO.test(light)
     if (badLight) err('items', ln, t('{col}: ghi x hoặc để trống', { col: colHead(cols('items')[8]) }))
-    if (l == null || w == null || h == null || [kg, pp, ml].includes(undefined) || badLight) continue
-    // gõ cm vào ô mm (cùng ngưỡng cảnh báo của form Mã hàng)
-    if (l < 100 && w < 100 && h < 100) { err('items', ln, t('{code}: cả 3 cạnh dưới 100 mm — có phải đang ghi cm? (40 cm = 400 mm)', { code })); continue }
+    // gõ cm vào ô mm (cùng ngưỡng cảnh báo của form Mã hàng) — báo cùng lúc với lỗi khác của dòng
+    const cm = l != null && w != null && h != null && l < 100 && w < 100 && h < 100
+    if (cm) err('items', ln, t('{code}: cả 3 cạnh dưới 100 mm — có phải đang ghi cm? (40 cm = 400 mm)', { code }))
+    if (l == null || w == null || h == null || [kg, pp, ml].includes(undefined) || badLight || cm) continue
     const old = mineItems.find(i => key(i.code) === key(code))
     if (old) out.updated++
     out.items.push({ id: old?.id ?? newId(), owner: 'me', code, name, l, w, h, kg: kg ?? null, perPallet: pp ?? null, maxLayers: ml ?? null, light: YES.test(light), updatedAt: 0 })
