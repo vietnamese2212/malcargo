@@ -81,7 +81,7 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
       </>}>
       <div className="-mx-5 -mt-4 mb-4">
         {dimsOk
-          ? <Scene className="h-[200px] sm:h-[240px]" truck={{ l: f.l, w: f.w, h: f.h, kind: f.kind, container: f.container, plate: f.plate }} walls="glass" />
+          ? <Scene className="h-[200px] sm:h-[240px]" truck={{ l: f.l, w: f.w, h: f.h, container: f.container, plate: f.plate }} walls="glass" />
           : <div className="grid h-[120px] place-items-center bg-[#e7ecf2] text-sm text-slate-600">{t('Nhập lòng thùng để xem trước xe')}</div>}
         {dimsOk && (
           <div className="flex justify-center gap-4 border-b border-slate-200 bg-white py-2 text-[13px] text-slate-600">

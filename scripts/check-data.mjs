@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url'
 
 const dir = mkdtempSync(join(tmpdir(), 'malcargo-'))
 const out = join(dir, 'store.mjs')
-buildSync({ stdin: { contents: "export * from './src/data/store'", resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', outfile: out, logLevel: 'error' })
+buildSync({ stdin: { contents: "export * from './src/data/store'; export { SAMPLE_TRIPS, SAMPLE_ORDERS, PREV_SAMPLE_TRIPS, PREV_SAMPLE_ORDERS } from './src/data/catalog'", resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', outfile: out, logLevel: 'error' })
 const S = await import(pathToFileURL(out).href)
 rmSync(dir, { recursive: true, force: true })
 
@@ -67,6 +67,26 @@ D().removeOrder('o-2')
 D().replaceAll({ ...base, orders: [order('o-2', 'Đơn 2', [{ itemId: 'x', qty: 1 }])], trips: [] })
 ok(!D().deleted['o-2'] && D().orders.some(o => o.id === 'o-2'), 'nạp lại file có thứ đã xoá ⇒ sống lại, bỏ dấu (lần gộp sau không mất nữa)')
 ok(!Object.keys(D().deleted).some(S.isSample), 'không bao giờ đánh dấu xoá chuyến / đơn mẫu')
+
+console.log('• Hai chuyến mẫu (29/10: xe pallet 17 pallet · container 40ft)')
+const samples = () => ids(D().trips.filter(t => S.isSample(t.id))) + ' / ' + ids(D().orders.filter(o => S.isSample(o.id)))
+const want = ids(S.SAMPLE_TRIPS) + ' / ' + ids(S.SAMPLE_ORDERS)
+// máy cũ còn chuyến mẫu đời trước NGUYÊN GỐC ⇒ chỉ thay mẫu, không đẻ chuyến
+D().replaceAll({ ...base, orders: S.PREV_SAMPLE_ORDERS, trips: S.PREV_SAMPLE_TRIPS, deleted: {} })
+ok(samples() === want && !mine(D().trips).length && !mine(D().orders).length, `mẫu đời trước nguyên gốc ⇒ thay bằng mẫu mới, không tách (${samples()})`)
+// đời trước đã bị sửa (bản sao lưu cũ) ⇒ thay đổi giữ thành chuyến mới mang ĐỦ 2 đơn cũ, mẫu về bản mới
+const edited = S.PREV_SAMPLE_ORDERS.map((o, i) => (i ? o : { ...o, lines: o.lines.map(l => ({ ...l, qty: l.qty + 1 })) }))
+D().replaceAll({ ...base, orders: edited, trips: S.PREV_SAMPLE_TRIPS, deleted: {} })
+const kept = mine(D().trips)
+ok(samples() === want && kept.length === 1 && kept[0].orderIds.length === 2 && kept[0].name === kept[0].code && kept[0].vehicleId === 'adm-v-5t',
+  `mẫu đời trước đã sửa ⇒ thành chuyến ${kept[0]?.name} (2 đơn, xe cũ), mẫu về bản mới`)
+// sửa đơn của chuyến mẫu THỨ HAI ⇒ tách đúng chuyến đó (xe container), chuyến mẫu kia không đụng
+D().replaceAll({ ...base, orders: [], trips: [], deleted: {} })
+const o2 = S.SAMPLE_ORDERS.find(o => o.id === 'sample-o2')
+D().upsertOrder({ ...o2, lines: o2.lines.map(l => ({ ...l, qty: l.qty + 5 })) })
+const f = D().fork, ft = D().trips.find(t => t.id === f?.to)
+ok(f?.from === 'sample-t2' && ft?.vehicleId === 'adm-v-c40' && ft.orderIds.length === 1 && D().orders.find(o => o.id === ft.orderIds[0])?.lines[0].qty === o2.lines[0].qty + 5 && samples() === want,
+  'sửa đơn container mẫu ⇒ tách chuyến container (giữ xe, mang số mới), hai chuyến mẫu nguyên')
 
 console.log(fail ? `\nĐỎ — ${fail} lỗi` : '\nXANH')
 process.exit(fail ? 1 : 0)

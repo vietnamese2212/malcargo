@@ -17,7 +17,7 @@ export type ViewPreset = 'overview' | 'rear' | 'top' | 'side'
 export type { CartonPrint }
 
 export interface TruckSceneProps {
-  truck: { l: number; w: number; h: number; kind: 'loose' | 'pallet'; container?: boolean; plate?: string } | null
+  truck: { l: number; w: number; h: number; container?: boolean; plate?: string } | null
   plan?: LoadPlan | null
   meta?: PlanGroupMeta[]
   colors?: Map<string, string>
@@ -82,6 +82,7 @@ function skyMaterial(glow: number) {
 export default function TruckScene(p: TruckSceneProps) {
   const host = useRef<HTMLDivElement>(null)
   const ctx = useRef<Ctx | null>(null)
+  const fitted = useRef('')   // cỡ xe camera đang căn theo
   const [noGL, setNoGL] = useState(false)
 
   // ── dựng cảnh một lần ────────────────────────────────────────────────────
@@ -251,13 +252,15 @@ export default function TruckScene(p: TruckSceneProps) {
   }, [])
 
   // ── xe ───────────────────────────────────────────────────────────────────
-  const tk = p.truck ? `${p.truck.l}|${p.truck.w}|${p.truck.h}|${p.truck.kind}|${p.truck.container ? 1 : 0}|${p.truck.plate ?? ''}` : ''
+  // Đổi Thùng rời ↔ Pallet không đụng tới xe: thân xe giống hệt, chỉ hàng đổi (chủ dự án 29/10)
+  const fk = p.truck ? `${p.truck.l}|${p.truck.w}|${p.truck.h}|${p.truck.container ? 1 : 0}` : ''
+  const tk = p.truck ? `${fk}|${p.truck.plate ?? ''}` : ''
   useEffect(() => {
     const c = ctx.current
     if (!c) return
     if (c.truck) { c.scene.remove(c.truck.group); c.truck.dispose(); c.truck = null }
     if (!p.truck) { c.dirty = true; return }
-    const t = buildTruck({ L: p.truck.l / 1000, W: p.truck.w / 1000, H: p.truck.h / 1000, pallet: p.truck.kind === 'pallet', container: p.truck.container, plate: p.truck.plate })
+    const t = buildTruck({ L: p.truck.l / 1000, W: p.truck.w / 1000, H: p.truck.h / 1000, container: p.truck.container, plate: p.truck.plate })
     c.truck = t
     c.scene.add(t.group)
     const b = t.bounds
@@ -274,7 +277,8 @@ export default function TruckScene(p: TruckSceneProps) {
     // vùng tính che khuất bám quanh xe — số đo sâu chính xác hơn
     c.ao?.setSceneClipBox(new THREE.Box3(new THREE.Vector3(b.minX - 3, -0.5, -b.halfW - 3), new THREE.Vector3(b.maxX + 3, b.topY + 1, b.halfW + 3)))
     t.setView(c.walls, c.camera.position.z)
-    goTo(c, 'overview', false)
+    // xe khác cỡ mới căn lại camera; cùng cỡ (đổi biển số, xe mẫu thành xe của tôi) giữ góc người dùng đang xem
+    if (fitted.current !== fk) { fitted.current = fk; goTo(c, 'overview', false) }
     c.dirty = true
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tk])

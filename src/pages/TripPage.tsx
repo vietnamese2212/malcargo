@@ -6,7 +6,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from '
 import {
   AlertTriangle, ArrowDown, ArrowUp, Camera, Check, ChevronDown, ClipboardCopy, ClipboardList, CloudOff, Crosshair, ExternalLink, Eye, EyeOff,
   FileSpreadsheet, Layers, Loader2, LogOut, MapPin, Maximize2, Menu, Minimize2, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Rotate3d, Ruler,
-  SlidersHorizontal, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, X,
+  Settings, SlidersHorizontal, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, X,
 } from 'lucide-react'
 import { findVehicle, isBlankOrder, isSample, newId, newTripLabel, nextName, useAllItems, useAllVehicles, useData } from '../data/store'
 import { signInGoogle, signOut, useAuth } from '../data/cloud'
@@ -295,12 +295,13 @@ export default function TripPage({ id }: { id: string }) {
         {/* toàn màn hình: khung 3D phủ kín màn (máy có Fullscreen API thì ẩn luôn thanh trình duyệt) */}
         <section data-scene className={full
           ? 'fixed inset-0 z-40 flex flex-col bg-[#e7ecf2] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)]'
-          : cx('sticky top-12 z-10 flex h-[50vh] min-h-[320px] flex-col bg-[#e7ecf2] sm:top-14 lg:relative lg:top-0 lg:order-2 lg:h-full', kb && 'max-lg:relative max-lg:top-0')}>
-          <SpecStrip vehicle={vehicle} pallet={pallet} onOpen={more => setSpec({ more })} onKind={k => patchVehicle({ kind: k })}
+          : cx('sticky top-12 z-10 flex flex-col bg-[#e7ecf2] sm:top-14 lg:relative lg:top-0 lg:order-2 lg:h-full', kb && 'max-lg:relative max-lg:top-0')}>
+          <SpecStrip vehicle={vehicle} pallet={pallet} keep={full} onOpen={more => setSpec({ more })} onKind={k => patchVehicle({ kind: k })}
             lightOwn={tripOrders.some(o => o.lines.some(l => l.qty > 0 && l.item.light)) ? !!trip.lightOwnPallet : null}
             onLightOwn={v => upsertTrip({ ...trip, lightOwnPallet: v })} onPallet={() => setPalletOpen(true)} />
-          <div className="relative min-h-0 flex-1">
-            <Scene className="h-full w-full" truck={vehicle ? { l: vehicle.l, w: vehicle.w, h: vehicle.h, kind: vehicle.kind, container: vehicle.container, plate: vehicle.plate } : null}
+          {/* điện thoại: khung 3D cao cố định (nửa màn trừ một hàng thông số) — dải thông số xuống dòng không bóp khung */}
+          <div className={cx('relative min-h-0', full ? 'flex-1' : 'h-[calc(50vh-56px)] min-h-[264px] sm:h-[calc(50vh-48px)] lg:h-auto lg:flex-1')}>
+            <Scene className="h-full w-full" truck={vehicle ? { l: vehicle.l, w: vehicle.w, h: vehicle.h, container: vehicle.container, plate: vehicle.plate } : null}
               plan={plan} meta={result?.meta} colors={colors} prints={prints} step={step} focus={shown} focusItem={sel?.itemId ?? null} view={view} walls={walls} />
 
             <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between gap-2">
@@ -688,11 +689,15 @@ function AccountButton({ onData }: { onData: () => void }) {
 // ── Dải thông số xe ở đầu bản vẽ: đọc một dòng là biết đang cấu hình gì; xá/pallet một chạm ──────
 // Không đủ chỗ thì XUỐNG DÒNG (không cắt chữ, không đẩy nút ra ngoài mép). `lightOwn` null = không hiện
 // công tắc hàng nhẹ (chuyến không có hàng nhẹ).
-function SpecStrip({ vehicle, pallet, lightOwn, onOpen, onKind, onLightOwn, onPallet }: {
-  vehicle?: Vehicle; pallet: { l: number; w: number; maxH: number }; lightOwn: boolean | null
+function SpecStrip({ vehicle, pallet, lightOwn, keep, onOpen, onKind, onLightOwn, onPallet }: {
+  vehicle?: Vehicle; pallet: { l: number; w: number; maxH: number }; lightOwn: boolean | null; keep: boolean
   onOpen: (more: boolean) => void; onKind: (k: VehicleKind) => void; onLightOwn: (v: boolean) => void; onPallet: () => void
 }) {
   const chip = 'hit flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[13px] text-slate-900 transition-colors hover:border-slate-400 hover:bg-slate-50'
+  // Đổi Thùng rời ↔ Pallet không được làm khung 3D đổi cỡ (chủ dự án 29/10): nút riêng của xe pallet vẫn GIỮ CHỖ
+  // khi xếp rời (vô hình, cuối hàng nên chỉ thấy khoảng trống) — dải thông số cao như nhau. Điện thoại (ngoài toàn
+  // màn hình) khung 3D cao cố định, dải thông số cao thêm thì đẩy phần dưới xuống ⇒ không cần giữ chỗ.
+  const palOnly = vehicle?.kind === 'pallet' ? '' : keep ? 'invisible' : 'max-lg:hidden lg:invisible'
   return (
     <div className="flex min-h-[56px] shrink-0 flex-wrap items-center gap-2 border-b border-slate-300 bg-white px-3 py-2 sm:min-h-[48px] sm:gap-1.5 sm:py-1.5">
       {!vehicle ? (
@@ -712,6 +717,12 @@ function SpecStrip({ vehicle, pallet, lightOwn, onOpen, onKind, onLightOwn, onPa
             </span>
             <ChevronDown size={15} className="ml-auto shrink-0 text-slate-500" />
           </button>
+          <button onClick={() => onOpen(true)} className={cx(chip, 'max-sm:hidden')} title={t('Lòng thùng dài × rộng × cao')}>
+            <span className="text-slate-600">{t('Lòng')}</span><span className="num font-semibold">{m(vehicle.l)} × {m(vehicle.w)} × {m(vehicle.h)} m</span>
+          </button>
+          <button onClick={() => onOpen(true)} className={cx(chip, 'max-sm:hidden')}>
+            <span className="text-slate-600">{t('Tải')}</span><span className="num font-semibold">{vehicle.payloadKg != null ? fmtKgShort(vehicle.payloadKg) : '—'}</span>
+          </button>
           <div className="flex h-9 shrink-0 rounded-md border border-slate-300 bg-slate-100 p-0.5" role="group" aria-label={t('Cách chất xếp')}>
             {(['loose', 'pallet'] as const).map(k => (
               <button key={k} onClick={() => k !== vehicle.kind && onKind(k)} aria-pressed={vehicle.kind === k}
@@ -721,30 +732,22 @@ function SpecStrip({ vehicle, pallet, lightOwn, onOpen, onKind, onLightOwn, onPa
               </button>
             ))}
           </div>
-          {/* cài pallet ngay cạnh nút chọn Pallet (chủ dự án 29/10) — điện thoại chỉ biểu tượng */}
-          {vehicle.kind === 'pallet' && (
-            <button onClick={onPallet} aria-label={t('Cài đặt pallet')} title={t('Cài đặt pallet')} className={cx(chip, 'px-2')}>
-              <SlidersHorizontal size={15} className="text-brand-700" />
-              <span className="num font-semibold max-sm:hidden">{m(pallet.l)} × {m(pallet.w)} m</span>
-              <span className="num text-slate-600 max-xl:hidden">· ≤ {fmtDec(pallet.maxH / 1000, 2)} m</span>
-            </button>
-          )}
-          {vehicle.kind === 'pallet' && lightOwn != null && (
+          {/* cài pallet ngay cạnh nút chọn Pallet (chủ dự án 29/10) — cỡ chân chỉ hiện ở màn rộng (dải giữ một hàng) */}
+          <button onClick={onPallet} aria-label={t('Cài đặt pallet')} title={t('Cài đặt pallet')} className={cx(chip, 'px-2', palOnly)}>
+            <Settings size={15} className="text-brand-700" />
+            <span className="num font-semibold max-2xl:hidden">{m(pallet.l)} × {m(pallet.w)} m</span>
+            <span className="num text-slate-600 max-2xl:hidden">· ≤ {fmtDec(pallet.maxH / 1000, 2)} m</span>
+          </button>
+          {lightOwn != null && (
             <button role="switch" aria-checked={lightOwn} onClick={() => onLightOwn(!lightOwn)}
               title={lightOwn ? t('Phần lẻ hàng nhẹ đứng pallet riêng') : t('Phần lẻ hàng nhẹ dồn lên trên cùng pallet gộp')}
-              className={cx(chip, 'gap-2 font-semibold max-sm:w-full max-sm:justify-between')}>
+              className={cx(chip, 'gap-2 font-semibold max-sm:w-full max-sm:justify-between', palOnly)}>
               {t('Hàng nhẹ: pallet riêng')}
               <span className={cx('relative h-5 w-9 shrink-0 rounded-full transition-colors', lightOwn ? 'bg-brand-500' : 'bg-slate-300')}>
                 <span className={cx('absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform', lightOwn && 'translate-x-4')} />
               </span>
             </button>
           )}
-          <button onClick={() => onOpen(true)} className={cx(chip, 'max-sm:hidden')} title={t('Lòng thùng dài × rộng × cao')}>
-            <span className="text-slate-600">{t('Lòng')}</span><span className="num font-semibold">{m(vehicle.l)} × {m(vehicle.w)} × {m(vehicle.h)} m</span>
-          </button>
-          <button onClick={() => onOpen(true)} className={cx(chip, 'max-sm:hidden')}>
-            <span className="text-slate-600">{t('Tải')}</span><span className="num font-semibold">{vehicle.payloadKg != null ? fmtKgShort(vehicle.payloadKg) : '—'}</span>
-          </button>
           <button onClick={() => onOpen(true)} aria-label={t('Chỉnh thông số thùng xe')} title={t('Chỉnh thông số thùng xe')} className={cx(chip, 'ml-auto text-brand-700 max-sm:hidden')}>
             <SlidersHorizontal size={16} />
           </button>

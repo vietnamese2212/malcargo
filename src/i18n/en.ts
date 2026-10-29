@@ -24,6 +24,13 @@ export const EN_NAMES: Record<string, string> = {
   'Xe tải 15 tấn': '15-ton truck',
   'Xe pallet 8 tấn': '8-ton pallet truck',
   'Xe pallet 15 tấn': '15-ton pallet truck',
+  'Mẫu pallet': 'Pallet demo',
+  'Mẫu 40ft': '40ft demo',
+  'Đơn mẫu pallet': 'Pallet sample',
+  'Đơn mẫu 40ft': '40ft sample',
+  'Nhà phân phối A': 'Distributor A',
+  'Kho B': 'Warehouse B',
+  // mẫu đời trước — đơn đã tách ra từ chuyến mẫu cũ vẫn mang tên này
   'Chuyến mẫu': 'Sample trip',
   'Đơn mẫu 1': 'Sample order 1',
   'Đơn mẫu 2': 'Sample order 2',

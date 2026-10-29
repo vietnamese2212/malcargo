@@ -21,7 +21,10 @@ await ctx.addInitScript(() => {
 })
 const p = await ctx.newPage()
 const errs = watchErrors(p)
-const kb = async open => { await p.evaluate(h => window.__kb(h), open ? KB : 0); await p.waitForTimeout(450) }
+// chờ cả hiệu ứng trượt của tấm chạy xong: máy bận dựng 3D (chuyến mẫu ~2.400 thùng) thì hiệu ứng bắt đầu muộn,
+// đo giữa chừng ra đáy lệch ~20px dù tấm đã bám đúng chỗ
+const settled = () => p.waitForFunction(() => !document.getAnimations().some(a => a.playState === 'running'), null, { timeout: 3000 }).catch(() => {})
+const kb = async open => { await p.evaluate(h => window.__kb(h), open ? KB : 0); await p.waitForTimeout(450); await settled() }
 const rectOf = (sel) => p.evaluate(s => { const r = document.querySelector(s)?.getBoundingClientRect(); return r && { top: Math.round(r.top), bottom: Math.round(r.bottom) } }, sel)
 await p.goto(srv.base + '#/trip/sample-t1', { waitUntil: 'networkidle' }); await p.waitForTimeout(2500)
 const visBottom = 844 - KB

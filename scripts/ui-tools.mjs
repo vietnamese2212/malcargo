@@ -82,9 +82,9 @@ for (const dev of [DEVICES[0], { ...DEVICES[1], name: 'tablet', viewport: { widt
   const h = await p.evaluate(() => location.hash)
   d = await data(p)
   const fork = d.trips.find(t => `#/trip/${t.id}` === h)
-  ok(h !== '#/trip/sample-t1' && fork?.orderIds.length === 3 && d.orders.find(o => o.id === fork.orderIds[2])?.name === 'Đơn nhập 3',
-    `chuyến mẫu: nhập đơn ⇒ chuyển sang chuyến mới có 2 đơn mẫu + đơn vừa nhập (${fork?.orderIds.length ?? 0} đơn)`)
-  ok(d.trips.find(t => t.id === 'sample-t1')?.orderIds.length === 2, 'chuyến mẫu giữ nguyên 2 đơn')
+  ok(h !== '#/trip/sample-t1' && fork?.orderIds.length === 2 && d.orders.find(o => o.id === fork.orderIds[1])?.name === 'Đơn nhập 3',
+    `chuyến mẫu: nhập đơn ⇒ chuyển sang chuyến mới có đơn mẫu + đơn vừa nhập (${fork?.orderIds.length ?? 0} đơn)`)
+  ok(d.trips.find(t => t.id === 'sample-t1')?.orderIds.length === 1, 'chuyến mẫu giữ nguyên 1 đơn')
   await p.screenshot({ path: `${OUT}/import-trip-done-${dev.name}.png` })
   ok(!errs.length, 'không lỗi trình duyệt' + (errs.length ? ': ' + errs.join(' | ') : ''))
   await ctx.close()

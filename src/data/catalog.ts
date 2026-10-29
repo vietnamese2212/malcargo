@@ -36,16 +36,34 @@ export const ADMIN_ITEMS: Item[] = [
 
 export const DEFAULT_PALLET_SETTINGS: PalletSettings = { l: 1200, w: 1000, maxH: 1650, baseH: 150, kg: 25 }
 
-// Chuyến mẫu cho lần mở đầu tiên — thấy ngay sơ đồ, không phải nhập gì.
+// Hai chuyến mẫu cho lần mở đầu tiên — thấy ngay sơ đồ, không phải nhập gì. Đơn NHIỀU MÃ để làm quen bảng
+// Diễn giải (chủ dự án 29/10): xe pallet 17 pallet (6 mã: pallet chẵn, pallet gộp chung, pallet lẻ riêng) ·
+// container 40ft xếp rời (2 mã nặng thành khối + thạch túi nhẹ trên nóc).
 export const SAMPLE_ORDERS: Order[] = [
+  { id: 'sample-o1', name: 'Đơn mẫu pallet', place: 'Nhà phân phối A', updatedAt: T0, lines: [
+    { itemId: 'adm-i-st110', qty: 620 }, { itemId: 'adm-i-c100', qty: 479 }, { itemId: 'adm-i-c85', qty: 612 },
+    { itemId: 'adm-i-th170', qty: 60 }, { itemId: 'adm-i-st180', qty: 140 }, { itemId: 'adm-i-tui110', qty: 492 },
+  ] },
+  { id: 'sample-o2', name: 'Đơn mẫu 40ft', place: 'Kho B', updatedAt: T0, lines: [
+    { itemId: 'adm-i-st180', qty: 1100 }, { itemId: 'adm-i-st110', qty: 900 }, { itemId: 'adm-i-tui110', qty: 600 },
+  ] },
+]
+
+export const SAMPLE_TRIPS: Trip[] = [
+  { id: 'sample-t1', name: 'Mẫu pallet', vehicleId: 'adm-v-p15t', orderIds: ['sample-o1'], updatedAt: T0 },
+  { id: 'sample-t2', name: 'Mẫu 40ft', vehicleId: 'adm-v-c40', orderIds: ['sample-o2'], updatedAt: T0 },
+]
+
+// Chuyến mẫu ĐỜI TRƯỚC (27–29/10/2026: xe 5 tấn, 2 đơn) — máy cũ / bản sao lưu còn giữ nguyên bản này ⇒ chỉ thay
+// bằng mẫu mới, không tách thành chuyến của người dùng.
+export const PREV_SAMPLE_TRIPS: Trip[] = [
+  { id: 'sample-t1', name: 'Chuyến mẫu', vehicleId: 'adm-v-5t', orderIds: ['sample-o1', 'sample-o2'], updatedAt: T0 },
+]
+export const PREV_SAMPLE_ORDERS: Order[] = [
   { id: 'sample-o1', name: 'Đơn mẫu 1', place: 'Cửa hàng A', updatedAt: T0, lines: [
     { itemId: 'adm-i-st180', qty: 150 }, { itemId: 'adm-i-st110', qty: 160 }, { itemId: 'adm-i-tui110', qty: 40 },
   ] },
   { id: 'sample-o2', name: 'Đơn mẫu 2', place: 'Cửa hàng B', updatedAt: T0, lines: [
     { itemId: 'adm-i-scu180', qty: 100 }, { itemId: 'adm-i-c100', qty: 120 },
   ] },
-]
-
-export const SAMPLE_TRIPS: Trip[] = [
-  { id: 'sample-t1', name: 'Chuyến mẫu', vehicleId: 'adm-v-5t', orderIds: ['sample-o1', 'sample-o2'], updatedAt: T0 },
 ]

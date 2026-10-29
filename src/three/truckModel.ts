@@ -8,7 +8,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { floorTexture, glassTexture, grilleTexture, lineTexture, panelTexture, plateTexture, sidewallTexture, tapeTexture, treadTexture } from './textures'
 
-export interface TruckDimsM { L: number; W: number; H: number; pallet: boolean; container?: boolean; plate?: string }
+export interface TruckDimsM { L: number; W: number; H: number; container?: boolean; plate?: string }
 export type WallMode = 'open' | 'glass'
 
 export interface TruckHandle {

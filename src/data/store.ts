@@ -5,7 +5,7 @@ import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import type { Item, Order, PalletSettings, Trip, Vehicle } from './types'
 import { t } from '../i18n'
-import { ADMIN_ITEMS, ADMIN_VEHICLES, DEFAULT_PALLET_SETTINGS, SAMPLE_ORDERS, SAMPLE_TRIPS } from './catalog'
+import { ADMIN_ITEMS, ADMIN_VEHICLES, DEFAULT_PALLET_SETTINGS, PREV_SAMPLE_ORDERS, PREV_SAMPLE_TRIPS, SAMPLE_ORDERS, SAMPLE_TRIPS } from './catalog'
 
 export const newId = () =>
   (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
@@ -77,10 +77,14 @@ export const isBlankOrder = (o: Order) => !isSample(o.id) && !o.lines.length && 
 const isBlankTrip = (t: Trip, orders: Set<string>) =>
   !isSample(t.id) && (t.name === t.code || DEFAULT_TRIP.test(t.name)) && !t.orderIds.some(id => orders.has(id))
 
-// ── CHUYẾN MẪU (+ 2 đơn của nó) luôn giữ nguyên: không xoá được, và sửa bất cứ gì trên nó thì app tự TÁCH
+// ── CHUYẾN MẪU (+ đơn của nó) luôn giữ nguyên: không xoá được, và sửa bất cứ gì trên nó thì app tự TÁCH
 //    thành một chuyến mới (mã ddmmyy-hhmm-stt) mang thay đổi đó; chọn lại chuyến mẫu là thấy bản gốc.
 export const isSample = (id: string) => id.startsWith('sample-')
-const SAMPLE_TRIP = SAMPLE_TRIPS[0]
+// tên mặc định của chuyến mẫu (cả đời trước): tách ra thì chuyến mới lấy mã chuyến làm tên
+const SAMPLE_NAMES = new Set([...SAMPLE_TRIPS, ...PREV_SAMPLE_TRIPS].map(t => t.name))
+/** Chuyến mẫu đang giữ đơn mẫu `oid` — sửa đơn đó thì tách chuyến này. */
+const sampleTripOf = (s: TO, oid: string) =>
+  s.trips.find(t => isSample(t.id) && t.orderIds.includes(oid)) ?? SAMPLE_TRIPS.find(t => t.orderIds.includes(oid)) ?? SAMPLE_TRIPS[0]
 
 /** Mã chuyến ddmmyy-hhmm-stt: thời điểm tạo + số thứ tự trong ngày. */
 export function tripCode(trips: Trip[], d = new Date()): string {
@@ -109,10 +113,10 @@ function makeFork(s: TO, trip: Trip, override?: Order) {
     map[oid] = newId(); orders.push({ ...src, id: map[oid], updatedAt: now })
   }
   const t: Trip = {
-    ...trip, id: newId(), code, name: trip.name === SAMPLE_TRIP.name ? code : trip.name,
+    ...trip, id: newId(), code, name: SAMPLE_NAMES.has(trip.name) ? code : trip.name,
     orderIds: trip.orderIds.map(o => map[o] ?? o).filter(o => !isSample(o)), updatedAt: now,
   }
-  return { trip: t, orders, fork: { from: SAMPLE_TRIP.id, to: t.id, orders: map, seen: false } as ForkInfo }
+  return { trip: t, orders, fork: { from: trip.id, to: t.id, orders: map, seen: false } as ForkInfo }
 }
 
 /** Chuyến THƯỜNG không giữ đơn mẫu (sửa đơn đó sẽ đụng chuyến mẫu): gặp thì sao ra đơn riêng. */
@@ -128,7 +132,7 @@ function detachSampleOrders(s: TO, t: Trip): { trip: Trip; added: Order[] } {
   return { trip: added.length ? { ...t, orderIds } : t, added }
 }
 
-// Hàng của 2 đơn mẫu ĐỜI TRƯỚC (đồ tiêu dùng chung, thay bằng hàng sữa ngày 27/10/2026)
+// Hàng của 2 đơn mẫu đời trước nữa (đồ tiêu dùng chung, thay bằng hàng sữa ngày 27/10/2026)
 const OLD_SAMPLE_LINES: Record<string, Order['lines']> = {
   'sample-o1': [{ itemId: 'adm-i-chai', qty: 120 }, { itemId: 'adm-i-lon', qty: 160 }, { itemId: 'adm-i-banh', qty: 30 }],
   'sample-o2': [{ itemId: 'adm-i-mi', qty: 90 }, { itemId: 'adm-i-dau', qty: 60 }],
@@ -138,12 +142,14 @@ const OLD_SAMPLE_LINES: Record<string, Order['lines']> = {
 function resetSamples(d: TO): TO {
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
   let { trips, orders } = d
-  const st = trips.find(t => t.id === SAMPLE_TRIP.id)
   // khớp bản mẫu hiện tại HOẶC bản mẫu đời trước (chưa ai sửa) ⇒ chỉ thay mẫu, không tách chuyến
-  const pristine = (o: Order, p: Order) => same([o.name, o.place, o.lines], [p.name, p.place, p.lines]) || same(o.lines, OLD_SAMPLE_LINES[o.id])
-  const changed = st && (!same([st.name, st.vehicleId, st.orderIds], [SAMPLE_TRIP.name, SAMPLE_TRIP.vehicleId, SAMPLE_TRIP.orderIds])
-    || SAMPLE_ORDERS.some(p => { const o = orders.find(x => x.id === p.id); return o && !pristine(o, p) }))
-  if (st && changed) { const k = makeFork({ trips, orders }, st); trips = [k.trip, ...trips]; orders = [...k.orders, ...orders] }
+  const pristineO = (o: Order) => same(o.lines, OLD_SAMPLE_LINES[o.id])
+    || [...SAMPLE_ORDERS, ...PREV_SAMPLE_ORDERS].some(p => p.id === o.id && same([o.name, o.place, o.lines], [p.name, p.place, p.lines]))
+  const pristineT = (t: Trip) => [...SAMPLE_TRIPS, ...PREV_SAMPLE_TRIPS].some(p => p.id === t.id && same([t.name, t.vehicleId, t.orderIds], [p.name, p.vehicleId, p.orderIds]))
+  for (const st of trips.filter(t => isSample(t.id))) {
+    const changed = !pristineT(st) || st.orderIds.some(oid => { const o = orders.find(x => x.id === oid); return o && !pristineO(o) })
+    if (changed) { const k = makeFork({ trips, orders }, st); trips = [k.trip, ...trips]; orders = [...k.orders, ...orders] }
+  }
   trips = trips.filter(t => !isSample(t.id)).map(t => {
     const k = detachSampleOrders({ trips, orders }, t); orders = [...k.added, ...orders]; return k.trip
   })
@@ -174,7 +180,7 @@ export const useData = create<DataState>()(
         // đơn mẫu bị sửa: vừa tách xong (cùng một thao tác sửa nhiều đơn) ⇒ ghi vào bản sao; chưa tách ⇒ tách
         const f = s.fork
         if (f && !f.seen && f.orders[o.id]) return { orders: upsert(s.orders, { ...o, id: f.orders[o.id], updatedAt: now }) }
-        const k = makeFork(s, s.trips.find(t => t.id === SAMPLE_TRIP.id) ?? SAMPLE_TRIP, o)
+        const k = makeFork(s, sampleTripOf(s, o.id), o)
         return { trips: [k.trip, ...s.trips], orders: [...k.orders, ...s.orders], fork: k.fork }
       }),
       removeOrder: id => set(s => (isSample(id) ? {} : {
@@ -192,7 +198,7 @@ export const useData = create<DataState>()(
         if (f && !f.seen && f.from === t.id) {
           const cur = s.trips.find(x => x.id === f.to)
           return { trips: upsert(s.trips, {
-            ...t, id: f.to, code: cur?.code, name: t.name === SAMPLE_TRIP.name ? cur?.name ?? t.name : t.name,
+            ...t, id: f.to, code: cur?.code, name: SAMPLE_NAMES.has(t.name) ? cur?.name ?? t.name : t.name,
             orderIds: t.orderIds.map(o => f.orders[o] ?? o), updatedAt: now,
           }) }
         }
