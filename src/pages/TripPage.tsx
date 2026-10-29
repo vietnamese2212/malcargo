@@ -27,6 +27,7 @@ import { TruckGlyph } from './VehiclesPage'
 import { VehicleSheet } from '../ui/VehicleSheet'
 import { ItemSheet } from '../ui/ItemSheet'
 import { ExplainPopup } from './TripExplain'
+import { PalletFields, PalletSheet } from '../ui/PalletSettings'
 import { LangSwitch } from '../ui/LangSwitch'
 import { t, tx } from '../i18n'
 import { ItemPicker } from '../ui/ItemPicker'
@@ -49,7 +50,10 @@ const OK_L = (n: number) => n >= 500 && n <= 20000, OK_W = (n: number) => n >= 5
 const m = (mm: number) => fmtDec(mm / 1000, 1)
 
 export default function TripPage({ id }: { id: string }) {
-  const trip = useData(s => s.trips.find(t => t.id === id))
+  // vừa tách chuyến mẫu: đọc NGAY chuyến mới — đường dẫn đổi sau một nhịp; phím gõ nhanh rơi vào nhịp đó mà còn thấy
+  // chuyến mẫu thì sửa lại chuyến mẫu ⇒ tách lần hai, số lẫn (ui-flow bắt được 29/10: gõ 200 lưu thành 150200)
+  const tid = useData(s => (s.fork && !s.fork.seen && s.fork.from === id ? s.fork.to : id))
+  const trip = useData(s => s.trips.find(t => t.id === tid))
   const trips = useData(s => s.trips)
   const orders = useData(s => s.orders)
   const pallet = useData(s => s.pallet)
@@ -91,6 +95,7 @@ export default function TripPage({ id }: { id: string }) {
   const [walls, setWalls] = useState<'open' | 'glass'>('open')
   const [open, setOpen] = useState({ cargo: true, count: false })
   const [explain, setExplain] = useState(false)   // popup bảng diễn giải từng mã (nút trên khung 3D)
+  const [palletOpen, setPalletOpen] = useState(false)   // cài đặt pallet (nút ⚙ cạnh nút chọn Pallet)
   const [panel, setPanel] = useState<PanelName | null>(null)
   const [importing, setImporting] = useState<'menu' | 'trip' | null>(null)   // 'trip' = nút nhập đơn trên bàn ⇒ đơn vào chuyến này
   const phone = usePhone()   // điện thoại không có phần nhập Excel
@@ -130,9 +135,9 @@ export default function TripPage({ id }: { id: string }) {
   // ⇒ đang gõ "150" → "200" không bị mất con trỏ sau phím đầu (phím đầu là lúc tách)
   const keyOf = useMemo(() => {
     const m = new Map<string, string>()
-    if (fork && fork.to === id) for (const [from, to] of Object.entries(fork.orders)) m.set(to, from)
+    if (fork && fork.to === tid) for (const [from, to] of Object.entries(fork.orders)) m.set(to, from)
     return (oid: string) => m.get(oid) ?? oid
-  }, [fork, id])
+  }, [fork, tid])
 
   const plan = vehicle && hasCargo ? result?.plan ?? null : null
   const stepCount = plan?.stepCount ?? 0
@@ -293,7 +298,7 @@ export default function TripPage({ id }: { id: string }) {
           : cx('sticky top-12 z-10 flex h-[50vh] min-h-[320px] flex-col bg-[#e7ecf2] sm:top-14 lg:relative lg:top-0 lg:order-2 lg:h-full', kb && 'max-lg:relative max-lg:top-0')}>
           <SpecStrip vehicle={vehicle} pallet={pallet} onOpen={more => setSpec({ more })} onKind={k => patchVehicle({ kind: k })}
             lightOwn={tripOrders.some(o => o.lines.some(l => l.qty > 0 && l.item.light)) ? !!trip.lightOwnPallet : null}
-            onLightOwn={v => upsertTrip({ ...trip, lightOwnPallet: v })} />
+            onLightOwn={v => upsertTrip({ ...trip, lightOwnPallet: v })} onPallet={() => setPalletOpen(true)} />
           <div className="relative min-h-0 flex-1">
             <Scene className="h-full w-full" truck={vehicle ? { l: vehicle.l, w: vehicle.w, h: vehicle.h, kind: vehicle.kind, container: vehicle.container, plate: vehicle.plate } : null}
               plan={plan} meta={result?.meta} colors={colors} prints={prints} step={step} focus={shown} focusItem={sel?.itemId ?? null} view={view} walls={walls} />
@@ -306,14 +311,14 @@ export default function TripPage({ id }: { id: string }) {
               {/* điện thoại: nút diễn giải chỉ biểu tượng, xếp dưới nút góc nhìn — dải số liệu bên trái cần đủ bề ngang */}
               <div className="flex shrink-0 flex-col-reverse items-end gap-2 sm:flex-row">
                 {r && r.plan.placed.length > 0 && (
-                  <button type="button" onClick={() => setExplain(true)} aria-haspopup="dialog" aria-label={t('Diễn giải')} title={t('Cao bao nhiêu, lẻ bao nhiêu — tính trước khi lên hàng')}
-                    className="pointer-events-auto flex h-9 min-w-9 items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-2 text-[12px] font-semibold text-slate-800 hover:bg-slate-50">
+                  <button type="button" onClick={() => setExplain(true)} aria-haspopup="dialog" aria-label={t('Diễn giải')} title={vehicle?.kind === 'pallet' ? t('Bao nhiêu pallet, pallet lẻ nào gộp chung') : t('Khối mấy lớp, lẻ trên khối mấy thùng')}
+                    className="hit pointer-events-auto flex h-9 min-w-9 items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-2 text-[12px] font-semibold text-slate-800 hover:bg-slate-50">
                     <Table2 size={16} /><span className="max-sm:hidden">{t('Diễn giải')}</span>
                   </button>
                 )}
                 <ViewMenu view={view.preset} walls={walls} onView={p => setView(v => ({ preset: p, n: v.n + 1 }))} onWalls={() => setWalls(w => (w === 'open' ? 'glass' : 'open'))} />
                 <button type="button" onClick={() => setFull(!full)} aria-pressed={full} aria-label={full ? t('Thoát toàn màn hình') : t('Toàn màn hình')} title={full ? t('Thoát toàn màn hình') : t('Toàn màn hình')}
-                  className="pointer-events-auto grid h-9 w-9 place-items-center rounded-md border border-slate-300 bg-white text-slate-800 hover:bg-slate-50">
+                  className="hit pointer-events-auto grid h-9 w-9 place-items-center rounded-md border border-slate-300 bg-white text-slate-800 hover:bg-slate-50">
                   {full ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                 </button>
               </div>
@@ -334,7 +339,7 @@ export default function TripPage({ id }: { id: string }) {
               )}
               {plan && stepCount > 0 && (
                 <div className="pointer-events-auto flex w-full items-center gap-3 rounded-md border border-slate-300 bg-white px-2 py-1.5 lg:max-w-2xl">
-                  <IconButton label={playing ? t('Dừng') : t('Xem xếp từng bước')} className="h-9 w-9 bg-brand-500 text-white hover:bg-brand-600 hover:text-white"
+                  <IconButton label={playing ? t('Dừng') : t('Xem xếp từng bước')} className="hit h-9 w-9 bg-brand-500 text-white hover:bg-brand-600 hover:text-white"
                     onClick={() => { if (!playing && step == null) setStep(0); setPlaying(p => !p) }}>
                     {playing ? <Pause size={17} /> : <Play size={17} className="ml-0.5" />}
                   </IconButton>
@@ -462,10 +467,11 @@ export default function TripPage({ id }: { id: string }) {
         </aside>
       </div>
 
+      <PalletSheet open={palletOpen} onClose={() => setPalletOpen(false)} />
       <ExplainPopup open={explain} onClose={() => setExplain(false)} r={r} vehicle={vehicle} items={items} colors={colors} tripName={trip.name} onToast={setToast} />
       <VehicleSheet open={!!editVehicle} vehicle={editVehicle?.v ?? null} onClose={() => setEditVehicle(null)}
         onSaved={nv => { if (!editVehicle?.v || editVehicle.v.id === trip.vehicleId) pickVehicle(nv.id) }} />
-      <OrderSheet order={rawOrders.find(o => o.id === editOrder) ?? null} onClose={() => setEditOrder(null)}
+      <OrderSheet order={rawOrders.find(o => o.id === editOrder) ?? null} items={items} colorOf={itemColor} onClose={() => setEditOrder(null)}
         onSave={(o, p) => upsertOrder({ ...o, ...p })} />
       {/* sửa mã từ dòng hàng — popup (user 28/10: "để trong hàng nhìn hơi rối") */}
       <ItemSheet open={!!editLine} item={editLine?.it ?? null} onClose={() => setEditing(null)}
@@ -515,7 +521,7 @@ function TripSwitcher({ trip, trips, onRename, onDelete, onAll, onNew }: {
       trigger={({ open, toggle }) => (
         <h1 className="min-w-0">
           <button onClick={() => { setRenaming(false); toggle() }} aria-expanded={open} aria-label={t('Chuyến đang mở: {name}. Bấm để xem các chuyến', { name: tx(trip.name) })}
-            className="flex h-9 w-full min-w-0 max-w-[170px] items-center gap-1 rounded-md border border-white/20 px-2 text-[13px] font-semibold text-white transition-colors hover:bg-white/10 sm:max-w-[260px] sm:px-2.5 sm:text-sm">
+            className="hit flex h-9 w-full min-w-0 max-w-[170px] items-center gap-1 rounded-md border border-white/20 px-2 text-[13px] font-semibold text-white transition-colors hover:bg-white/10 sm:max-w-[260px] sm:px-2.5 sm:text-sm">
             <span className="truncate">{tx(trip.name)}</span><ChevronDown size={16} className={cx('shrink-0 text-slate-300 transition-transform', open && 'rotate-180')} />
           </button>
         </h1>
@@ -615,7 +621,7 @@ function AccountButton({ onData }: { onData: () => void }) {
       <Popover align="right" panelClass="w-[290px] max-w-[calc(100vw-24px)] overflow-hidden"
         trigger={({ open, toggle }) => (
           <button onClick={toggle} aria-expanded={open} aria-label={t('Tài khoản {name}', { name: user.name })} title={user.email}
-            className="grid h-9 w-9 place-items-center overflow-hidden rounded-full border-2 border-white/30 bg-brand-500 text-sm font-bold text-white hover:border-white/60">
+            className="hit grid h-9 w-9 place-items-center overflow-hidden rounded-full border-2 border-white/30 bg-brand-500 text-sm font-bold text-white hover:border-white/60">
             {user.avatar ? <img src={user.avatar} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" /> : (user.name || user.email).slice(0, 1).toUpperCase()}
           </button>
         )}>
@@ -644,7 +650,7 @@ function AccountButton({ onData }: { onData: () => void }) {
     <Popover hover align="right" panelClass="w-[300px] max-w-[calc(100vw-24px)] p-4"
       trigger={({ open, toggle }) => (
         <button onClick={toggle} aria-expanded={open} disabled={status === 'loading'}
-          className="flex h-9 items-center rounded-md border border-white/30 px-1.5 text-sm font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-60 sm:px-3">
+          className="hit flex h-9 items-center rounded-md border border-white/30 px-1.5 text-sm font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-60 sm:px-3">
           {t('Login')}
         </button>
       )}>
@@ -682,11 +688,11 @@ function AccountButton({ onData }: { onData: () => void }) {
 // ── Dải thông số xe ở đầu bản vẽ: đọc một dòng là biết đang cấu hình gì; xá/pallet một chạm ──────
 // Không đủ chỗ thì XUỐNG DÒNG (không cắt chữ, không đẩy nút ra ngoài mép). `lightOwn` null = không hiện
 // công tắc hàng nhẹ (chuyến không có hàng nhẹ).
-function SpecStrip({ vehicle, pallet, lightOwn, onOpen, onKind, onLightOwn }: {
-  vehicle?: Vehicle; pallet: { l: number; w: number }; lightOwn: boolean | null
-  onOpen: (more: boolean) => void; onKind: (k: VehicleKind) => void; onLightOwn: (v: boolean) => void
+function SpecStrip({ vehicle, pallet, lightOwn, onOpen, onKind, onLightOwn, onPallet }: {
+  vehicle?: Vehicle; pallet: { l: number; w: number; maxH: number }; lightOwn: boolean | null
+  onOpen: (more: boolean) => void; onKind: (k: VehicleKind) => void; onLightOwn: (v: boolean) => void; onPallet: () => void
 }) {
-  const chip = 'flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[13px] text-slate-900 transition-colors hover:border-slate-400 hover:bg-slate-50'
+  const chip = 'hit flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[13px] text-slate-900 transition-colors hover:border-slate-400 hover:bg-slate-50'
   return (
     <div className="flex min-h-[56px] shrink-0 flex-wrap items-center gap-2 border-b border-slate-300 bg-white px-3 py-2 sm:min-h-[48px] sm:gap-1.5 sm:py-1.5">
       {!vehicle ? (
@@ -709,12 +715,20 @@ function SpecStrip({ vehicle, pallet, lightOwn, onOpen, onKind, onLightOwn }: {
           <div className="flex h-9 shrink-0 rounded-md border border-slate-300 bg-slate-100 p-0.5" role="group" aria-label={t('Cách chất xếp')}>
             {(['loose', 'pallet'] as const).map(k => (
               <button key={k} onClick={() => k !== vehicle.kind && onKind(k)} aria-pressed={vehicle.kind === k}
-                className={cx('rounded-[5px] px-2.5 text-[13px] font-semibold transition-colors',
+                className={cx('hit rounded-[5px] px-2.5 text-[13px] font-semibold transition-colors',
                   vehicle.kind === k ? 'border border-slate-300 bg-white text-slate-900' : 'border border-transparent text-slate-600 hover:text-slate-900')}>
                 {k === 'loose' ? t('Thùng rời') : 'Pallet'}
               </button>
             ))}
           </div>
+          {/* cài pallet ngay cạnh nút chọn Pallet (chủ dự án 29/10) — điện thoại chỉ biểu tượng */}
+          {vehicle.kind === 'pallet' && (
+            <button onClick={onPallet} aria-label={t('Cài đặt pallet')} title={t('Cài đặt pallet')} className={cx(chip, 'px-2')}>
+              <SlidersHorizontal size={15} className="text-brand-700" />
+              <span className="num font-semibold max-sm:hidden">{m(pallet.l)} × {m(pallet.w)} m</span>
+              <span className="num text-slate-600 max-xl:hidden">· ≤ {fmtDec(pallet.maxH / 1000, 2)} m</span>
+            </button>
+          )}
           {vehicle.kind === 'pallet' && lightOwn != null && (
             <button role="switch" aria-checked={lightOwn} onClick={() => onLightOwn(!lightOwn)}
               title={lightOwn ? t('Phần lẻ hàng nhẹ đứng pallet riêng') : t('Phần lẻ hàng nhẹ dồn lên trên cùng pallet gộp')}
@@ -731,11 +745,6 @@ function SpecStrip({ vehicle, pallet, lightOwn, onOpen, onKind, onLightOwn }: {
           <button onClick={() => onOpen(true)} className={cx(chip, 'max-sm:hidden')}>
             <span className="text-slate-600">{t('Tải')}</span><span className="num font-semibold">{vehicle.payloadKg != null ? fmtKgShort(vehicle.payloadKg) : '—'}</span>
           </button>
-          {vehicle.kind === 'pallet' && (
-            <button onClick={() => onOpen(true)} className={cx(chip, 'max-sm:hidden')}>
-              <span className="text-slate-600">Pallet</span><span className="num font-semibold">{m(pallet.l)} × {m(pallet.w)} m</span>
-            </button>
-          )}
           <button onClick={() => onOpen(true)} aria-label={t('Chỉnh thông số thùng xe')} title={t('Chỉnh thông số thùng xe')} className={cx(chip, 'ml-auto text-brand-700 max-sm:hidden')}>
             <SlidersHorizontal size={16} />
           </button>
@@ -885,7 +894,7 @@ function ViewMenu({ view, walls, onView, onWalls }: { view: ViewPreset; walls: '
     <Popover align="right" className="pointer-events-auto shrink-0" panelClass="w-[210px] overflow-hidden py-1"
       trigger={({ open, toggle }) => (
         <button onClick={toggle} aria-expanded={open} aria-label={t('Góc nhìn: {view}', { view: cur })} title={t('Góc nhìn')}
-          className="flex h-9 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[12px] font-semibold text-slate-800 hover:bg-slate-50">
+          className="hit flex h-9 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-[12px] font-semibold text-slate-800 hover:bg-slate-50">
           <Rotate3d size={16} /><span className="hidden sm:inline">{cur}</span><ChevronDown size={14} className="text-slate-500" />
         </button>
       )}>
@@ -911,7 +920,6 @@ function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, more, onMo
   onClose: () => void; onPick: (id: string) => void; onPatch: (p: Partial<Vehicle>) => void; onEdit: (v: Vehicle) => void; onAdd: () => void
 }) {
   const pallet = useData(s => s.pallet)
-  const setPallet = useData(s => s.setPallet)
   const box = useViewportBox(true)
   const { kb } = useVisualView()
   const [q, setQ] = useState('')
@@ -1014,11 +1022,7 @@ function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, more, onMo
                   <span className="flex-1 text-sm font-semibold text-slate-900">Pallet</span>
                   <span className="text-[12px] text-slate-600">{t('dùng cho mọi xe pallet')}</span>
                 </div>
-                <div className="grid grid-cols-3 gap-2 p-3">
-                  <LiveNum label={t('Dài chân')} value={pallet.l} valid={n => n >= 400 && n <= 2000} suffix="mm" onCommit={v => v && setPallet({ ...pallet, l: v })} />
-                  <LiveNum label={t('Rộng chân')} value={pallet.w} valid={n => n >= 400 && n <= 2000} suffix="mm" onCommit={v => v && setPallet({ ...pallet, w: v })} />
-                  <LiveNum label={t('Cao tối đa')} value={pallet.maxH} valid={n => n >= 500 && n <= 3000} suffix="mm" onCommit={v => v && setPallet({ ...pallet, maxH: v })} />
-                </div>
+                <div className="p-3"><PalletFields cols="grid-cols-3" /></div>
               </div>
             )}
           </div>
@@ -1237,33 +1241,84 @@ function CountSheet({ r, colors, focus, onFocus, tripName, vehicle, onToast }: {
   )
 }
 
-// ── Sửa tên đơn / điểm giao (popup từ nút "Sửa" trên thẻ đơn) ───────────────
-function OrderSheet({ order, onClose, onSave }: { order: Order | null; onClose: () => void; onSave: (o: Order, p: Partial<Order>) => void }) {
+// ── Sửa đơn (popup từ nút "Sửa" trên thẻ đơn): tên, điểm giao VÀ hàng trong đơn — thêm / bỏ mã, số thùng (chủ dự án
+// 29/10: "edit order phải sửa được cả mã hàng"). Sửa trên bản nháp, bấm Lưu mới ghi (đơn mẫu ⇒ tách chuyến như mọi lần sửa).
+function OrderSheet({ order, items, colorOf, onClose, onSave }: {
+  order: Order | null; items: Item[]; colorOf: (id: string) => string | undefined
+  onClose: () => void; onSave: (o: Order, p: Partial<Order>) => void
+}) {
   const [name, setName] = useState('')
   const [place, setPlace] = useState('')
+  const [lines, setLines] = useState<Order['lines']>([])
+  const [picking, setPicking] = useState(false)
   const [tried, setTried] = useState(false)
-  useEffect(() => { if (order) { setName(order.name); setPlace(order.place); setTried(false) } }, [order])
+  // nạp bản nháp khi MỞ đơn (theo id) — cập nhật kho lúc đang sửa không xoá chữ đang gõ
+  useEffect(() => { setPicking(false); if (order) { setName(order.name); setPlace(order.place); setLines(order.lines); setTried(false) } }, [order?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const byId = new Map(items.map(i => [i.id, i]))
+  const qty = (itemId: string, q: number) => setLines(ls => ls.map(l => (l.itemId === itemId ? { ...l, qty: Math.max(0, Math.round(q)) } : l)))
+  const drop = (itemId: string) => setLines(ls => ls.filter(l => l.itemId !== itemId))
   const save = () => {
     setTried(true)
     if (!order || !name.trim()) return
-    onSave(order, { name: name.trim(), place: place.trim() }); onClose()
+    onSave(order, { name: name.trim(), place: place.trim(), lines }); onClose()
   }
-  return (
-    <Sheet open={!!order} onClose={onClose} title={t('Sửa đơn')} subtitle={t('Tên đơn và điểm giao hiện trên bảng đếm chân')}
+  return (<>
+    <Sheet open={!!order && !picking} onClose={onClose} title={t('Sửa đơn')} subtitle={t('Tên, điểm giao và hàng trong đơn')}
       footer={<div className="flex gap-2">
         <Button className="flex-1" onClick={onClose}>{t('Huỷ')}</Button>
         <Button variant="primary" className="flex-[2]" onClick={save}>{t('Lưu')}</Button>
       </div>}>
       <form className="space-y-4" onSubmit={e => { e.preventDefault(); save() }}>
-        <Field label={t('Tên đơn')} error={tried && !name.trim() ? t('Nhập tên đơn') : null}>
-          <TextInput value={name} onChange={e => setName(e.target.value)} autoFocus />
-        </Field>
-        <Field label={t('Điểm giao')} hint={t('Không bắt buộc')}>
-          <TextInput value={place} onChange={e => setPlace(e.target.value)} placeholder={t('Cửa hàng / khách')} />
-        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t('Tên đơn')} error={tried && !name.trim() ? t('Nhập tên đơn') : null}>
+            <TextInput value={name} onChange={e => setName(e.target.value)} />
+          </Field>
+          <Field label={t('Điểm giao')} hint={t('Không bắt buộc')}>
+            <TextInput value={place} onChange={e => setPlace(e.target.value)} placeholder={t('Cửa hàng / khách')} />
+          </Field>
+        </div>
         <button type="submit" hidden />
       </form>
+      <div className="mt-5 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-900">{t('Hàng trong đơn')} <span className="font-normal text-slate-600">{t('· {n} mã', { n: lines.length })}</span></h3>
+        <Button variant="ghost" className="text-brand-700" onClick={() => setPicking(true)}><Plus size={17} />{t('Thêm mã')}</Button>
+      </div>
+      {!lines.length && <p className="py-4 text-center text-sm text-slate-600">{t('Chọn các mã hàng rồi nhập số thùng.')}</p>}
+      <div className="-mx-5">
+        {lines.map(l => {
+          const it = byId.get(l.itemId)
+          return (
+            <div key={l.itemId} className="border-t border-slate-100 py-1.5 pl-5 pr-3">
+              {/* tên trọn dòng trên (xuống dòng được), dòng dưới: số thùng — như dòng hàng trên bàn xếp xe */}
+              <div className="flex items-start gap-2">
+                {it ? <BoxGlyph w={it.w} h={it.h} light={it.light} color={colorOf(it.id)} /> : <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-700" />}
+                <span className="min-w-0 flex-1 pt-0.5">
+                  <span className={cx('block break-words text-sm font-semibold leading-snug', it ? 'text-slate-900' : 'text-red-700')}>{it ? tx(it.name) : t('Mã hàng này đã bị xoá')}</span>
+                  {it && <span className="num block text-[12px] text-slate-600">{it.code} · <span className="whitespace-nowrap">{fmtDims(it.l, it.w, it.h)} mm</span></span>}
+                </span>
+                <IconButton label={t('Bỏ {name} khỏi đơn', { name: it ? tx(it.name) : l.itemId })} onClick={() => drop(l.itemId)} className="shrink-0 text-slate-500"><X size={17} /></IconButton>
+              </div>
+              {it && (
+                <div className="flex items-center justify-end">
+                  <IconButton label={t('Bớt 1')} onClick={() => qty(l.itemId, l.qty - 1)} disabled={l.qty <= 0}><Minus size={15} /></IconButton>
+                  <input inputMode="numeric" value={l.qty || ''} placeholder={t('Số thùng')} aria-label={t('Số thùng {name}', { name: tx(it.name) })}
+                    onChange={e => qty(l.itemId, Number(e.target.value.replace(/\D/g, '')) || 0)}
+                    className={cx('tap num w-[76px] rounded-md border px-1.5 text-center text-base font-semibold outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-sm',
+                      l.qty > 0 ? 'border-slate-300 bg-white' : 'border-amber-400 bg-amber-50 placeholder:text-[12px] placeholder:font-normal placeholder:text-amber-800')} />
+                  <IconButton label={t('Thêm 1')} onClick={() => qty(l.itemId, l.qty + 1)}><Plus size={15} /></IconButton>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </Sheet>
+    {/* chọn mã: tấm sửa đơn tạm cất (bản nháp vẫn giữ), chọn xong quay lại */}
+    {!!order && picking && (
+      <ItemPicker open onClose={() => setPicking(false)} picked={new Set(lines.map(l => l.itemId))}
+        onToggle={it => setLines(ls => (ls.some(l => l.itemId === it.id) ? ls.filter(l => l.itemId !== it.id) : [...ls, { itemId: it.id, qty: 0 }]))} />
+    )}
+  </>
   )
 }
 

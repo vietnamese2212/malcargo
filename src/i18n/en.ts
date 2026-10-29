@@ -57,6 +57,7 @@ export const EN_RULES: Rule[] = [
     (m, tx) => `Cartons per pallet not set: ${list(m[1], tx)} — counting 1 pallet per item for now.`],
   [/^Pallet cao hơn lòng thùng xe: (.+)\.$/, (m, tx) => `Pallets taller than the cargo box: ${list(m[1], tx)}.`],
   [/^Thùng to hơn lòng thùng xe: (.+)\.$/, (m, tx) => `Cartons bigger than the cargo box: ${list(m[1], tx)}.`],
+  [/^Pallet lẻ cao hơn mức cài đặt ([\d,]+) m: (.+)\.$/, (m, tx) => `Part pallets taller than the ${m[1].replace(',', '.')} m setting: ${list(m[2], tx)}.`],
   [/^Không đặt được lên trên hàng khác: (.+) — đã xếp như hàng thường\.$/,
     (m, tx) => `Could not go on top of other goods: ${list(m[1], tx)} — loaded as regular goods.`],
   [/^Vượt tải trọng: (.+) \/ (.+)\.$/, m => `Over payload: ${num(m[1])} / ${num(m[2])}.`],

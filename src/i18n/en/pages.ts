@@ -130,11 +130,11 @@ export const PAGES: Record<string, string> = {
   'Tải file sao lưu': 'Download backup',
   'Nạp từ file': 'Restore from file',
   'Pallet dùng khi chở xe pallet': 'Pallet used on pallet trucks',
-  'Áp cho mọi chuyến xe pallet. Pallet hàng nguyên cao theo số thùng/pallet của từng mã; pallet gộp hàng lẻ không cao quá mức dưới.':
-    "Applies to every pallet-truck trip. A full pallet's height follows each item's cartons/pallet; mixed pallets of remainders stay under the height below.",
-  'Dài chân': 'Pallet length',
-  'Rộng chân': 'Pallet width',
-  'Cao tối đa pallet lẻ': 'Max part-pallet height',
+  'Áp cho mọi chuyến xe pallet. Trên bàn xếp xe: nút ⚙ cạnh nút chọn Pallet.': 'Applies to every pallet-truck trip. On the loading board: the ⚙ button next to the Pallet choice.',
+  'Cao tối đa (cả đế)': 'Max height (incl. deck)',
+  'Pallet gộp hàng lẻ không cao quá mức này (tính cả đế). Pallet chẵn cao theo số thùng/pallet và số lớp của từng mã.':
+    "Mixed pallets of remainders stay under this height (deck included). A full pallet's height follows each item's cartons per pallet and layers.",
+  'Cài đặt pallet': 'Pallet settings',
   'Cao đế pallet': 'Pallet deck height',
   'Nặng pallet rỗng': 'Empty pallet weight',
   'Về mặc định 1200 × 1000': 'Reset to default 1200 × 1000',

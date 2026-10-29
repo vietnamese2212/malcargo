@@ -68,6 +68,37 @@ export function explainLoose(r: TripResult): LooseNote[] {
   return out
 }
 
+/** Xe pallet nhìn theo TỪNG PALLET (chủ dự án 29/10: "nhìn vào biết bao nhiêu pallet, pallet lẻ bao nhiêu, pallet nào
+ *  chung nhau" — bảng theo mã phải đọc nhiều chữ). Thứ tự cabin ra cửa như bảng đếm chân. */
+export interface PalletCard {
+  group: number; orderName: string; orderId: string
+  kind: 'full' | 'own' | 'mixed'   // chẵn · lẻ riêng một mã · lẻ GỘP nhiều mã
+  count: number; placed: number    // số pallet giống hệt nhau trong khối (pallet chẵn cùng mã) · đã lên xe
+  heightMm: number
+  parts: { itemId: string; label: string; n: number; perLayer: number; layers: number }[]   // từ DƯỚI lên; n = thùng / pallet
+}
+export function explainPalletCards(r: TripResult): PalletCard[] {
+  const out: PalletCard[] = []
+  for (const c of r.count) {
+    const gi = c.group, m = r.meta[gi], g = r.plan.groups[gi]
+    if (!m.isPallet) continue
+    const cs = m.cartons ?? []
+    const low = (id: string) => Math.min(...cs.filter(x => x.itemId === id).map(x => x.z))
+    const ids = [...new Set(cs.map(x => x.itemId))].sort((a, b) => low(a) - low(b))
+    const parts = ids.map(id => {
+      const mine = cs.filter(x => x.itemId === id)
+      const per = new Map<number, number>()
+      for (const x of mine) per.set(x.z, (per.get(x.z) ?? 0) + 1)
+      return { itemId: id, label: m.mix?.find(x => x.itemId === id)?.label ?? m.label, n: mine.length, perLayer: Math.max(...per.values()), layers: per.size }
+    })
+    // không rõ ruột (thùng to hơn chân / chưa khai quy cách): một dòng tên khối, không số thùng
+    if (!parts.length) parts.push({ itemId: m.itemId ?? '', label: m.label, n: 0, perLayer: 0, layers: 0 })
+    const kind = g.key.endsWith('|full') ? 'full' : ids.length > 1 ? 'mixed' : 'own'
+    out.push({ group: gi, orderName: m.orderName, orderId: m.orderId, kind, count: c.total, placed: c.placed, heightMm: g.h, parts })
+  }
+  return out
+}
+
 export function explainPallets(r: TripResult): { items: PalletItemNote[]; mixes: MixNote[] } {
   const items = new Map<string, PalletItemNote>()
   const mixes: MixNote[] = []

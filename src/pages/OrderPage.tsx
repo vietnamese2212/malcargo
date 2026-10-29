@@ -12,7 +12,8 @@ import { go, replaceRoute } from '../ui/route'
 import { t, tx } from '../i18n'
 
 export default function OrderPage({ id, back }: { id: string; back?: string }) {
-  const order = useData(s => s.orders.find(o => o.id === id))
+  // vừa tách chuyến mẫu: đọc NGAY bản sao của đơn (đường dẫn đổi sau một nhịp — phím gõ nhanh không sửa lại đơn mẫu)
+  const order = useData(s => { const oid = s.fork && !s.fork.seen && s.fork.orders[id] ? s.fork.orders[id] : id; return s.orders.find(o => o.id === oid) })
   const trips = useData(s => s.trips)
   const upsert = useData(s => s.upsertOrder)
   const removeOrder = useData(s => s.removeOrder)

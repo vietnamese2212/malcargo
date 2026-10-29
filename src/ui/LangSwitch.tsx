@@ -8,7 +8,7 @@ export function LangSwitch() {
   const label = lang === 'en' ? t('Đổi sang tiếng Việt') : t('Đổi sang tiếng Anh')
   return (
     <button type="button" onClick={() => setLang(lang === 'en' ? 'vi' : 'en')} aria-label={label} title={label}
-      className="flex h-9 items-center gap-1.5 rounded-md border border-white/30 px-2 text-sm font-semibold text-white transition-colors hover:bg-white/10 max-sm:px-1.5 sm:px-2.5">
+      className="hit flex h-9 items-center gap-1.5 rounded-md border border-white/30 px-2 text-sm font-semibold text-white transition-colors hover:bg-white/10 max-sm:px-1.5 sm:px-2.5">
       <Languages size={16} strokeWidth={1.75} className="max-sm:hidden" />{lang === 'en' ? 'EN' : 'VI'}
     </button>
   )

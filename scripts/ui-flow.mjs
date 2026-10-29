@@ -56,6 +56,28 @@ for (const [hash, label, typed] of [['#/trip/sample-t1', 'chuyến mẫu', '200'
   ok(String(qty) === typed && still && st.trips.length === 2, `${label}: gõ "${typed}" ⇒ tách 1 chuyến mới, lưu ${qty}, ô vẫn đang gõ: ${still}`)
 }
 
+// Sửa đơn (popup) sửa được cả HÀNG trong đơn: đổi số thùng, bỏ một mã, Lưu (chủ dự án 29/10) — trên máy tính
+{
+  const q = await (await b.newContext(DEVICES[0])).newPage()
+  await q.goto(srv.base + '#/trip/sample-t1', { waitUntil: 'networkidle' }); await q.waitForTimeout(1200)
+  await q.getByRole('button', { name: /^Sửa đơn Đơn mẫu 1/ }).click()
+  const sheet = q.locator('[data-sheet]')
+  await sheet.getByLabel('Số thùng Sữa 180ml x48').fill('99')
+  await sheet.getByRole('button', { name: 'Bỏ Thạch túi 110ml x24 khỏi đơn' }).click()
+  await sheet.getByRole('button', { name: 'Lưu', exact: true }).click(); await q.waitForTimeout(500)
+  const st = await q.evaluate(() => JSON.parse(localStorage.getItem('malcargo-data-v1')).state)
+  const o = st.orders.find(x => !x.id.startsWith('sample-') && x.name === 'Đơn mẫu 1')
+  ok(o?.lines.length === 2 && o.lines.find(l => /st180/.test(l.itemId))?.qty === 99 && !o.lines.some(l => /tui110/.test(l.itemId)),
+    `Sửa đơn: đổi số thùng + bỏ mã ⇒ lưu vào đơn (bản tách): ${JSON.stringify(o?.lines)}`)
+  // Cài đặt pallet: nút ⚙ ngay cạnh nút chọn Pallet
+  await q.getByRole('button', { name: 'Pallet', exact: true }).click(); await q.waitForTimeout(1500)
+  await q.getByRole('button', { name: 'Cài đặt pallet' }).click()
+  const h = q.locator('[data-sheet]').getByLabel('Cao tối đa (cả đế)')
+  await h.fill('1500'); await h.press('Enter'); await q.waitForTimeout(300)
+  const p2 = await q.evaluate(() => JSON.parse(localStorage.getItem('malcargo-data-v1')).state.pallet)
+  ok(p2.maxH === 1500, `Cài đặt pallet cạnh nút Pallet: cao tối đa (cả đế) lưu ${p2.maxH}`)
+}
+
 await b.close(); await srv.close()
 console.log(fail ? `${fail} phép HỎNG` : 'XANH')
 process.exit(fail ? 1 : 0)

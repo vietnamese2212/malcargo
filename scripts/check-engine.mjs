@@ -54,6 +54,11 @@ function invariants(name, r) {
     ok(sum === r.totals.cartons && ex.items.every(n => n.total === (n.full ? n.full.pallets * n.full.perPallet : 0) + n.rest.reduce((a, x) => a + x.n, 0)),
       `${name}: diễn giải pallet cộng ${sum} ≠ ${r.totals.cartons} thùng`)
     ok(ex.mixes.every(x => x.levels.reduce((s, l) => s + l.times * l.parts.reduce((a, p) => a + p.n, 0), 0) === r.meta[x.group].cartons.length), `${name}: ruột pallet gộp diễn giải lệch`)
+    // popup Diễn giải pallet (29/10): thẻ từng pallet — tổng thùng khớp chuyến, tổng pallet khớp số pallet đã tính
+    const cards = E.explainPalletCards(r)
+    const cs = cards.reduce((s, c) => s + c.count * c.parts.reduce((a, p) => a + p.n, 0), 0), ps = cards.reduce((s, c) => s + c.count, 0)
+    ok(cs === r.totals.cartons && ps === r.totals.pallets && cards.every(c => (c.kind === 'mixed') === (c.parts.length > 1)),
+      `${name}: thẻ pallet cộng ${cs} thùng / ${ps} pallet ≠ ${r.totals.cartons} / ${r.totals.pallets}`)
   }
 }
 

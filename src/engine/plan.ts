@@ -460,6 +460,10 @@ export function computeTrip(input: TripInput): TripResult {
       }
     })
     groups = palGroups
+    // pallet LẺ / GỘP cao quá mức cài đặt (tính cả đế) — ca hiếm của lớp ghép (quét ngẫu nhiên: 1/6.657); nói ra
+    // thay vì im lặng (chủ dự án 29/10: "pallet cao 1,65 bao gồm cả pallet")
+    const over = palGroups.filter(g => !g.key.endsWith('|full') && g.h > spec.h + 5)
+    if (over.length) warnings.push(`Pallet lẻ cao hơn mức cài đặt ${(spec.h / 1000).toFixed(2).replace('.', ',')} m: ${[...new Set(over.map(g => `${g.meta.label} (cao ${(g.h / 1000).toFixed(2).replace('.', ',')} m)`))].join(', ')}.`) // i18n-ok
     if (!fitErr) {
       // lõi ghi số kiểu Anh ("cao 4.00m") ⇒ đổi sang dấu phẩy tiếng Việt; bản tiếng Anh đổi lại ở luật dịch
       const tall = palletsTooTall(palGroups, T).map(s => s.replace(/\(cao (\d+)\.(\d+)m\)$/, '(cao $1,$2 m)'))

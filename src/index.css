@@ -24,6 +24,12 @@
     .tap { min-height: 44px; }
     .tap-icon { height: 44px; width: 44px; }
   }
+  /* nút nhỏ gọn ở chỗ chật (thanh trên, khung 3D): GIỮ cỡ nhìn, nhưng máy cảm ứng có vùng chạm vô hình ≥ 44 px quanh nút.
+     Đặt ở lớp components ⇒ nút đã `absolute` thì lớp utilities vẫn thắng `relative` */
+  .hit { position: relative; }
+  @media (pointer: coarse) {
+    .hit::after { content: ''; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
+  }
   .num { font-variant-numeric: tabular-nums; }
   .pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
 }

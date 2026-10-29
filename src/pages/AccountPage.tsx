@@ -1,9 +1,10 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { Download, LogIn, MessageCircle, RotateCcw, Upload } from 'lucide-react'
-import { exportBackup, parseBackup, useData, type BackupData } from '../data/store'
+import { exportBackup, isSample, parseBackup, useData, type BackupData } from '../data/store'
 import { signInGoogle, useAuth } from '../data/cloud'
 import { DEFAULT_PALLET_SETTINGS } from '../data/catalog'
-import { Button, Confirm, LiveNum, SectionBand, fmtInt } from '../ui/kit'
+import { Button, Confirm, SectionBand, fmtInt } from '../ui/kit'
+import { PalletFields } from '../ui/PalletSettings'
 import { ListCard, Page, PageHeader } from '../ui/Shell'
 import { saveFile } from '../ui/saveFile'
 import { t } from '../i18n'
@@ -37,8 +38,8 @@ export default function AccountPage() {
     if (typeof r === 'string') setMsg(r); else { setMsg(null); setPending(r) }
     if (fileRef.current) fileRef.current.value = ''
   }
-  const p = s.pallet
-  const counts = [[s.items.length, t('mã hàng')], [s.vehicles.length, t('xe')], [s.orders.length, t('đơn')], [s.trips.length, t('chuyến')]] as const
+  // chỉ đếm dữ liệu của người dùng — chuyến mẫu + 2 đơn mẫu có sẵn từ đầu, người mới chưa nhập gì không phải thấy "2 đơn · 1 chuyến"
+  const counts = [[s.items.length, t('mã hàng')], [s.vehicles.length, t('xe')], [s.orders.filter(o => !isSample(o.id)).length, t('đơn')], [s.trips.filter(x => !isSample(x.id)).length, t('chuyến')]] as const
 
   return (
     <>
@@ -73,17 +74,8 @@ export default function AccountPage() {
             {msg && <p className="mt-2 text-sm text-red-700">{msg}</p>}
           </Group>
 
-          <Group title={t('Pallet dùng khi chở xe pallet')}
-            desc={t('Áp cho mọi chuyến xe pallet. Pallet hàng nguyên cao theo số thùng/pallet của từng mã; pallet gộp hàng lẻ không cao quá mức dưới.')}>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              {/* cùng khoảng số với bảng Thùng xe — số vô lý (chân 10 mm, đế 2 m) không được lưu, ô đỏ */}
-              <LiveNum label={t('Dài chân')} value={p.l} valid={n => n >= 400 && n <= 2000} suffix="mm" onCommit={v => v && s.setPallet({ ...p, l: v })} />
-              <LiveNum label={t('Rộng chân')} value={p.w} valid={n => n >= 400 && n <= 2000} suffix="mm" onCommit={v => v && s.setPallet({ ...p, w: v })} />
-              <LiveNum label={t('Cao tối đa pallet lẻ')} value={p.maxH} valid={n => n >= 500 && n <= 3000} suffix="mm" onCommit={v => v && s.setPallet({ ...p, maxH: v })} />
-              <LiveNum label={t('Cao đế pallet')} value={p.baseH} valid={n => n >= 50 && n <= 300} suffix="mm" onCommit={v => v && s.setPallet({ ...p, baseH: v })} />
-              <LiveNum label={t('Nặng pallet rỗng')} value={p.kg} valid={n => n >= 0 && n <= 100} suffix="kg" onCommit={v => v != null && s.setPallet({ ...p, kg: v })} />
-            </div>
-            <button className="tap mt-2 text-[13px] font-medium text-brand-700 hover:text-brand-600" onClick={() => s.setPallet(DEFAULT_PALLET_SETTINGS)}>{t('Về mặc định 1200 × 1000')}</button>
+          <Group title={t('Pallet dùng khi chở xe pallet')} desc={t('Áp cho mọi chuyến xe pallet. Trên bàn xếp xe: nút ⚙ cạnh nút chọn Pallet.')}>
+            <PalletFields cols="grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" />
           </Group>
 
           <Group title={t('Xoá dữ liệu')} desc={t('Xoá mọi mã hàng, xe, đơn, chuyến của bạn trên máy này. Nên tải file sao lưu trước.')}>
@@ -106,7 +98,7 @@ export default function AccountPage() {
       <Confirm open={!!pending} onClose={() => setPending(null)} danger={false} okText={t('Nạp và thay')}
         title={t('Thay dữ liệu bằng file sao lưu?')}
         body={pending && t('File có {items} mã · {vehicles} xe · {orders} đơn · {trips} chuyến. Dữ liệu hiện tại trên máy sẽ bị thay.',
-          { items: pending.items.length, vehicles: pending.vehicles.length, orders: pending.orders.length, trips: pending.trips.length })}
+          { items: pending.items.length, vehicles: pending.vehicles.length, orders: pending.orders.filter(o => !isSample(o.id)).length, trips: pending.trips.filter(x => !isSample(x.id)).length })}
         onOk={() => { if (pending) s.replaceAll(pending) }} />
       <Confirm open={askReset} onClose={() => setAskReset(false)} okText={t('Xoá hết')} title={t('Xoá toàn bộ dữ liệu?')}
         body={t('Mã hàng, xe, đơn, chuyến của bạn trên máy này sẽ mất. Nên tải file sao lưu trước.')}

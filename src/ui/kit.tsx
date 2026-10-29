@@ -406,9 +406,15 @@ const typingIn = (el: HTMLElement | null) => {
 export function Sheet({ open, onClose, title, subtitle, children, footer, wide }: {
   open: boolean; onClose: () => void; title: ReactNode; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode; wide?: boolean | 'table'
 }) {
+  const sheet = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return
-    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    // Esc chỉ đóng tấm TRÊN CÙNG (chọn mã mở trên tấm sửa đơn, hộp hỏi trên tấm…) — không đóng hết một lượt
+    const k = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      const all = document.querySelectorAll('[role=dialog][data-sheet],[role=alertdialog]')
+      if (!all.length || all[all.length - 1] === sheet.current) onClose()
+    }
     window.addEventListener('keydown', k)
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -416,7 +422,6 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, wide }
   }, [open, onClose])
   const box = useViewportBox(open)
   const { kb } = useVisualView()
-  const sheet = useRef<HTMLDivElement>(null)
   // điện thoại đang gõ mà chạm ra ngoài tấm: chỉ cất bàn phím, KHÔNG đóng tấm — khỏi mất chữ vừa gõ
   const keepOpen = useRef(false)
   if (!open) return null
@@ -507,6 +512,13 @@ export function Confirm({ open, title, body, okText = t('Xoá'), danger = true, 
   open: boolean; title: string; body?: ReactNode; okText?: string; danger?: boolean; onOk: () => void; onClose: () => void
 }) {
   const box = useViewportBox(open)
+  // Esc đóng hộp hỏi (tấm bên dưới giữ nguyên — xem Sheet)
+  useEffect(() => {
+    if (!open) return
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [open, onClose])
   if (!open) return null
   return createPortal(
     <div className="fixed inset-0 z-[60] grid place-items-center p-5" style={box}>
