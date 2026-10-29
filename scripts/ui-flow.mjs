@@ -67,7 +67,7 @@ for (const [hash, label, typed] of [['#/trip/sample-t1', 'chuyến mẫu', '200'
   await sheet.getByRole('button', { name: 'Bỏ Thạch túi 110ml x24 khỏi đơn' }).click()
   await sheet.getByRole('button', { name: 'Lưu', exact: true }).click(); await q.waitForTimeout(500)
   const st = await q.evaluate(() => JSON.parse(localStorage.getItem('malcargo-data-v1')).state)
-  const o = st.orders.find(x => !x.id.startsWith('sample-') && x.name === 'Đơn mẫu pallet')
+  const o = st.orders.find(x => !x.id.startsWith('sample-') && x.name === 'Đơn 1')
   ok(o?.lines.length === 5 && o.lines.find(l => /st180/.test(l.itemId))?.qty === 99 && !o.lines.some(l => /tui110/.test(l.itemId)),
     `Sửa đơn: đổi số thùng + bỏ mã ⇒ lưu vào đơn (bản tách): ${JSON.stringify(o?.lines)}`)
   // Cài đặt pallet: nút ⚙ ngay cạnh nút chọn Pallet (chuyến mẫu này đã là xe pallet)

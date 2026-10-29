@@ -47,6 +47,7 @@ export const TRIP: Record<string, string> = {
   'đang mở': 'open',
   'Chưa chọn xe': 'No truck chosen',
   'Chuyến mặc định của app, không xoá được': 'The app’s default trip, cannot be deleted',
+  'Đơn mặc định của app — sửa sẽ lưu thành đơn mới': 'The app’s default order — editing saves it as a new order',
   'mặc định': 'default',
   'Xoá {name}': 'Delete {name}',
   'Dạng bảng': 'Table view',

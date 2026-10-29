@@ -5,7 +5,7 @@ import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import type { Item, Order, PalletSettings, Trip, Vehicle } from './types'
 import { t } from '../i18n'
-import { ADMIN_ITEMS, ADMIN_VEHICLES, DEFAULT_PALLET_SETTINGS, PREV_SAMPLE_ORDERS, PREV_SAMPLE_TRIPS, SAMPLE_ORDERS, SAMPLE_TRIPS } from './catalog'
+import { ADMIN_ITEMS, ADMIN_VEHICLES, DEFAULT_PALLET_SETTINGS, PREV_SAMPLES, SAMPLE_ORDERS, SAMPLE_TRIPS } from './catalog'
 
 export const newId = () =>
   (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
@@ -80,8 +80,14 @@ const isBlankTrip = (t: Trip, orders: Set<string>) =>
 // ── CHUYẾN MẪU (+ đơn của nó) luôn giữ nguyên: không xoá được, và sửa bất cứ gì trên nó thì app tự TÁCH
 //    thành một chuyến mới (mã ddmmyy-hhmm-stt) mang thay đổi đó; chọn lại chuyến mẫu là thấy bản gốc.
 export const isSample = (id: string) => id.startsWith('sample-')
+const PREV_TRIPS = PREV_SAMPLES.flatMap(v => v.trips), PREV_ORDERS = PREV_SAMPLES.flatMap(v => v.orders)
 // tên mặc định của chuyến mẫu (cả đời trước): tách ra thì chuyến mới lấy mã chuyến làm tên
-const SAMPLE_NAMES = new Set([...SAMPLE_TRIPS, ...PREV_SAMPLE_TRIPS].map(t => t.name))
+const SAMPLE_NAMES = new Set([...SAMPLE_TRIPS, ...PREV_TRIPS].map(t => t.name))
+// Bản sao của đơn mẫu mang tên ĐƠN MỚI "Đơn N" (chủ dự án 29/10: sửa đơn mẫu ⇒ ra "đơn 1", từ đó sửa mãi trên đơn 1 —
+// giữ tên mẫu thì danh sách đầy "Đơn mẫu pallet", không biết đâu là mẫu); tên người dùng vừa tự đặt thì giữ
+const SAMPLE_ORDER_NAMES = new Set([...SAMPLE_ORDERS, ...PREV_ORDERS].map(o => o.name))
+const copyName = (name: string, taken: Order[]) =>
+  (SAMPLE_ORDER_NAMES.has(name) ? nextName('Đơn', taken.map(o => o.name)) : name) // i18n-ok — tên mặc định lưu vào dữ liệu
 /** Chuyến mẫu đang giữ đơn mẫu `oid` — sửa đơn đó thì tách chuyến này. */
 const sampleTripOf = (s: TO, oid: string) =>
   s.trips.find(t => isSample(t.id) && t.orderIds.includes(oid)) ?? SAMPLE_TRIPS.find(t => t.orderIds.includes(oid)) ?? SAMPLE_TRIPS[0]
@@ -110,7 +116,7 @@ function makeFork(s: TO, trip: Trip, override?: Order) {
     if (!isSample(oid)) continue
     const src = (override?.id === oid ? override : undefined) ?? s.orders.find(o => o.id === oid) ?? SAMPLE_ORDERS.find(o => o.id === oid)
     if (!src) continue
-    map[oid] = newId(); orders.push({ ...src, id: map[oid], updatedAt: now })
+    map[oid] = newId(); orders.push({ ...src, id: map[oid], name: copyName(src.name, [...s.orders, ...orders]), updatedAt: now })
   }
   const t: Trip = {
     ...trip, id: newId(), code, name: SAMPLE_NAMES.has(trip.name) ? code : trip.name,
@@ -126,7 +132,7 @@ function detachSampleOrders(s: TO, t: Trip): { trip: Trip; added: Order[] } {
     if (!isSample(oid)) return oid
     const src = s.orders.find(o => o.id === oid) ?? SAMPLE_ORDERS.find(o => o.id === oid)
     if (!src) return oid
-    const o = { ...src, id: newId(), updatedAt: Date.now() }
+    const o = { ...src, id: newId(), name: copyName(src.name, [...s.orders, ...added]), updatedAt: Date.now() }
     added.push(o); return o.id
   })
   return { trip: added.length ? { ...t, orderIds } : t, added }
@@ -144,8 +150,8 @@ function resetSamples(d: TO): TO {
   let { trips, orders } = d
   // khớp bản mẫu hiện tại HOẶC bản mẫu đời trước (chưa ai sửa) ⇒ chỉ thay mẫu, không tách chuyến
   const pristineO = (o: Order) => same(o.lines, OLD_SAMPLE_LINES[o.id])
-    || [...SAMPLE_ORDERS, ...PREV_SAMPLE_ORDERS].some(p => p.id === o.id && same([o.name, o.place, o.lines], [p.name, p.place, p.lines]))
-  const pristineT = (t: Trip) => [...SAMPLE_TRIPS, ...PREV_SAMPLE_TRIPS].some(p => p.id === t.id && same([t.name, t.vehicleId, t.orderIds], [p.name, p.vehicleId, p.orderIds]))
+    || [...SAMPLE_ORDERS, ...PREV_ORDERS].some(p => p.id === o.id && same([o.name, o.place, o.lines], [p.name, p.place, p.lines]))
+  const pristineT = (t: Trip) => [...SAMPLE_TRIPS, ...PREV_TRIPS].some(p => p.id === t.id && same([t.name, t.vehicleId, t.orderIds], [p.name, p.vehicleId, p.orderIds]))
   for (const st of trips.filter(t => isSample(t.id))) {
     const changed = !pristineT(st) || st.orderIds.some(oid => { const o = orders.find(x => x.id === oid); return o && !pristineO(o) })
     if (changed) { const k = makeFork({ trips, orders }, st); trips = [k.trip, ...trips]; orders = [...k.orders, ...orders] }
@@ -179,7 +185,11 @@ export const useData = create<DataState>()(
         if (!isSample(o.id)) return { orders: upsert(s.orders, { ...o, updatedAt: now }) }
         // đơn mẫu bị sửa: vừa tách xong (cùng một thao tác sửa nhiều đơn) ⇒ ghi vào bản sao; chưa tách ⇒ tách
         const f = s.fork
-        if (f && !f.seen && f.orders[o.id]) return { orders: upsert(s.orders, { ...o, id: f.orders[o.id], updatedAt: now }) }
+        if (f && !f.seen && f.orders[o.id]) {
+          // bản sao đã mang tên "Đơn N": màn còn cầm đơn mẫu (tên mẫu) thì không ghi tên mẫu đè lại
+          const cur = s.orders.find(x => x.id === f.orders[o.id])
+          return { orders: upsert(s.orders, { ...o, id: f.orders[o.id], name: cur && SAMPLE_ORDER_NAMES.has(o.name) ? cur.name : o.name, updatedAt: now }) }
+        }
         const k = makeFork(s, sampleTripOf(s, o.id), o)
         return { trips: [k.trip, ...s.trips], orders: [...k.orders, ...s.orders], fork: k.fork }
       }),

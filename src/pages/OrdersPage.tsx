@@ -3,7 +3,7 @@ import { ChevronRight, ClipboardList, Plus } from 'lucide-react'
 import { isSample, newId, nextName, useAllItems, useData } from '../data/store'
 import { resolveOrder } from '../data/resolve'
 import { orderTotals } from '../engine/plan'
-import { Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SelectBar, SummaryBand, cx, fmtInt, fmtKgShort, fmtM3, useSelection } from '../ui/kit'
+import { Badge, Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SelectBar, SummaryBand, cx, fmtInt, fmtKgShort, fmtM3, useSelection } from '../ui/kit'
 import { ListCard, Page, PageHeader } from '../ui/Shell'
 import { go } from '../ui/route'
 import { t, tx } from '../i18n'
@@ -68,7 +68,11 @@ export default function OrdersPage() {
                 <a href={`#/order/${o.id}`}
                   className={`group flex min-w-0 flex-1 items-center gap-4 py-3 pr-4 transition-colors hover:bg-slate-50 sm:grid sm:min-h-[52px] sm:py-2 ${GRID}`}>
                   <span className="min-w-0 flex-1">
-                    <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{tx(o.name)}</span>
+                    <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">
+                      {tx(o.name)}
+                      {/* đơn mẫu: sửa ⇒ app tách ra đơn mới "Đơn N", đơn mẫu giữ nguyên — nhãn để không lẫn với đơn của mình */}
+                      {isSample(o.id) && <span className="ml-1.5 align-[1px]" title={t('Đơn mặc định của app — sửa sẽ lưu thành đơn mới')}><Badge>{t('mặc định')}</Badge></span>}
+                    </span>
                     <span className="num block text-[13px] leading-snug text-slate-600 sm:hidden">
                       {[tx(o.place), fmtKgShort(tot.kg) + (tot.kgKnown ? '' : '*'), fmtM3(tot.m3), trip && tx(trip.name)].filter(Boolean).join(' · ')}
                     </span>

@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url'
 
 const dir = mkdtempSync(join(tmpdir(), 'malcargo-'))
 const out = join(dir, 'store.mjs')
-buildSync({ stdin: { contents: "export * from './src/data/store'; export { SAMPLE_TRIPS, SAMPLE_ORDERS, PREV_SAMPLE_TRIPS, PREV_SAMPLE_ORDERS } from './src/data/catalog'", resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', outfile: out, logLevel: 'error' })
+buildSync({ stdin: { contents: "export * from './src/data/store'; export { SAMPLE_TRIPS, SAMPLE_ORDERS, PREV_SAMPLES } from './src/data/catalog'", resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', outfile: out, logLevel: 'error' })
 const S = await import(pathToFileURL(out).href)
 rmSync(dir, { recursive: true, force: true })
 
@@ -71,15 +71,42 @@ ok(!Object.keys(D().deleted).some(S.isSample), 'không bao giờ đánh dấu xo
 console.log('• Hai chuyến mẫu (29/10: xe pallet 17 pallet · container 40ft)')
 const samples = () => ids(D().trips.filter(t => S.isSample(t.id))) + ' / ' + ids(D().orders.filter(o => S.isSample(o.id)))
 const want = ids(S.SAMPLE_TRIPS) + ' / ' + ids(S.SAMPLE_ORDERS)
-// máy cũ còn chuyến mẫu đời trước NGUYÊN GỐC ⇒ chỉ thay mẫu, không đẻ chuyến
-D().replaceAll({ ...base, orders: S.PREV_SAMPLE_ORDERS, trips: S.PREV_SAMPLE_TRIPS, deleted: {} })
-ok(samples() === want && !mine(D().trips).length && !mine(D().orders).length, `mẫu đời trước nguyên gốc ⇒ thay bằng mẫu mới, không tách (${samples()})`)
-// đời trước đã bị sửa (bản sao lưu cũ) ⇒ thay đổi giữ thành chuyến mới mang ĐỦ 2 đơn cũ, mẫu về bản mới
-const edited = S.PREV_SAMPLE_ORDERS.map((o, i) => (i ? o : { ...o, lines: o.lines.map(l => ({ ...l, qty: l.qty + 1 })) }))
-D().replaceAll({ ...base, orders: edited, trips: S.PREV_SAMPLE_TRIPS, deleted: {} })
-const kept = mine(D().trips)
-ok(samples() === want && kept.length === 1 && kept[0].orderIds.length === 2 && kept[0].name === kept[0].code && kept[0].vehicleId === 'adm-v-5t',
-  `mẫu đời trước đã sửa ⇒ thành chuyến ${kept[0]?.name} (2 đơn, xe cũ), mẫu về bản mới`)
+// máy cũ còn chuyến mẫu MỌI đời trước NGUYÊN GỐC ⇒ chỉ thay mẫu, không đẻ chuyến
+S.PREV_SAMPLES.forEach((v, i) => {
+  D().replaceAll({ ...base, orders: v.orders, trips: v.trips, deleted: {} })
+  ok(samples() === want && !mine(D().trips).length && !mine(D().orders).length, `mẫu đời trước #${i + 1} nguyên gốc ⇒ thay bằng mẫu mới, không tách (${samples()})`)
+})
+// đời trước đã bị sửa (bản sao lưu cũ) ⇒ thay đổi giữ thành chuyến mới mang ĐỦ 2 đơn cũ (tên "Đơn 1", "Đơn 2"), mẫu về bản mới
+const old = S.PREV_SAMPLES[0]
+const edited = old.orders.map((o, i) => (i ? o : { ...o, lines: o.lines.map(l => ({ ...l, qty: l.qty + 1 })) }))
+D().replaceAll({ ...base, orders: edited, trips: old.trips, deleted: {} })
+const kept = mine(D().trips), keptNames = kept[0]?.orderIds.map(id => D().orders.find(o => o.id === id)?.name).sort().join()
+ok(samples() === want && kept.length === 1 && keptNames === 'Đơn 1,Đơn 2' && kept[0].name === kept[0].code && kept[0].vehicleId === 'adm-v-5t',
+  `mẫu đời trước đã sửa ⇒ thành chuyến ${kept[0]?.name} (${keptNames}, xe cũ), mẫu về bản mới`)
+
+// Chủ dự án 29/10: "chọn đơn mẫu, thay đổi gì ⇒ ra đơn mới (đơn 1), từ đó sửa mãi trên đơn 1; chỉ ra đơn 2 khi
+// tạo chuyến mới hoặc chọn lại đơn mẫu làm tiếp"
+D().replaceAll({ ...base, orders: [], trips: [], deleted: {} })
+const o1 = S.SAMPLE_ORDERS.find(o => o.id === 'sample-o1')
+D().upsertOrder({ ...o1, lines: o1.lines.map((l, i) => (i ? l : { ...l, qty: l.qty + 1 })) })
+const f1 = D().fork
+// phím gõ nhanh còn cầm đơn MẪU (tên mẫu) trước khi màn chuyển sang bản sao ⇒ ghi vào bản sao, không đè tên
+D().upsertOrder({ ...o1, lines: o1.lines.map((l, i) => (i ? l : { ...l, qty: l.qty + 2 })) })
+D().markForkSeen()
+const copy1 = () => D().orders.find(o => o.id === f1.orders['sample-o1'])
+ok(copy1()?.name === 'Đơn 1' && copy1().place === o1.place && copy1().lines[0].qty === o1.lines[0].qty + 2 && mine(D().trips).length === 1,
+  `sửa đơn mẫu ⇒ 1 chuyến mới, đơn bản sao tên "${copy1()?.name}" (không mang tên mẫu), phím sau ghi vào nó`)
+for (let k = 0; k < 3; k++) D().upsertOrder({ ...copy1(), lines: copy1().lines.map((l, i) => (i ? l : { ...l, qty: l.qty + 1 })) })
+D().upsertTrip({ ...D().trips.find(t => t.id === f1.to), lightOwnPallet: true })
+ok(mine(D().trips).length === 1 && mine(D().orders).length === 1 && copy1().lines[0].qty === o1.lines[0].qty + 5,
+  'sửa tiếp đơn 1 / chuyến của nó nhiều lần ⇒ vẫn 1 chuyến, 1 đơn')
+D().upsertOrder({ ...o1, lines: o1.lines.map((l, i) => (i ? l : { ...l, qty: 7 })) })
+const names = mine(D().orders).map(o => o.name).sort().join()
+ok(mine(D().trips).length === 2 && names === 'Đơn 1,Đơn 2', `chọn lại đơn mẫu, sửa ⇒ chuyến thứ 2, đơn "Đơn 2" (${names})`)
+// tự đặt tên ngay lúc sửa đơn mẫu (popup Sửa đơn) ⇒ giữ tên đó
+D().markForkSeen()
+D().upsertOrder({ ...o1, name: 'Khách Hưng' })
+ok(mine(D().orders).some(o => o.name === 'Khách Hưng'), 'đổi tên đơn mẫu ⇒ bản sao giữ tên người dùng đặt')
 // sửa đơn của chuyến mẫu THỨ HAI ⇒ tách đúng chuyến đó (xe container), chuyến mẫu kia không đụng
 D().replaceAll({ ...base, orders: [], trips: [], deleted: {} })
 const o2 = S.SAMPLE_ORDERS.find(o => o.id === 'sample-o2')

@@ -66,20 +66,28 @@ const items = Object.fromEntries(E.ADMIN_ITEMS.map(i => [i.id, i]))
 const trucks = Object.fromEntries(E.ADMIN_VEHICLES.map(v => [v.id, v]))
 const orderOf = o => ({ id: o.id, name: o.name, place: o.place, lines: o.lines.map(l => ({ item: items[l.itemId], qty: l.qty })) })
 // bộ đơn thử cố định = 2 đơn mẫu đời trước (xe 5 tấn) — các ca dưới đây đã chốt số trên bộ này
-const sample = E.PREV_SAMPLE_ORDERS.map(orderOf)
+const sample = E.PREV_SAMPLES[0].orders.map(orderOf)
 
-// chuyến mẫu hiện tại (29/10): xe pallet ra ĐÚNG 17 pallet có cả chẵn / gộp chung / lẻ riêng; container 40ft
-// xếp rời, hàng nhẹ trên nóc — cả hai vừa xe
+// chuyến mẫu hiện tại (29/10): xe pallet ra ĐÚNG 17 pallet (chẵn + gộp chung), phần lẻ thạch túi nằm trên cùng
+// pallet gộp — bật "Hàng nhẹ: pallet riêng" thì đứng pallet riêng (18 pallet, vẫn vừa xe: công tắc phải thấy được
+// khác biệt); container 40ft xếp rời gần đủ tải 28 tấn, hàng nhẹ trên nóc
 for (const st of E.SAMPLE_TRIPS) {
   const os = st.orderIds.map(id => orderOf(E.SAMPLE_ORDERS.find(o => o.id === id)))
-  const r = E.computeTrip({ truck: trucks[st.vehicleId], orders: os, pallet: E.DEFAULT_PALLET_SETTINGS })
+  const run = lightOwnPallet => E.computeTrip({ truck: trucks[st.vehicleId], orders: os, pallet: E.DEFAULT_PALLET_SETTINGS, lightOwnPallet })
+  const r = run(false)
   invariants(st.name, r)
   ok(r.fits && !r.overweight && r.plan.placedCount === r.plan.totalCount, `${st.name}: không vừa xe`)
   if (trucks[st.vehicleId].kind === 'pallet') {
-    const kinds = new Set(E.explainPalletCards(r).map(c => c.kind))
-    ok(r.totals.pallets === 17 && kinds.size === 3, `${st.name}: ${r.totals.pallets} pallet, loại ${[...kinds]} (cần 17 pallet, đủ chẵn / riêng / gộp)`)
+    const cards = E.explainPalletCards(r)
+    const lightIn = rr => E.explainPalletCards(rr).filter(c => c.parts.some(p => os[0].lines.some(l => l.item.light && l.item.id === p.itemId)) && c.kind !== 'full')
+    ok(r.totals.pallets === 17 && cards.some(c => c.kind === 'mixed') && lightIn(r).every(c => c.kind === 'mixed'),
+      `${st.name}: ${r.totals.pallets} pallet (cần 17, có pallet gộp, thạch lẻ nằm trên pallet gộp)`)
+    const on = run(true)
+    invariants(st.name + ' · hàng nhẹ pallet riêng', on)
+    ok(on.fits && on.totals.pallets === 18 && lightIn(on).every(c => c.kind === 'own'), `${st.name}: bật hàng nhẹ pallet riêng ⇒ ${on.totals.pallets} pallet (cần 18, thạch lẻ đứng riêng, vừa xe)`)
   } else {
     ok(r.count.some(c => c.onTopOfOthers && os.some(o => o.lines.some(l => l.item.light && l.item.name === c.label))), `${st.name}: hàng nhẹ không nằm trên nóc`)
+    ok(r.payloadPct >= 90, `${st.name}: chở ${r.payloadPct?.toFixed(0)}% tải (cần ≥ 90% để thử được)`)
   }
   console.log(`• ${st.name} — ${r.plan.placedCount}/${r.plan.totalCount} · ${E.fmtKg(r.weightKg)} (${r.payloadPct?.toFixed(0)}% tải)${r.totals.pallets != null ? ` · ${r.totals.pallets} pallet` : ''}`)
 }

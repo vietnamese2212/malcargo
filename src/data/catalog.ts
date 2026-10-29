@@ -16,9 +16,9 @@ export const ADMIN_VEHICLES: Vehicle[] = [
   { id: 'adm-v-15t', owner: 'admin', name: 'Xe tải 15 tấn', plate: '', kind: 'loose', l: 9200, w: 2350, h: 2400, payloadKg: 15000, updatedAt: T0 },
   { id: 'adm-v-p8t', owner: 'admin', name: 'Xe pallet 8 tấn', plate: '', kind: 'pallet', l: 7400, w: 2350, h: 2300, payloadKg: 8000, updatedAt: T0 },
   { id: 'adm-v-p15t', owner: 'admin', name: 'Xe pallet 15 tấn', plate: '', kind: 'pallet', l: 9600, w: 2500, h: 2600, payloadKg: 15000, updatedAt: T0 },
-  // container khô tiêu chuẩn (lòng thùng ISO; tải = tải hàng tối đa của vỏ — đường bộ thường thấp hơn, người dùng sửa)
-  { id: 'adm-v-c20', owner: 'admin', name: 'Container 20ft', plate: '', kind: 'loose', l: 5898, w: 2352, h: 2393, payloadKg: 28200, container: true, updatedAt: T0 },
-  { id: 'adm-v-c40', owner: 'admin', name: 'Container 40ft', plate: '', kind: 'loose', l: 12032, w: 2352, h: 2393, payloadKg: 26700, container: true, updatedAt: T0 },
+  // container khô tiêu chuẩn (lòng thùng ISO; tải tối đa 28 tấn — chủ dự án 29/10)
+  { id: 'adm-v-c20', owner: 'admin', name: 'Container 20ft', plate: '', kind: 'loose', l: 5898, w: 2352, h: 2393, payloadKg: 28000, container: true, updatedAt: T0 },
+  { id: 'adm-v-c40', owner: 'admin', name: 'Container 40ft', plate: '', kind: 'loose', l: 12032, w: 2352, h: 2393, payloadKg: 28000, container: true, updatedAt: T0 },
 ]
 
 // Cỡ thùng hàng sữa & đồ uống đóng hộp phổ biến (thùng 48 hộp / chai, thùng 24 túi) — số đo, kg, số thùng / pallet
@@ -37,15 +37,16 @@ export const ADMIN_ITEMS: Item[] = [
 export const DEFAULT_PALLET_SETTINGS: PalletSettings = { l: 1200, w: 1000, maxH: 1650, baseH: 150, kg: 25 }
 
 // Hai chuyến mẫu cho lần mở đầu tiên — thấy ngay sơ đồ, không phải nhập gì. Đơn NHIỀU MÃ để làm quen bảng
-// Diễn giải (chủ dự án 29/10): xe pallet 17 pallet (6 mã: pallet chẵn, pallet gộp chung, pallet lẻ riêng) ·
-// container 40ft xếp rời (2 mã nặng thành khối + thạch túi nhẹ trên nóc).
+// Diễn giải (chủ dự án 29/10): xe pallet 17 pallet (6 mã: pallet chẵn, pallet gộp chung — phần lẻ thạch túi nằm
+// trên cùng một pallet gộp, bật "Hàng nhẹ: pallet riêng" thì tách thành pallet thứ 18) · container 40ft xếp rời
+// gần đủ tải 28 tấn (2 mã nặng thành khối + thạch túi nhẹ trên nóc).
 export const SAMPLE_ORDERS: Order[] = [
   { id: 'sample-o1', name: 'Đơn mẫu pallet', place: 'Nhà phân phối A', updatedAt: T0, lines: [
-    { itemId: 'adm-i-st110', qty: 620 }, { itemId: 'adm-i-c100', qty: 479 }, { itemId: 'adm-i-c85', qty: 612 },
-    { itemId: 'adm-i-th170', qty: 60 }, { itemId: 'adm-i-st180', qty: 140 }, { itemId: 'adm-i-tui110', qty: 492 },
+    { itemId: 'adm-i-st110', qty: 740 }, { itemId: 'adm-i-c100', qty: 479 }, { itemId: 'adm-i-c85', qty: 612 },
+    { itemId: 'adm-i-th170', qty: 40 }, { itemId: 'adm-i-st180', qty: 140 }, { itemId: 'adm-i-tui110', qty: 472 },
   ] },
   { id: 'sample-o2', name: 'Đơn mẫu 40ft', place: 'Kho B', updatedAt: T0, lines: [
-    { itemId: 'adm-i-st180', qty: 1100 }, { itemId: 'adm-i-st110', qty: 900 }, { itemId: 'adm-i-tui110', qty: 600 },
+    { itemId: 'adm-i-st180', qty: 1350 }, { itemId: 'adm-i-st110', qty: 1400 }, { itemId: 'adm-i-tui110', qty: 1600 },
   ] },
 ]
 
@@ -54,16 +55,30 @@ export const SAMPLE_TRIPS: Trip[] = [
   { id: 'sample-t2', name: 'Mẫu 40ft', vehicleId: 'adm-v-c40', orderIds: ['sample-o2'], updatedAt: T0 },
 ]
 
-// Chuyến mẫu ĐỜI TRƯỚC (27–29/10/2026: xe 5 tấn, 2 đơn) — máy cũ / bản sao lưu còn giữ nguyên bản này ⇒ chỉ thay
-// bằng mẫu mới, không tách thành chuyến của người dùng.
-export const PREV_SAMPLE_TRIPS: Trip[] = [
-  { id: 'sample-t1', name: 'Chuyến mẫu', vehicleId: 'adm-v-5t', orderIds: ['sample-o1', 'sample-o2'], updatedAt: T0 },
-]
-export const PREV_SAMPLE_ORDERS: Order[] = [
-  { id: 'sample-o1', name: 'Đơn mẫu 1', place: 'Cửa hàng A', updatedAt: T0, lines: [
-    { itemId: 'adm-i-st180', qty: 150 }, { itemId: 'adm-i-st110', qty: 160 }, { itemId: 'adm-i-tui110', qty: 40 },
-  ] },
-  { id: 'sample-o2', name: 'Đơn mẫu 2', place: 'Cửa hàng B', updatedAt: T0, lines: [
-    { itemId: 'adm-i-scu180', qty: 100 }, { itemId: 'adm-i-c100', qty: 120 },
-  ] },
+// Chuyến mẫu ĐỜI TRƯỚC — máy cũ / bản sao lưu còn giữ nguyên một đời này ⇒ chỉ thay bằng mẫu mới, không tách thành
+// chuyến của người dùng. Đổi số / tên mẫu ⇒ thêm đời đang chạy vào đây.
+export const PREV_SAMPLES: { trips: Trip[]; orders: Order[] }[] = [
+  { // 27–29/10/2026: xe 5 tấn, 2 đơn
+    trips: [{ id: 'sample-t1', name: 'Chuyến mẫu', vehicleId: 'adm-v-5t', orderIds: ['sample-o1', 'sample-o2'], updatedAt: T0 }],
+    orders: [
+      { id: 'sample-o1', name: 'Đơn mẫu 1', place: 'Cửa hàng A', updatedAt: T0, lines: [
+        { itemId: 'adm-i-st180', qty: 150 }, { itemId: 'adm-i-st110', qty: 160 }, { itemId: 'adm-i-tui110', qty: 40 },
+      ] },
+      { id: 'sample-o2', name: 'Đơn mẫu 2', place: 'Cửa hàng B', updatedAt: T0, lines: [
+        { itemId: 'adm-i-scu180', qty: 100 }, { itemId: 'adm-i-c100', qty: 120 },
+      ] },
+    ],
+  },
+  { // 29/10/2026 tối: cùng 2 chuyến như bây giờ, số khác (thạch lẻ đã đứng riêng — công tắc hàng nhẹ không đổi gì)
+    trips: SAMPLE_TRIPS,
+    orders: [
+      { id: 'sample-o1', name: 'Đơn mẫu pallet', place: 'Nhà phân phối A', updatedAt: T0, lines: [
+        { itemId: 'adm-i-st110', qty: 620 }, { itemId: 'adm-i-c100', qty: 479 }, { itemId: 'adm-i-c85', qty: 612 },
+        { itemId: 'adm-i-th170', qty: 60 }, { itemId: 'adm-i-st180', qty: 140 }, { itemId: 'adm-i-tui110', qty: 492 },
+      ] },
+      { id: 'sample-o2', name: 'Đơn mẫu 40ft', place: 'Kho B', updatedAt: T0, lines: [
+        { itemId: 'adm-i-st180', qty: 1100 }, { itemId: 'adm-i-st110', qty: 900 }, { itemId: 'adm-i-tui110', qty: 600 },
+      ] },
+    ],
+  },
 ]
