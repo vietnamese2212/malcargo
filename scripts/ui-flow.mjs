@@ -78,21 +78,24 @@ for (const [hash, label, typed] of [['#/trip/sample-t1', 'chuyến mẫu', '200'
   ok(p2.maxH === 1500, `Cài đặt pallet cạnh nút Pallet: cao tối đa (cả đế) lưu ${p2.maxH}`)
 }
 
-// Chọn xe kiểu ô chọn (chủ dự án 29/10): bấm tên xe trên dải thông số ⇒ danh sách xe thả sẵn; chọn ⇒ đổi xe, bảng tự đóng
-{
-  const q = await (await b.newContext(DEVICES[1])).newPage()
+// Chọn xe như bộ lọc Excel (chủ dự án 29/10): bấm ô tên xe trên dải thông số ⇒ danh sách xe thả NGAY DƯỚI ô; chọn ⇒
+// đổi xe, danh sách đóng; cuối danh sách "Chỉnh thông số thùng xe" ⇒ bảng sửa thông số
+for (const dev of DEVICES) {
+  const q = await (await b.newContext(dev)).newPage()
   await q.goto(srv.base + '#/trip/sample-t2', { waitUntil: 'networkidle' }); await q.waitForTimeout(1500)
-  await q.getByRole('button', { name: 'Đổi xe' }).click(); await q.waitForTimeout(400)
-  const dlg = q.getByRole('dialog', { name: 'Thùng xe' })
-  const listShown = await dlg.getByLabel('Tìm xe').isVisible()
-  await dlg.getByText('Container 20ft', { exact: true }).click(); await q.waitForTimeout(800)
+  const chip = q.getByRole('button', { name: 'Đổi xe' })
+  await chip.click(); await q.waitForTimeout(300)
+  const pop = q.locator('[data-popover]')
+  const cb = await chip.boundingBox(), pb = await pop.boundingBox()
+  const under = !!pb && Math.abs(pb.x - cb.x) < 2 && pb.y >= cb.y + cb.height && pb.y < cb.y + cb.height + 12
+  const listShown = await pop.getByLabel('Tìm xe').isVisible()
+  await pop.getByText('Container 20ft', { exact: true }).click(); await q.waitForTimeout(800)
   const st = await q.evaluate(() => JSON.parse(localStorage.getItem('malcargo-data-v1')).state)
-  ok(listShown && !(await dlg.count()) && st.trips.some(t => !t.id.startsWith('sample-') && t.vehicleId === 'adm-v-c20'),
-    `bấm tên xe ⇒ danh sách thả sẵn (${listShown}), chọn Container 20ft ⇒ đổi xe, bảng đóng`)
-  // nút ✏ cạnh ô chọn xe ⇒ ô sửa thông số
-  await q.getByRole('button', { name: 'Đổi xe' }).click(); await q.waitForTimeout(400)
-  await dlg.getByRole('button', { name: 'Chỉnh thông số thùng xe' }).click(); await q.waitForTimeout(200)
-  ok(await dlg.getByLabel('Dài lòng thùng').isVisible() && !(await dlg.getByLabel('Tìm xe').count()), 'nút ✏ ⇒ ô sửa thông số, danh sách xe gấp lại')
+  ok(listShown && under && !(await pop.count()) && !(await q.getByRole('dialog', { name: 'Thùng xe' }).count()) && st.trips.some(t => !t.id.startsWith('sample-') && t.vehicleId === 'adm-v-c20'),
+    `${dev.name}: bấm tên xe ⇒ danh sách thả ngay dưới ô (${under}), chọn Container 20ft ⇒ đổi xe, danh sách đóng`)
+  await chip.click(); await q.waitForTimeout(300)
+  await pop.getByRole('button', { name: 'Chỉnh thông số thùng xe' }).click(); await q.waitForTimeout(300)
+  ok(await q.getByRole('dialog', { name: 'Thùng xe' }).getByLabel('Dài lòng thùng').isVisible() && !(await pop.count()), `${dev.name}: cuối danh sách "Chỉnh thông số" ⇒ bảng sửa thông số`)
 }
 
 // Đổi Thùng rời ↔ Pallet: khung 3D không đổi cỡ (chủ dự án 29/10: "khung xe nằm im, chỉ thay đổi hàng") — dải

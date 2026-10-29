@@ -49,7 +49,7 @@ await kb(false); await p.keyboard.press('Escape'); await p.waitForTimeout(200); 
 
 // 2. bảng Thùng xe: mở thông số, chạm ô Dài lòng thùng
 await p.getByRole('button', { name: T('Đổi xe') }).click(); await p.waitForTimeout(400)
-await p.getByRole('dialog', { name: T('Thùng xe') }).getByRole('button', { name: T('Chỉnh thông số thùng xe') }).click(); await p.waitForTimeout(200)
+await p.locator('[data-popover]').getByRole('button', { name: T('Chỉnh thông số thùng xe') }).click(); await p.waitForTimeout(400)
 const len = p.getByRole('dialog', { name: T('Thùng xe') }).getByLabel(T('Dài lòng thùng'))
 await len.focus(); await kb(true)
 const spec = await rectOf('[role=dialog][aria-label="' + T('Thùng xe') + '"]')

@@ -144,7 +144,6 @@ export const TRIP: Record<string, string> = {
   'dùng cho mọi xe pallet': 'used by all pallet trucks',
   'Dài chân': 'Pallet length',
   'Rộng chân': 'Pallet width',
-  'Chọn xe khác: {name}': 'Pick another truck: {name}',
   'Tên xe, biển số': 'Truck name, plate',
   'Tìm xe': 'Search trucks',
   'Chỉ xe chở hết': 'Only trucks that fit',

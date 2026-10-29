@@ -13,6 +13,7 @@ export interface OrderInput { id: string; name: string; place: string; lines: { 
 export interface TripInput {
   truck: TruckInput; orders: OrderInput[]; pallet: PalletSettings
   lightOwnPallet?: boolean   // xe pallet: phần lẻ hàng nhẹ đứng pallet riêng (mặc định dồn lên trên cùng pallet gộp)
+  quick?: boolean            // chỉ cần biết chở hết hay không (gợi ý xe, ✓/✗ từng xe) — bỏ bước trải hàng tới cửa
 }
 
 export interface PlanGroupMeta {
@@ -483,15 +484,17 @@ export function computeTrip(input: TripInput): TripResult {
     // toàn bộ dù xe còn chỗ — ca hiếm vì hàng nhẹ thường là túi / hộp nhỏ hơn thùng nền.
     // Không vá lõi (giữ bản chép khớp SUPPLYC): xếp lại các mã đó như hàng thường và NÓI RA.
     if (truck.kind === 'loose') {
+      let gs: LoadGroup[] = groups
       const stuck = new Set(plan.leftover.filter(x => groups[x.group].onTop).map(x => x.group))
       if (stuck.size) {
-        const retry = computeLoadPlan(T, groups.map((g, i) => (stuck.has(i) ? { ...g, onTop: false } : g)))
-        const leftOf = (p: LoadPlan) => p.leftover.reduce((s, x) => s + x.count, 0)
+        const retryGroups = groups.map((g, i) => (stuck.has(i) ? { ...g, onTop: false } : g))
+        const retry = computeLoadPlan(T, retryGroups)
         if (leftOf(retry) < leftOf(plan)) {
-          plan = retry
+          plan = retry; gs = retryGroups
           warnings.push(`Không đặt được lên trên hàng khác: ${[...stuck].map(i => groups[i].label).join(', ')} — đã xếp như hàng thường.`) // i18n-ok
         }
       }
+      if (!input.quick) plan = spreadToDoor(T, gs, plan)
     }
   }
 
@@ -515,6 +518,77 @@ export function computeTrip(input: TripInput): TripResult {
   }
 }
 
+const leftOf = (p: LoadPlan) => p.leftover.reduce((s, x) => s + x.count, 0)
+
+/** Xe XÁ đã gần đầy sàn (≥ 75% chiều dài) mà hàng chưa tới cửa: HẠ DẦN từng lớp của khối SÁT CỬA trước (giữ "cao thấp
+ *  dần ra cửa"), mỗi lần chạy lại lõi — còn xếp đủ hàng thì giữ, tới cửa thì dừng ⇒ hàng trải dài TỚI SÁT CỬA (chủ dự
+ *  án 29/10, container sữa đủ tải mới đầy 62% thể tích: "bốc xá cần phải bốc tới sát cửa" — chừa trống ở cửa thì hàng
+ *  xô khi chạy). Lõi chồng tới số lớp tối đa rồi mới tiến ra cửa nên không tự làm được; không sửa lõi — hạ `maxLayers`
+ *  từng mã. Xe còn ít hàng thì vẫn chồng gọn phía cabin như cũ. Nhiều nhất `SPREAD_RUNS` lần chạy lõi. */
+const SPREAD_FROM = 75, SPREAD_RUNS = 8
+
+/** Đếm THÁP: cột thùng lộ cao hơn xung quanh ở ≥ 3 phía (thành xe tính là tựa, phía cửa trống thì không) — cùng cách
+ *  đo của bộ đo hình khối `scripts/out/q.mjs`. Trải hàng tới cửa không được đẻ thêm tháp (đo 29/10: 1 ca / 220). */
+function towers(p: LoadPlan, T: { length: number; width: number }): number {
+  type C = { x: number; y: number; l: number; w: number; top: number; bot: number; h: number }
+  const cols = new Map<string, C>()
+  for (const b of p.placed) {
+    const k = `${b.x},${b.y},${b.l},${b.w}`
+    const c = cols.get(k) ?? { x: b.x, y: b.y, l: b.l, w: b.w, top: 0, bot: 1e9, h: b.h }
+    if (b.z + b.h >= c.top) c.h = b.h
+    c.top = Math.max(c.top, b.z + b.h); c.bot = Math.min(c.bot, b.z); cols.set(k, c)
+  }
+  const C = [...cols.values()], e = 3
+  const ov = (a0: number, a1: number, b0: number, b1: number) => Math.min(a1, b1) - Math.max(a0, b0) > 20
+  const side = (c: C, s: number) => {
+    if (s === 0 && c.x <= e) return Infinity
+    if (s === 1 && c.x + c.l >= T.length - e) return 0
+    if (s === 2 && c.y <= e) return Infinity
+    if (s === 3 && c.y + c.w >= T.width - e) return Infinity
+    let best = 0
+    for (const d of C) {
+      if (d === c || d.top <= c.bot) continue
+      const touch = s === 0 ? Math.abs(d.x + d.l - c.x) <= e && ov(c.y, c.y + c.w, d.y, d.y + d.w)
+        : s === 1 ? Math.abs(c.x + c.l - d.x) <= e && ov(c.y, c.y + c.w, d.y, d.y + d.w)
+        : s === 2 ? Math.abs(d.y + d.w - c.y) <= e && ov(c.x, c.x + c.l, d.x, d.x + d.l)
+        : Math.abs(c.y + c.w - d.y) <= e && ov(c.x, c.x + c.l, d.x, d.x + d.l)
+      if (touch) best = Math.max(best, d.top)
+    }
+    return best
+  }
+  return C.filter(c => [0, 1, 2, 3].filter(s => c.top - Math.max(side(c, s), c.bot) > Math.max(2 * c.h, 250)).length >= 3).length
+}
+function spreadToDoor(T: { length: number; width: number; height: number }, groups: LoadGroup[], base: LoadPlan): LoadPlan {
+  // tới cửa = khe còn lại dưới 1,5 cạnh thùng nhỏ nhất của hàng đứng sàn (không đứng thêm được hàng thùng nào cho ra
+  // hồn; hàng nhẹ nằm trên nóc, không tính)
+  const floorGs = groups.filter(g => !g.onTop)
+  const minSide = Math.min(...(floorGs.length ? floorGs : groups).map(g => Math.min(g.l, g.w)))
+  const atDoor = (p: LoadPlan) => T.length - Math.max(0, ...p.placed.map(b => b.x + b.l)) < minSide * 1.5
+  if (leftOf(base) || !base.placed.length || atDoor(base) || base.lengthUsedPct < SPREAD_FROM) return base
+  // số lớp từng mã đang chồng (cột thùng cùng mã cao nhất) + mã nào nằm sát cửa nhất
+  const layersOf = (p: LoadPlan) => groups.map((_, gi) => {
+    const col = new Map<string, number>()
+    for (const b of p.placed) if (b.group === gi) { const k = `${Math.round(b.x)}|${Math.round(b.y)}`; col.set(k, (col.get(k) ?? 0) + 1) }
+    return Math.max(0, ...col.values())
+  })
+  const doorX = groups.map((_, gi) => Math.max(0, ...base.placed.filter(b => b.group === gi).map(b => b.x + b.l)))
+  const order = groups.map((_, gi) => gi).filter(gi => !groups[gi].onTop).sort((a, b) => doorX[b] - doorX[a])
+  let best = base, cap = layersOf(base), runs = 0, failed = false
+  const baseTowers = towers(base, T)
+  for (const gi of order) {
+    while (cap[gi] > 1 && runs < SPREAD_RUNS && !atDoor(best)) {
+      const next = cap.map((c, i) => (i === gi ? c - 1 : c))
+      runs++
+      const p = computeLoadPlan(T, groups.map((g, i) => (next[i] > 0 ? { ...g, maxLayers: Math.min(g.maxLayers ?? Infinity, next[i]) } : g)))
+      // hạ nữa là bỏ thùng / không dài thêm / đẻ tháp ⇒ thôi (lần thử hỏng của lõi chậm gấp ~8 lần — không thử mã khác nữa)
+      if (leftOf(p) || p.lengthUsedPct <= best.lengthUsedPct || towers(p, T) > baseTowers) { failed = true; break }
+      best = p; cap = next
+    }
+    if (failed || runs >= SPREAD_RUNS || atDoor(best)) break
+  }
+  return best
+}
+
 /** Xe nhỏ nhất (theo thể tích lòng thùng) chở hết hàng và không vượt tải — cùng kiểu xe. */
 export function suggestTruck(orders: OrderInput[], pallet: PalletSettings, candidates: TruckInput[], lightOwnPallet?: boolean): string | null {
   const t = orderTotals(orders.flatMap(o => o.lines), pallet)
@@ -525,7 +599,7 @@ export function suggestTruck(orders: OrderInput[], pallet: PalletSettings, candi
     .filter(c => !(c.payloadKg && t.kgKnown && t.kg > c.payloadKg))
     .sort((a, b) => a.l * a.w * a.h - b.l * b.w * b.h)
   for (const c of list) {
-    const r = computeTrip({ truck: c, orders, pallet, lightOwnPallet })
+    const r = computeTrip({ truck: c, orders, pallet, lightOwnPallet, quick: true })
     if (r.fits) return c.id
   }
   return null

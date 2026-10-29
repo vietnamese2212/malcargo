@@ -54,10 +54,9 @@ for (const dev of DEVS) {
   await p.getByRole('button', { name: T('Diễn giải'), exact: true }).click(); await p.waitForTimeout(400); await scan(p, dev.name, 'Diễn giải từng mã'); await p.keyboard.press('Escape'); await p.waitForTimeout(200)
   await p.getByRole('button', { name: new RegExp(esc(T('Bảng đếm chân'))) }).click(); await p.waitForTimeout(300); await scan(p, dev.name, 'Bảng đếm chân')
   await p.evaluate(() => window.scrollTo(0, 0))
-  // bấm tên xe ⇒ bảng Thùng xe với danh sách xe thả sẵn; nút ✏ cạnh ô chọn xe ⇒ mở ô sửa thông số
-  await p.getByRole('button', { name: T('Đổi xe') }).click(); await p.waitForTimeout(500); await scan(p, dev.name, 'Bảng Thùng xe · danh sách xe')
-  const specDlg = p.getByRole('dialog', { name: T('Thùng xe') })
-  await specDlg.getByRole('button', { name: T('Chỉnh thông số thùng xe') }).click(); await p.waitForTimeout(200); await scan(p, dev.name, 'Bảng Thùng xe · mở thông số'); await p.keyboard.press('Escape'); await p.waitForTimeout(200)
+  // bấm ô tên xe ⇒ danh sách xe thả ngay dưới; cuối danh sách "Chỉnh thông số thùng xe" ⇒ bảng Thùng xe
+  await p.getByRole('button', { name: T('Đổi xe') }).click(); await p.waitForTimeout(500); await scan(p, dev.name, 'Danh sách chọn xe')
+  await p.locator('[data-popover]').getByRole('button', { name: T('Chỉnh thông số thùng xe') }).click(); await p.waitForTimeout(300); await scan(p, dev.name, 'Bảng Thùng xe'); await p.keyboard.press('Escape'); await p.waitForTimeout(200)
   await p.getByRole('button', { name: new RegExp('^' + esc(TP('Chuyến đang mở: {name}. Bấm để xem các chuyến'))) }).click(); await p.waitForTimeout(200); await scan(p, dev.name, 'Chọn chuyến'); await p.keyboard.press('Escape')
   // nhập từ Excel: điện thoại không có; máy tính soi cả 4 loại
   for (const [label, tabs] of [['Mã hàng', ['Của tôi', 'Mẫu chung']], ['Xe', ['Xe của tôi', 'Mẫu chung']], ['Đơn hàng', []], ['Các chuyến', []], ['Tài khoản & dữ liệu', []], ...(dev.isMobile ? [] : [['Nhập từ Excel', ['Xe', 'Đơn hàng', 'Chuyến']]])]) {

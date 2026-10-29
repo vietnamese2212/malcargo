@@ -88,6 +88,9 @@ for (const st of E.SAMPLE_TRIPS) {
   } else {
     ok(r.count.some(c => c.onTopOfOthers && os.some(o => o.lines.some(l => l.item.light && l.item.name === c.label))), `${st.name}: hàng nhẹ không nằm trên nóc`)
     ok(r.payloadPct >= 90, `${st.name}: chở ${r.payloadPct?.toFixed(0)}% tải (cần ≥ 90% để thử được)`)
+    // bốc xá TỚI SÁT CỬA (chủ dự án 29/10): khe ở cửa dưới 1,5 cạnh thùng — trước đó chừa ~0,7 m (khối cuối chồng 11 lớp)
+    const gap = trucks[st.vehicleId].l - Math.max(...r.plan.placed.map(b => b.x + b.l))
+    ok(gap < 380, `${st.name}: hàng tới sát cửa (khe ${gap} mm)`)
   }
   console.log(`• ${st.name} — ${r.plan.placedCount}/${r.plan.totalCount} · ${E.fmtKg(r.weightKg)} (${r.payloadPct?.toFixed(0)}% tải)${r.totals.pallets != null ? ` · ${r.totals.pallets} pallet` : ''}`)
 }

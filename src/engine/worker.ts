@@ -22,7 +22,7 @@ self.onmessage = (e: MessageEvent<WorkerReq>) => {
       for (const c of checkAll) {
         if (c.payloadKg && t.kgKnown && t.kg > c.payloadKg) { fits[c.id] = 'weight'; continue }
         if ((c.l * c.w * c.h) / 1e9 < t.m3) { fits[c.id] = 'space'; continue }
-        const r = computeTrip({ ...input, truck: c })
+        const r = computeTrip({ ...input, truck: c, quick: true })
         fits[c.id] = r.fits ? 'fit' : r.overweight ? 'weight' : 'space'
       }
     }

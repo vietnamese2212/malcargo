@@ -65,7 +65,7 @@ insert into public.catalog (id, kind, sort, data) values
   ('adm-v-p8t', 'vehicle', 6, '{"name":"Xe pallet 8 tấn","plate":"","kind":"pallet","l":7400,"w":2350,"h":2300,"payloadKg":8000}'),
   ('adm-v-p15t', 'vehicle', 7, '{"name":"Xe pallet 15 tấn","plate":"","kind":"pallet","l":9600,"w":2500,"h":2600,"payloadKg":15000}'),
   ('adm-v-c20', 'vehicle', 8, '{"name":"Container 20ft","plate":"","kind":"loose","l":5898,"w":2352,"h":2393,"payloadKg":28000,"container":true}'),
-  ('adm-v-c40', 'vehicle', 9, '{"name":"Container 40ft","plate":"","kind":"loose","l":12032,"w":2352,"h":2393,"payloadKg":28000,"container":true}'),
+  ('adm-v-c40', 'vehicle', 9, '{"name":"Container 40ft","plate":"","kind":"loose","l":12032,"w":2352,"h":2393,"payloadKg":28500,"container":true}'),
   ('adm-i-st180', 'item', 0, '{"code":"MAU-ST180","name":"Sữa 180ml x48","l":420,"w":255,"h":130,"kg":9.85,"perPallet":110,"maxLayers":11,"light":false}'),
   ('adm-i-st110', 'item', 1, '{"code":"MAU-ST110","name":"Sữa 110ml x48","l":420,"w":255,"h":100,"kg":6.2,"perPallet":140,"maxLayers":14,"looseLayers":28,"light":false}'),
   ('adm-i-scu180', 'item', 2, '{"code":"MAU-SCU180","name":"Sữa chua 180ml x48","l":420,"w":255,"h":130,"kg":10.05,"perPallet":110,"maxLayers":11,"light":false}'),
