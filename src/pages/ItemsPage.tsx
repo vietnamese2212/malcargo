@@ -90,7 +90,11 @@ export default function ItemsPage() {
                       <span className="num hidden text-right text-sm text-slate-700 sm:block">{fmtDims(i.l, i.w, i.h)}</span>
                       <Num v={i.kg == null ? null : fmtDec(i.kg, 2)} />
                       <Num v={i.perPallet == null ? null : fmtInt(i.perPallet)} />
-                      <Num v={i.maxLayers == null ? null : `≤ ${i.maxLayers}`} />
+                      {/* chồng trên pallet; dòng nhỏ dưới: chồng khi xếp xá (đã khai thì mới hiện) */}
+                      <span className="num hidden text-right text-sm text-slate-700 sm:block">
+                        {i.maxLayers == null ? <span className="text-slate-500">—</span> : `≤ ${i.maxLayers}`}
+                        {i.looseLayers != null && <span className="block text-[12px] text-slate-600">{t('xá ≤ {n}', { n: i.looseLayers })}</span>}
+                      </span>
                       <span className="shrink-0 text-right">{i.light && <Badge tone="amber">{t('Hàng nhẹ')}</Badge>}</span>
                     </button>
                   </div>
@@ -127,6 +131,7 @@ export function ItemRow({ item: i, onClick, right }: { item: Item; onClick?: () 
           {i.kg != null && <span className="num">{fmtDec(i.kg, 2)} kg</span>}
           {i.light && <Badge tone="amber">{t('Hàng nhẹ')}</Badge>}
           {i.maxLayers != null && <Badge>{t('≤ {n} lớp', { n: i.maxLayers })}</Badge>}
+          {i.looseLayers != null && <Badge>{t('xá ≤ {n} lớp', { n: i.looseLayers })}</Badge>}
           {i.perPallet != null && <Badge>{i.perPallet}/pallet</Badge>}
         </div>
       </div>

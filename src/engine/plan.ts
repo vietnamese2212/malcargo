@@ -327,7 +327,8 @@ function cartonGroupsOf(orders: OrderInput[]): G[] {
       const g: G = {
         key: `${doKey}|${it.id}`, label: it.name || it.code, doKey, doLabel: o.name,
         count: ln.qty, l: it.l, w: it.w, h: it.h, weightKg: it.kg, assumed: false,
-        maxLayers: it.maxLayers, onTop: it.light,
+        // xếp xá chồng được cao hơn trên pallet (chủ dự án 29/10: 110ml pallet 14 lớp, xá 28) — chưa khai thì như pallet
+        maxLayers: it.looseLayers || it.maxLayers, onTop: it.light,
         meta: { label: it.name || it.code, orderName: o.name, orderId: o.id, itemId: it.id, isPallet: false, colorKey: it.id },
       }
       byItem.set(it.id, g); out.push(g)

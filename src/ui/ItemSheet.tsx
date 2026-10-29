@@ -7,7 +7,7 @@ import { removeCatalog, saveCatalog, useAuth } from '../data/cloud'
 import { t, tx } from '../i18n'
 import { Badge, Button, Confirm, Field, NumInput, Sheet, Switch, TextInput, fmtDims, fmtInt } from './kit'
 
-const blank = (owner: Item['owner'] = 'me'): Item => ({ id: newId(), owner, code: '', name: '', l: 0, w: 0, h: 0, kg: null, perPallet: null, maxLayers: null, light: false, updatedAt: 0 })
+const blank = (owner: Item['owner'] = 'me'): Item => ({ id: newId(), owner, code: '', name: '', l: 0, w: 0, h: 0, kg: null, perPallet: null, maxLayers: null, looseLayers: null, light: false, updatedAt: 0 })
 
 /** `asSample`: admin thêm một mã MẪU CHUNG mới. `onUnlink`: mở từ một dòng hàng của đơn — có nút "Bỏ khỏi đơn"
  *  thay cho nút xoá mã khỏi danh mục (ở màn chuyến, xoá hẳn mã là quá tay). */
@@ -94,9 +94,13 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample, onUnlink }: 
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('Khối lượng')} hint={t('Để trống nếu chưa biết')}><NumInput value={f.kg} onChange={v => set('kg', v)} suffix={t('kg/thùng')} placeholder="0" /></Field>
-          <Field label={t('Chồng tối đa')} hint={t('Trống = theo chiều cao xe')}><NumInput value={f.maxLayers} onChange={v => set('maxLayers', v == null ? null : Math.max(1, Math.round(v)))} suffix={t('lớp')} placeholder={t('Tự động')} /></Field>
+          <Field label={t('Số thùng trên 1 pallet')} hint={t('Chỉ cần khi chở bằng xe pallet')}><NumInput value={f.perPallet} onChange={v => set('perPallet', v == null ? null : Math.round(v))} suffix={t('thùng')} placeholder="—" /></Field>
         </div>
-        <Field label={t('Số thùng trên 1 pallet')} hint={t('Chỉ cần khi chở bằng xe pallet')}><NumInput value={f.perPallet} onChange={v => set('perPallet', v == null ? null : Math.round(v))} suffix={t('thùng')} placeholder="—" /></Field>
+        {/* số lớp chồng: trên pallet và khi xếp XÁ khác nhau (chủ dự án 29/10: 110ml pallet 14 lớp, xá 28) — xá để trống = như pallet */}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t('Chồng trên pallet')} hint={t('Trống = theo chiều cao xe')}><NumInput value={f.maxLayers} onChange={v => set('maxLayers', v == null ? null : Math.max(1, Math.round(v)))} suffix={t('lớp')} placeholder={t('Tự động')} /></Field>
+          <Field label={t('Chồng khi xếp xá')} hint={t('Trống = như trên pallet')}><NumInput value={f.looseLayers ?? null} onChange={v => set('looseLayers', v == null ? null : Math.max(1, Math.round(v)))} suffix={t('lớp')} placeholder={f.maxLayers ? String(f.maxLayers) : t('Tự động')} /></Field>
+        </div>
         <Switch checked={f.light} onChange={v => set('light', v)} label={t('Hàng nhẹ — cho lên trên hàng khác')} hint={t('Túi, hộp giấy nhẹ… được xếp lên mặt các khối hàng nặng')} />
         {sample && item && <p className="text-xs text-slate-600">{t('Mẫu gốc: thùng {dims} mm, số tham khảo, nên đo lại thùng thật.', { dims: fmtDims(item?.l ?? 0, item?.w ?? 0, item?.h ?? 0) })}</p>}
         {onUnlink && (

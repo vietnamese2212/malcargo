@@ -78,6 +78,23 @@ for (const [hash, label, typed] of [['#/trip/sample-t1', 'chuyến mẫu', '200'
   ok(p2.maxH === 1500, `Cài đặt pallet cạnh nút Pallet: cao tối đa (cả đế) lưu ${p2.maxH}`)
 }
 
+// Chọn xe kiểu ô chọn (chủ dự án 29/10): bấm tên xe trên dải thông số ⇒ danh sách xe thả sẵn; chọn ⇒ đổi xe, bảng tự đóng
+{
+  const q = await (await b.newContext(DEVICES[1])).newPage()
+  await q.goto(srv.base + '#/trip/sample-t2', { waitUntil: 'networkidle' }); await q.waitForTimeout(1500)
+  await q.getByRole('button', { name: 'Đổi xe' }).click(); await q.waitForTimeout(400)
+  const dlg = q.getByRole('dialog', { name: 'Thùng xe' })
+  const listShown = await dlg.getByLabel('Tìm xe').isVisible()
+  await dlg.getByText('Container 20ft', { exact: true }).click(); await q.waitForTimeout(800)
+  const st = await q.evaluate(() => JSON.parse(localStorage.getItem('malcargo-data-v1')).state)
+  ok(listShown && !(await dlg.count()) && st.trips.some(t => !t.id.startsWith('sample-') && t.vehicleId === 'adm-v-c20'),
+    `bấm tên xe ⇒ danh sách thả sẵn (${listShown}), chọn Container 20ft ⇒ đổi xe, bảng đóng`)
+  // nút ✏ cạnh ô chọn xe ⇒ ô sửa thông số
+  await q.getByRole('button', { name: 'Đổi xe' }).click(); await q.waitForTimeout(400)
+  await dlg.getByRole('button', { name: 'Chỉnh thông số thùng xe' }).click(); await q.waitForTimeout(200)
+  ok(await dlg.getByLabel('Dài lòng thùng').isVisible() && !(await dlg.getByLabel('Tìm xe').count()), 'nút ✏ ⇒ ô sửa thông số, danh sách xe gấp lại')
+}
+
 // Đổi Thùng rời ↔ Pallet: khung 3D không đổi cỡ (chủ dự án 29/10: "khung xe nằm im, chỉ thay đổi hàng") — dải
 // thông số có thêm nút pallet / công tắc hàng nhẹ cũng không được bóp khung
 for (const dev of DEVICES) {

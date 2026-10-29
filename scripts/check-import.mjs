@@ -24,7 +24,9 @@ const has = (r, line, re) => r.errors.some(e => e.includes(`dòng ${line}:`) && 
 console.log('• Tiêu đề cột')
 for (const k of ['items', 'vehicles', 'orders', 'trips']) ok(I.headError(k, head(k)) === null, `${k}: tiêu đề file mẫu tiếng Việt đúng mẫu`)
 ok(I.headError('orders', ['Order name *', 'Delivery point', 'Code *', 'Cartons *']) === null, 'tiêu đề tiếng Anh, có dấu * ⇒ đúng mẫu')
-ok(I.headError('items', ['mã hàng', 'TÊN HÀNG', 'Dài (mm)', 'Rộng (mm)', 'Cao (mm)', 'Kg/thùng', 'Thùng/pallet', 'Chồng tối đa (lớp)', 'Hàng nhẹ (x)', 'Ghi chú']) === null, 'hoa / thường, không dấu *, thừa cột ở cuối ⇒ vẫn đúng mẫu')
+ok(I.headError('items', ['mã hàng', 'TÊN HÀNG', 'Dài (mm)', 'Rộng (mm)', 'Cao (mm)', 'Kg/thùng', 'Thùng/pallet', 'Chồng tối đa (lớp)', 'Hàng nhẹ (x)', 'Chồng xá (lớp)', 'Ghi chú']) === null, 'hoa / thường, không dấu *, thừa cột ở cuối ⇒ vẫn đúng mẫu')
+// cột "Chồng xá" thêm 29/10 ở cuối: file mẫu Mã hàng cũ (9 cột) vẫn nhận, chồng xá trống = như pallet
+ok(I.headError('items', ['Mã hàng *', 'Tên hàng *', 'Dài (mm) *', 'Rộng (mm) *', 'Cao (mm) *', 'Kg/thùng *', 'Thùng/pallet *', 'Chồng tối đa (lớp) *', 'Hàng nhẹ (x)']) === null, 'file mẫu Mã hàng cũ thiếu cột Chồng xá ⇒ vẫn nhận')
 ok(I.headError('trips', ['Tên chuyến', 'Xe (tên hoặc biển số)', 'Tên đơn']) === null, 'file mẫu Chuyến đời trước (cột C "Tên đơn") ⇒ vẫn nhận')
 const swap = I.headError('items', ['Mã hàng', 'Tên hàng', 'Rộng (mm)', 'Dài (mm)', 'Cao (mm)', 'Kg/thùng', 'Thùng/pallet', 'Chồng tối đa (lớp)', 'Hàng nhẹ (x)'])
 ok(/cột C/.test(swap ?? '') && /Dài \(mm\)/.test(swap ?? ''), `đảo cột ⇒ sai mẫu: ${swap}`)
@@ -43,6 +45,11 @@ r = parse({ items: [head('items'), ['SP1', 'Hộp lẻ', '420,5', '255.5', 100, 
 const sp1 = r.items.find(i => i.code === 'SP1')
 ok(!r.errors.length && sp1?.l === 420.5 && sp1?.w === 255.5 && sp1?.kg === 9.85 && sp1?.perPallet === 140 && sp1?.light === false, 'kích thước + kg số lẻ (dấu phẩy hay chấm) ⇒ nhận; hàng nhẹ để trống ⇒ không nhẹ')
 ok(r.items.find(i => i.code === 'SP2')?.light === true, 'Hàng nhẹ ghi x ⇒ hàng nhẹ')
+{
+  const ex = parse({ items: tpl('items') }).items, lx = parse({ items: [head('items'), ['SP4', 'Xá lẻ', 420, 255, 100, 6.2, 140, 14, '', '12,5']] })
+  ok(ex.find(i => i.code === 'SP001')?.looseLayers === 28 && ex.find(i => i.code === 'SP002')?.looseLayers == null && sp1?.looseLayers == null && !lx.items.length && has(lx, 2, /Chồng xá/),
+    'cột Chồng xá: dòng ví dụ 28 · trống ⇒ chưa khai (như pallet) · số lẻ ⇒ lỗi')
+}
 r = parse({ items: [head('items'), ['SP3', 'Thiếu', 420, 255, 100, '', '', '', '']] })
 ok(!r.items.length && ['Kg/thùng', 'Thùng/pallet', 'Chồng tối đa \\(lớp\\)'].every(c => has(r, 2, new RegExp(`thiếu ${c}`))) && !r.errors.some(e => /Hàng nhẹ/.test(e)),
   'nhập file: thiếu kg / thùng-pallet / số lớp ⇒ lỗi; hàng nhẹ để trống thì không')

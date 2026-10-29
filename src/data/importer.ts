@@ -40,8 +40,10 @@ export const SHEETS: SheetDef[] = [
       // nhập file: mọi cột bắt buộc trừ Hàng nhẹ (trống = không nhẹ) — chủ dự án 29/10; form Mã hàng vẫn cho để trống kg / pallet / lớp
       { label: 'Rộng (mm)', req: true, w: 10, rule: DIM }, { label: 'Cao (mm)', req: true, w: 10, rule: DIM }, { label: 'Kg/thùng', req: true, w: 10, rule: KG }, // i18n-key
       { label: 'Thùng/pallet', req: true, w: 12, rule: PER_PALLET }, { label: 'Chồng tối đa (lớp)', req: true, w: 16, rule: LAYERS }, { label: 'Hàng nhẹ (x)', w: 12, pick: 'x' }, // i18n-key
+      // chồng khi XẾP XÁ (chủ dự án 29/10: 110ml pallet 14 lớp, xá 28) — trống = như trên pallet; cột thêm sau, ở cuối
+      { label: 'Chồng xá (lớp)', w: 14, rule: LAYERS, late: true }, // i18n-key
     ],
-    sample: [['SP001', 'Sữa 110ml x48', 420, 255, 100, 6.2, 140, 14, ''], ['SP002', 'Thạch túi 110ml x24', 310, 130, 130, 3.08, 216, 8, 'x']], // i18n-ok
+    sample: [['SP001', 'Sữa 110ml x48', 420, 255, 100, 6.2, 140, 14, '', 28], ['SP002', 'Thạch túi 110ml x24', 310, 130, 130, 3.08, 216, 8, 'x', '']], // i18n-ok
   },
   {
     key: 'vehicles', title: 'Xe', file: 'malcargo-mau-xe.xlsx', // i18n-key
@@ -167,16 +169,16 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     const dup = itemAt.get(key(code))
     if (dup) { err('items', ln, t('mã "{code}" trùng dòng {line}', { code, line: dup })); continue }
     itemAt.set(key(code), ln)
-    const [l, w, h, kg, pp, ml] = [2, 3, 4, 5, 6, 7].map(i => cell('items', ln, r, i))
+    const [l, w, h, kg, pp, ml, lx] = [2, 3, 4, 5, 6, 7, 9].map(i => cell('items', ln, r, i))
     const light = str(r[8]), badLight = !!light && !YES.test(light) && !NO.test(light)
     if (badLight) err('items', ln, t('{col}: ghi x hoặc để trống', { col: colHead(cols('items')[8]) }))
     // gõ cm vào ô mm (cùng ngưỡng cảnh báo của form Mã hàng) — báo cùng lúc với lỗi khác của dòng
     const cm = l != null && w != null && h != null && l < 100 && w < 100 && h < 100
     if (cm) err('items', ln, t('{code}: cả 3 cạnh dưới 100 mm — có phải đang ghi cm? (40 cm = 400 mm)', { code }))
-    if (l == null || w == null || h == null || [kg, pp, ml].includes(undefined) || badLight || cm) continue
+    if (l == null || w == null || h == null || [kg, pp, ml, lx].includes(undefined) || badLight || cm) continue
     const old = mineItems.find(i => key(i.code) === key(code))
     if (old) out.updated++
-    out.items.push({ id: old?.id ?? newId(), owner: 'me', code, name, l, w, h, kg: kg ?? null, perPallet: pp ?? null, maxLayers: ml ?? null, light: YES.test(light), updatedAt: 0 })
+    out.items.push({ id: old?.id ?? newId(), owner: 'me', code, name, l, w, h, kg: kg ?? null, perPallet: pp ?? null, maxLayers: ml ?? null, looseLayers: lx ?? null, light: YES.test(light), updatedAt: 0 })
   }
 
   // ── Xe (một biển số — hoặc một tên khi không biển số — chỉ một dòng)

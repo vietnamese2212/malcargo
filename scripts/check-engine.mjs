@@ -92,6 +92,20 @@ for (const st of E.SAMPLE_TRIPS) {
   console.log(`• ${st.name} — ${r.plan.placedCount}/${r.plan.totalCount} · ${E.fmtKg(r.weightKg)} (${r.payloadPct?.toFixed(0)}% tải)${r.totals.pallets != null ? ` · ${r.totals.pallets} pallet` : ''}`)
 }
 
+// Chồng khi XẾP XÁ (`looseLayers`, chủ dự án 29/10: 110ml pallet 14 lớp, xá 28): xe thùng rời chồng theo số xá,
+// chưa khai thì như pallet; xe pallet không đổi
+{
+  const base = { ...items['adm-i-st110'], looseLayers: null }
+  const loose = lx => E.computeTrip({ truck: trucks['adm-v-5t'], orders: [{ id: 'x', name: 'Đơn X', place: '', lines: [{ item: { ...base, looseLayers: lx }, qty: 1800 }] }], pallet: E.DEFAULT_PALLET_SETTINGS })
+  const top = r => Math.max(...r.count.flatMap(c => c.stacks.map(([, l]) => l)))
+  const a = loose(null), b = loose(28)
+  invariants('chồng xá 28', b)
+  ok(top(a) <= 14 && top(b) > 14 && top(b) <= 20, `xe xá: chưa khai chồng xá ⇒ ≤ 14 lớp (${top(a)}); khai 28 ⇒ quá 14, ≤ 20 lớp vừa cao xe 2 m (${top(b)})`)
+  const pal = lx => E.computeTrip({ truck: trucks['adm-v-p8t'], orders: [{ id: 'x', name: 'Đơn X', place: '', lines: [{ item: { ...base, looseLayers: lx }, qty: 500 }] }], pallet: E.DEFAULT_PALLET_SETTINGS })
+  ok(JSON.stringify(pal(null).count) === JSON.stringify(pal(28).count), 'xe pallet: chồng xá không làm đổi pallet')
+  console.log(`• Chồng xá — 1.800 thùng 110ml xe 5 tấn: như pallet ${top(a)} lớp · khai xá 28 ⇒ ${top(b)} lớp`)
+}
+
 const cases = [
   ['Chuyến mẫu · xe 5 tấn', trucks['adm-v-5t'], sample],
   ['Chuyến mẫu · xe 1,5 tấn (quá tải)', trucks['adm-v-1t5'], sample],

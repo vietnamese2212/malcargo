@@ -41,11 +41,15 @@ for (const dev of DEVICES) {
     await p.evaluate(() => window.scrollTo(0, 0))
     await p.getByRole('button', { name: 'Đổi xe' }).click(); await p.waitForTimeout(400)
     await p.screenshot({ path: `${OUT}/${dev.name}-spec.jpg`, type: 'jpeg', quality: 78 })
-    await p.getByRole('dialog', { name: 'Thùng xe' }).locator('button[aria-expanded="false"]').first().click(); await p.waitForTimeout(200)
+    await p.getByRole('dialog', { name: 'Thùng xe' }).getByRole('button', { name: 'Chỉnh thông số thùng xe' }).click(); await p.waitForTimeout(200)
     await p.screenshot({ path: `${OUT}/${dev.name}-spec-open.jpg`, type: 'jpeg', quality: 78 })
+    // danh sách xe gấp trong ô xe đang chọn — bấm để mở, chọn xong tự gấp
+    await p.getByRole('dialog', { name: 'Thùng xe' }).getByRole('button', { name: /^Chọn xe khác: / }).click(); await p.waitForTimeout(300)
+    await p.screenshot({ path: `${OUT}/${dev.name}-spec-pick.jpg`, type: 'jpeg', quality: 78 })
     await p.getByRole('dialog', { name: 'Thùng xe' }).getByText('Xe pallet 8 tấn').click(); await p.waitForTimeout(4500)
     await p.keyboard.press('Escape'); await p.waitForTimeout(200)
     await p.screenshot({ path: `${OUT}/${dev.name}-pallet.jpg`, type: 'jpeg', quality: 78 })
+    // bấm tên xe ⇒ danh sách thả sẵn, chọn xong bảng tự đóng
     await p.getByRole('button', { name: 'Đổi xe' }).click(); await p.waitForTimeout(400)
     await p.getByRole('dialog', { name: 'Thùng xe' }).getByText('Xe tải 5 tấn').click(); await p.waitForTimeout(300)
     await p.keyboard.press('Escape'); await p.waitForTimeout(200)

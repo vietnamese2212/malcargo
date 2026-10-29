@@ -25,7 +25,7 @@ export const ADMIN_VEHICLES: Vehicle[] = [
 // và số lớp chồng lấy theo thùng thật trong kho; tên ghi chung, không nhãn hiệu.
 export const ADMIN_ITEMS: Item[] = [
   { id: 'adm-i-st180', owner: 'admin', code: 'MAU-ST180', name: 'Sữa 180ml x48', l: 420, w: 255, h: 130, kg: 9.85, perPallet: 110, maxLayers: 11, light: false, updatedAt: T0 },
-  { id: 'adm-i-st110', owner: 'admin', code: 'MAU-ST110', name: 'Sữa 110ml x48', l: 420, w: 255, h: 100, kg: 6.2, perPallet: 140, maxLayers: 14, light: false, updatedAt: T0 },
+  { id: 'adm-i-st110', owner: 'admin', code: 'MAU-ST110', name: 'Sữa 110ml x48', l: 420, w: 255, h: 100, kg: 6.2, perPallet: 140, maxLayers: 14, looseLayers: 28, light: false, updatedAt: T0 },
   { id: 'adm-i-scu180', owner: 'admin', code: 'MAU-SCU180', name: 'Sữa chua 180ml x48', l: 420, w: 255, h: 130, kg: 10.05, perPallet: 110, maxLayers: 11, light: false, updatedAt: T0 },
   { id: 'adm-i-th170', owner: 'admin', code: 'MAU-TH170', name: 'Sữa thạch 170ml x48', l: 430, w: 250, h: 130, kg: 9.5, perPallet: 100, maxLayers: 11, light: false, updatedAt: T0 },
   { id: 'adm-i-c100', owner: 'admin', code: 'MAU-C100', name: 'Sữa chua chai 100ml x48', l: 430, w: 250, h: 100, kg: 5.9, perPallet: 143, maxLayers: 14, light: false, updatedAt: T0 },

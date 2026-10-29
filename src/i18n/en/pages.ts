@@ -47,6 +47,8 @@ export const PAGES: Record<string, string> = {
   'Mẫu chung: bấm một mã để sửa, lưu lại thành mã của bạn': 'Shared: tap an item to edit and save it as your own',
   '{n} / {total} mã': '{n} / {total} {total:item|items}',
   '≤ {n} lớp': '≤ {n} {n:layer|layers}',
+  'xá ≤ {n} lớp': 'loose ≤ {n} {n:layer|layers}',
+  'xá ≤ {n}': 'loose ≤ {n}',
 
   // Một đơn
   'Không thấy đơn': 'Order not found',

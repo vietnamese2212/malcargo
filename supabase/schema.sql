@@ -67,7 +67,7 @@ insert into public.catalog (id, kind, sort, data) values
   ('adm-v-c20', 'vehicle', 8, '{"name":"Container 20ft","plate":"","kind":"loose","l":5898,"w":2352,"h":2393,"payloadKg":28000,"container":true}'),
   ('adm-v-c40', 'vehicle', 9, '{"name":"Container 40ft","plate":"","kind":"loose","l":12032,"w":2352,"h":2393,"payloadKg":28000,"container":true}'),
   ('adm-i-st180', 'item', 0, '{"code":"MAU-ST180","name":"Sữa 180ml x48","l":420,"w":255,"h":130,"kg":9.85,"perPallet":110,"maxLayers":11,"light":false}'),
-  ('adm-i-st110', 'item', 1, '{"code":"MAU-ST110","name":"Sữa 110ml x48","l":420,"w":255,"h":100,"kg":6.2,"perPallet":140,"maxLayers":14,"light":false}'),
+  ('adm-i-st110', 'item', 1, '{"code":"MAU-ST110","name":"Sữa 110ml x48","l":420,"w":255,"h":100,"kg":6.2,"perPallet":140,"maxLayers":14,"looseLayers":28,"light":false}'),
   ('adm-i-scu180', 'item', 2, '{"code":"MAU-SCU180","name":"Sữa chua 180ml x48","l":420,"w":255,"h":130,"kg":10.05,"perPallet":110,"maxLayers":11,"light":false}'),
   ('adm-i-th170', 'item', 3, '{"code":"MAU-TH170","name":"Sữa thạch 170ml x48","l":430,"w":250,"h":130,"kg":9.5,"perPallet":100,"maxLayers":11,"light":false}'),
   ('adm-i-c100', 'item', 4, '{"code":"MAU-C100","name":"Sữa chua chai 100ml x48","l":430,"w":250,"h":100,"kg":5.9,"perPallet":143,"maxLayers":14,"light":false}'),

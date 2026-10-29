@@ -64,8 +64,9 @@ export default function TripPage({ id }: { id: string }) {
   const removeOrder = useData(s => s.removeOrder)
   const items = useAllItems()
   const vehicles = useAllVehicles()
-  // bảng Thùng xe: null = đóng; more = phần thông số đang mở (bấm chip Lòng / Tải / nút chỉnh ⇒ mở sẵn, bấm tên xe ⇒ gấp — để đổi xe)
-  const [spec, setSpec] = useState<{ more: boolean } | null>(null)
+  // bảng Thùng xe: null = đóng; more = phần thông số đang mở (bấm chip Lòng / Tải / nút chỉnh ⇒ mở sẵn);
+  // pick = bấm tên xe ⇒ danh sách xe thả sẵn, chọn xong đóng bảng
+  const [spec, setSpec] = useState<{ more: boolean; pick?: boolean } | null>(null)
 
   const vehicle = findVehicle(vehicles, trip?.vehicleId ?? null)
   const candidates = useMemo(() => pickPool(vehicles, vehicle).map(truckOf), [vehicles, vehicle])
@@ -296,7 +297,7 @@ export default function TripPage({ id }: { id: string }) {
         <section data-scene className={full
           ? 'fixed inset-0 z-40 flex flex-col bg-[#e7ecf2] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)]'
           : cx('sticky top-12 z-10 flex flex-col bg-[#e7ecf2] sm:top-14 lg:relative lg:top-0 lg:order-2 lg:h-full', kb && 'max-lg:relative max-lg:top-0')}>
-          <SpecStrip vehicle={vehicle} pallet={pallet} keep={full} onOpen={more => setSpec({ more })} onKind={k => patchVehicle({ kind: k })}
+          <SpecStrip vehicle={vehicle} pallet={pallet} keep={full} onOpen={more => setSpec({ more, pick: !more })} onKind={k => patchVehicle({ kind: k })}
             lightOwn={tripOrders.some(o => o.lines.some(l => l.qty > 0 && l.item.light)) ? !!trip.lightOwnPallet : null}
             onLightOwn={v => upsertTrip({ ...trip, lightOwnPallet: v })} onPallet={() => setPalletOpen(true)} />
           {/* điện thoại: khung 3D cao cố định (nửa màn trừ một hàng thông số) — dải thông số xuống dòng không bóp khung */}
@@ -356,7 +357,7 @@ export default function TripPage({ id }: { id: string }) {
 
             {spec && (
               <SpecPopup vehicle={vehicle} vehicles={vehicles} suggestion={suggestion} fits={hasCargo ? fits : null} sharedWith={vehicleSharedWith}
-                more={spec.more} onMore={more => setSpec({ more })}
+                more={spec.more} pick={spec.pick} onMore={more => setSpec({ more })}
                 onClose={() => setSpec(null)} onPick={pickVehicle} onPatch={patchVehicle}
                 onEdit={v => setEditVehicle({ v })} onAdd={() => setEditVehicle({ v: null })} />
             )}
@@ -784,12 +785,14 @@ function TitleBlock({ r, busy, error, hasCargo, vehicle, tripName, orders, sug, 
       <button onClick={() => setMore(v => !v)} aria-expanded={more} aria-label={t('Kết quả: {head}. Bấm để xem chi tiết', { head })}
         className={cx(frame, 'flex max-w-full items-stretch text-left transition-opacity', busy && 'opacity-80')}>
         <span className={cx('flex items-center gap-1 whitespace-nowrap px-2 py-1 text-[12px] font-semibold', r.fits ? 'bg-emerald-50 text-emerald-900' : 'bg-red-50 text-red-900')}>
-          {busy ? <Loader2 size={13} className="animate-spin" /> : r.fits ? <Check size={13} /> : <AlertTriangle size={13} />}{head}
+          {busy ? <Loader2 size={13} className="shrink-0 animate-spin" /> : r.fits ? <Check size={13} className="shrink-0" /> : <AlertTriangle size={13} className="shrink-0" />}{head}
         </span>
         <Cell label={pal ? 'Pallet' : t('Thùng')} value={count} bad={pal ? palPlaced < palTotal : left > 0} className="max-sm:hidden" />
         <Cell label={t('Tải')} value={r.payloadPct != null ? `${fmtDec(r.payloadPct, 0)}%` : fmtKgShort(r.weightKg)} pct={r.payloadPct} />
         <Cell label={t('Khối')} value={`${fmtDec(p.volumePct, 0)}%`} pct={p.volumePct} />
-        <Cell label={t('Sàn')} value={`${fmtDec(p.lengthUsedPct, 0)}%`} pct={p.lengthUsedPct} />
+        {/* màn hẹp (360px) / chữ trạng thái dài ("Thiếu 5 pallet") trên điện thoại: bớt ô Sàn (vẫn có trong chi tiết ▾) —
+            dải không chui dưới nút góc phải */}
+        <Cell label={t('Sàn')} value={`${fmtDec(p.lengthUsedPct, 0)}%`} pct={p.lengthUsedPct} className={r.fits ? 'max-[379px]:hidden' : 'max-sm:hidden'} />
         <span className="grid place-items-center border-l border-slate-300 px-1 text-slate-500"><ChevronDown size={14} className={cx('transition-transform', more && 'rotate-180')} /></span>
       </button>
       {more && (
@@ -917,9 +920,9 @@ function ViewMenu({ view, walls, onView, onWalls }: { view: ViewPreset; walls: '
 }
 
 // ── Bảng Thùng xe: chỉnh xe đang dùng + đổi xe khác (tìm, ô chọn, thử ✓/✗ từng xe, sửa) ───────
-function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, more, onMore, onClose, onPick, onPatch, onEdit, onAdd }: {
+function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, more, pick, onMore, onClose, onPick, onPatch, onEdit, onAdd }: {
   vehicle?: Vehicle; vehicles: Vehicle[]; suggestion: string | null; fits: Record<string, FitCheck> | null; sharedWith: number
-  more: boolean; onMore: (v: boolean) => void
+  more: boolean; pick?: boolean; onMore: (v: boolean) => void
   onClose: () => void; onPick: (id: string) => void; onPatch: (p: Partial<Vehicle>) => void; onEdit: (v: Vehicle) => void; onAdd: () => void
 }) {
   const pallet = useData(s => s.pallet)
@@ -927,6 +930,16 @@ function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, more, onMo
   const { kb } = useVisualView()
   const [q, setQ] = useState('')
   const [onlyFit, setOnlyFit] = useState(false)
+  // danh sách xe GẤP trong ô chọn xe, bấm mới thả (chủ dự án 29/10: "để hết ở dưới hơi khó nhìn, rối mắt"); bấm tên
+  // xe trên dải thông số (`pick`) ⇒ thả sẵn, chọn xong đóng luôn bảng như ô chọn ("chọn ở phía trên thì ra luôn
+  // validate xe"). Chưa có xe thì thả sẵn. Thả danh sách ⇒ gấp phần thông số và ngược lại — một lúc một việc.
+  const [picking, setPicking] = useState(!!pick)
+  const [closeOnPick, setCloseOnPick] = useState(!!pick)
+  const showList = picking || !vehicle
+  useEffect(() => { if (more) setPicking(false) }, [more])
+  const togglePick = () => { if (!picking) onMore(false); setPicking(!picking) }
+  const toggleMore = () => { if (!more) { setPicking(false); setCloseOnPick(false) } onMore(!more) }
+  const choose = (id: string) => { onPick(id); setPicking(false); if (closeOnPick) onClose() }
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && !document.querySelector('[data-sheet]')) onClose() }
     window.addEventListener('keydown', k)
@@ -946,10 +959,8 @@ function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, more, onMo
     const on = v.id === vehicle?.id
     return (
       <div key={v.id} className={cx('flex items-center', on && 'bg-brand-50')}>
-        <button onClick={() => onPick(v.id)} aria-pressed={on} className="flex min-w-0 flex-1 items-center gap-2.5 py-2 pl-3 pr-1 text-left hover:bg-black/[.03]">
-          <span className={cx('grid h-[18px] w-[18px] shrink-0 place-items-center rounded border-2', on ? 'border-brand-500 bg-brand-500 text-white' : 'border-slate-400 bg-white')}>
-            {on && <Check size={12} strokeWidth={3} />}
-          </span>
+        <button onClick={() => choose(v.id)} aria-pressed={on} className="flex min-w-0 flex-1 items-center gap-2 py-2 pl-2.5 pr-1 text-left hover:bg-black/[.03]">
+          <span className="grid w-4 shrink-0 place-items-center text-brand-600">{on && <Check size={15} strokeWidth={3} />}</span>
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-1.5">
               <span className="min-w-0 break-words text-sm font-semibold leading-snug text-slate-900">{tx(v.name)}</span>
@@ -977,27 +988,62 @@ function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, more, onMo
         <IconButton label={t('Đóng')} onClick={onClose}><X size={19} /></IconButton>
       </div>
       <div data-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        {vehicle && (
-          <div className="space-y-2.5 px-3 py-3">
-            {/* XE: lòng thùng + tải — của riêng xe này. Gấp thành một dòng tóm tắt, bấm mới mở ô sửa (cùng kiểu Block) */}
-            <div className="rounded-lg border border-slate-300">
-              <button type="button" onClick={() => onMore(!more)} aria-expanded={more} title={t('Chỉnh thông số thùng xe')}
-                className={cx('flex w-full items-center gap-2 rounded-t-lg px-3 py-2 text-left hover:bg-slate-50', more ? 'border-b border-slate-200' : 'rounded-b-lg')}>
-                <TruckGlyph pallet={vehicle.kind === 'pallet'} small />
-                <span className="min-w-0 flex-1">
-                  <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <span className="min-w-0 break-words text-sm font-semibold leading-snug text-slate-900">{tx(vehicle.name)}</span>
-                    <OwnerTag v={vehicle} />
+        <div className="space-y-2.5 px-3 py-3">
+          {/* XE = Ô CHỌN kiểu danh sách thả xuống (chủ dự án 29/10: "chọn xe trong cái validate đó, có thêm edit nếu muốn
+              sửa"): bấm ô ⇒ danh sách xe thả ngay dưới, chọn xong tự gấp; nút ✏ cạnh ô ⇒ sửa thông số xe đang chọn */}
+          <div>
+            {vehicle && (
+              <div className="flex items-stretch gap-2">
+                <button type="button" onClick={togglePick} aria-expanded={showList} aria-label={t('Chọn xe khác: {name}', { name: tx(vehicle.name) })}
+                  className={cx('flex min-w-0 flex-1 items-center gap-2 rounded-lg border bg-white px-3 py-2 text-left hover:bg-slate-50', showList ? 'border-brand-500 ring-2 ring-brand-100' : 'border-slate-400')}>
+                  <TruckGlyph pallet={vehicle.kind === 'pallet'} small />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span className="min-w-0 break-words text-sm font-semibold leading-snug text-slate-900">{tx(vehicle.name)}</span>
+                      <OwnerTag v={vehicle} />
+                    </span>
+                    <span className="num block text-[12px] leading-snug text-slate-600">
+                      <span className="whitespace-nowrap">{m(vehicle.l)} × {m(vehicle.w)} × {m(vehicle.h)} m</span>
+                      {vehicle.payloadKg != null && <> · <span className="whitespace-nowrap">{fmtKgShort(vehicle.payloadKg)}</span></>}
+                      {' · '}{vehicle.kind === 'pallet' ? <span className="whitespace-nowrap">pallet {m(pallet.l)} × {m(pallet.w)} m</span> : t('thùng rời')}
+                    </span>
                   </span>
-                  <span className="num block text-[12px] leading-snug text-slate-600">
-                    <span className="whitespace-nowrap">{m(vehicle.l)} × {m(vehicle.w)} × {m(vehicle.h)} m</span>
-                    {vehicle.payloadKg != null && <> · <span className="whitespace-nowrap">{fmtKgShort(vehicle.payloadKg)}</span></>}
-                    {' · '}{vehicle.kind === 'pallet' ? <span className="whitespace-nowrap">pallet {m(pallet.l)} × {m(pallet.w)} m</span> : t('thùng rời')}
-                  </span>
-                </span>
-                <ChevronDown size={18} className={cx('shrink-0 text-slate-500 transition-transform', more && 'rotate-180')} />
-              </button>
-              {more && <div className="space-y-2.5 p-3">
+                  <ChevronDown size={18} className={cx('shrink-0 text-slate-600 transition-transform', showList && 'rotate-180')} />
+                </button>
+                <button type="button" onClick={toggleMore} aria-expanded={more} aria-label={t('Chỉnh thông số thùng xe')} title={t('Chỉnh thông số thùng xe')}
+                  className={cx('grid w-11 shrink-0 place-items-center rounded-lg border hover:bg-slate-50', more ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-slate-400 text-slate-700')}>
+                  <Pencil size={17} />
+                </button>
+              </div>
+            )}
+            {showList && (
+              <div className={cx('overflow-hidden rounded-lg border border-slate-300 bg-white shadow-pop', vehicle && 'mt-1')}>
+                <div className="flex items-center gap-2 border-b border-slate-200 px-2.5 py-2">
+                  <SearchInput className="min-w-0 flex-1" placeholder={t('Tên xe, biển số')} value={q} onChange={e => setQ(e.target.value)} aria-label={t('Tìm xe')} />
+                  <label className="tap flex shrink-0 cursor-pointer items-center gap-1.5 text-[13px] text-slate-700">
+                    <input type="checkbox" checked={onlyFit} onChange={e => setOnlyFit(e.target.checked)} className="h-4 w-4 accent-brand-500" />{t('Chỉ xe chở hết')}
+                  </label>
+                </div>
+                {/* danh sách thả xuống: nhóm Xe của tôi / Mẫu chung là nhãn nhỏ, không khung to */}
+                <div className="flex items-center gap-1.5 bg-brand-50 px-2.5 py-1 text-[12px] font-semibold text-brand-800">
+                  <UserRound size={13} /><span className="flex-1">{t('Xe của tôi')}</span><span className="num">{mine.length}</span>
+                </div>
+                {mine.length ? <div className="divide-y divide-slate-100">{mine.map(row)}</div>
+                  : <p className="px-3 py-2 text-[13px] text-slate-600">{needle || onlyFit ? t('Không có xe nào khớp.') : t('Chưa có. Sửa một xe mẫu hoặc thêm xe mới, xe sẽ nằm ở đây.')}</p>}
+                <button onClick={onAdd} className="tap flex w-full items-center gap-2 border-t border-slate-100 px-3 text-[13px] font-semibold text-brand-700 hover:bg-brand-50">
+                  <Plus size={16} />{t('Thêm xe của tôi')}
+                </button>
+                <div className="flex items-center gap-1.5 border-t border-slate-200 bg-slate-100 px-2.5 py-1 text-[12px] font-semibold text-slate-700">
+                  <Users size={13} /><span className="flex-1">{t('Mẫu chung')} <span className="font-normal text-slate-600">· {isAdmin ? t('bạn là admin, sửa được mẫu') : t('sửa sẽ thành xe của bạn')}</span></span><span className="num">{admin.length}</span>
+                </div>
+                {admin.length ? <div className="divide-y divide-slate-100">{admin.map(row)}</div>
+                  : <p className="px-3 py-2 text-[13px] text-slate-600">{t('Không có xe nào khớp.')}</p>}
+              </div>
+            )}
+          </div>
+          {vehicle && more && (
+            /* THÔNG SỐ xe đang chọn (nút ✏): cách chở + lòng thùng + tải */
+            <div className="space-y-2.5 rounded-lg border border-slate-300 p-3">
                 <Segmented value={vehicle.kind} onChange={k => onPatch({ kind: k })} options={[
                   { value: 'loose', label: t('Thùng rời (xe xá)') }, { value: 'pallet', label: t('Xếp pallet') },
                 ]} />
@@ -1015,49 +1061,20 @@ function SpecPopup({ vehicle, vehicles, suggestion, fits, sharedWith, more, onMo
                     : sharedWith ? t('Xe này đang dùng ở {n} chuyến khác, sửa ở đây là sửa cho cả các chuyến đó.', { n: sharedWith })
                     : t('Sửa xong sơ đồ tự vẽ lại.')}
                 </p>
-              </div>}
             </div>
-            {/* PALLET: một cỡ dùng chung cho MỌI xe pallet — tách khung riêng để không lẫn với kích thước xe */}
-            {more && vehicle.kind === 'pallet' && (
-              <div className="rounded-lg border border-slate-300 bg-slate-50">
-                <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
-                  <Layers size={16} className="text-slate-600" />
-                  <span className="flex-1 text-sm font-semibold text-slate-900">Pallet</span>
-                  <span className="text-[12px] text-slate-600">{t('dùng cho mọi xe pallet')}</span>
-                </div>
-                <div className="p-3"><PalletFields cols="grid-cols-3" /></div>
+          )}
+          {/* PALLET: một cỡ dùng chung cho MỌI xe pallet — tách khung riêng để không lẫn với kích thước xe */}
+          {vehicle && more && vehicle.kind === 'pallet' && (
+            <div className="rounded-lg border border-slate-300 bg-slate-50">
+              <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
+                <Layers size={16} className="text-slate-600" />
+                <span className="flex-1 text-sm font-semibold text-slate-900">Pallet</span>
+                <span className="text-[12px] text-slate-600">{t('dùng cho mọi xe pallet')}</span>
               </div>
-            )}
-          </div>
-        )}
-        <SectionBand title={t('Đổi xe khác')} meta={t('· thử hàng chuyến này trên từng xe')} />
-        <div className="flex items-center gap-2 px-3 py-2">
-          <SearchInput className="min-w-0 flex-1" placeholder={t('Tên xe, biển số')} value={q} onChange={e => setQ(e.target.value)} aria-label={t('Tìm xe')} />
-          <label className="tap flex shrink-0 cursor-pointer items-center gap-1.5 text-[13px] text-slate-700">
-            <input type="checkbox" checked={onlyFit} onChange={e => setOnlyFit(e.target.checked)} className="h-4 w-4 accent-brand-500" />{t('Chỉ xe chở hết')}
-          </label>
-        </div>
-        <div className="space-y-2.5 px-3 pb-1">
-          {/* Xe của tôi: khung viền xanh, nền trắng · Mẫu chung: khung nét đứt, nền xám — nhìn là phân biệt */}
-          <div className="overflow-hidden rounded-lg border-[1.5px] border-brand-500 bg-white">
-            <div className="flex items-center gap-2 bg-brand-500 px-3 py-1.5 text-[12px] font-semibold text-white">
-              <UserRound size={14} /><span className="flex-1">{t('Xe của tôi')}</span><span className="num">{mine.length}</span>
+              <div className="p-3"><PalletFields cols="grid-cols-3" /></div>
             </div>
-            {mine.length ? <div className="divide-y divide-slate-100">{mine.map(row)}</div>
-              : <p className="px-3 py-2.5 text-[13px] text-slate-600">{needle || onlyFit ? t('Không có xe nào khớp.') : t('Chưa có. Sửa một xe mẫu hoặc thêm xe mới, xe sẽ nằm ở đây.')}</p>}
-            <button onClick={onAdd} className="tap flex w-full items-center gap-2 border-t border-slate-200 px-3 text-[13px] font-semibold text-brand-700 hover:bg-brand-50">
-              <Plus size={16} />{t('Thêm xe của tôi')}
-            </button>
-          </div>
-          <div className="overflow-hidden rounded-lg border-[1.5px] border-dashed border-slate-400 bg-slate-50">
-            <div className="flex items-center gap-2 border-b border-dashed border-slate-300 px-3 py-1.5 text-[12px] font-semibold text-slate-700">
-              <Users size={14} /><span className="flex-1">{t('Mẫu chung')} <span className="font-normal text-slate-600">· {isAdmin ? t('bạn là admin, sửa được mẫu') : t('sửa sẽ thành xe của bạn')}</span></span><span className="num">{admin.length}</span>
-            </div>
-            {admin.length ? <div className="divide-y divide-slate-200/70">{admin.map(row)}</div>
-              : <p className="px-3 py-2.5 text-[13px] text-slate-600">{t('Không có xe nào khớp.')}</p>}
-          </div>
+          )}
         </div>
-        <div className="h-3" />
       </div>
     </div>
     </div>
@@ -1166,7 +1183,8 @@ function Block({ title, summary, open, onToggle, children }: { title: string; su
 // Quy cách trên dòng hàng (user 28/10: "thay vì 420 × 255 × 130 mm thì để 110 thùng – 11 lớp – 10,05 kg"):
 // số thủ kho đối chiếu khi xếp; cỡ thùng xem ở phần Sửa. Chưa khai thùng/pallet lẫn số lớp thì mới hiện cỡ thùng.
 function specParts(it: Item): string[] {
-  const pack = [it.perPallet ? t('{n} thùng/pallet', { n: fmtInt(it.perPallet) }) : null, it.maxLayers ? t('{n} lớp', { n: fmtInt(it.maxLayers) }) : null]
+  const pack = [it.perPallet ? t('{n} thùng/pallet', { n: fmtInt(it.perPallet) }) : null, it.maxLayers ? t('{n} lớp', { n: fmtInt(it.maxLayers) }) : null,
+    it.looseLayers ? t('xá {n} lớp', { n: fmtInt(it.looseLayers) }) : null]
     .filter((s): s is string => !!s)
   return [...(pack.length ? pack : [`${fmtDims(it.l, it.w, it.h)} mm`]), ...(it.kg != null ? [`${fmtDec(it.kg, 2)} kg`] : [])]
 }

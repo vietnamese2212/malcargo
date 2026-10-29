@@ -164,7 +164,7 @@ for (const dev of [DEVICES[1], { ...DEVICES[1], name: 'phone-ngang', viewport: {
       const lists = wb.find(s => s.sheet === '_lists')?.data.flat().filter(Boolean) ?? []
       const truck5 = l === 'vi' ? 'Xe tải 5 tấn' : '5-ton truck'
       const want = {
-        items: ['A:custom', 'C:decimal', 'D:decimal', 'E:decimal', 'F:decimal', 'G:whole', 'H:whole', 'I:list'],
+        items: ['A:custom', 'C:decimal', 'D:decimal', 'E:decimal', 'F:decimal', 'G:whole', 'H:whole', 'I:list', 'J:whole'],
         vehicles: ['B:custom', 'C:list', 'D:decimal', 'E:decimal', 'F:decimal', 'G:decimal'],
         orders: ['C:list@list', 'D:whole', 'E:list@list'], trips: ['B:list@list', 'C:list@list'],
       }[k]

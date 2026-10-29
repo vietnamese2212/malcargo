@@ -11,7 +11,8 @@ export interface Item {
   l: number; w: number; h: number   // kích thước THÙNG (mm)
   kg: number | null                 // kg / thùng
   perPallet: number | null          // số thùng / pallet — chỉ cần khi chở xe pallet
-  maxLayers: number | null          // chồng tối đa (lớp) — trống = tự tính theo chiều cao xe
+  maxLayers: number | null          // chồng tối đa (lớp) trên PALLET — trống = tự tính theo chiều cao xe
+  looseLayers?: number | null       // chồng tối đa khi XẾP XÁ (xe thùng rời) — trống = như trên pallet (110ml: pallet 14, xá 28)
   light: boolean                    // hàng nhẹ: cho lên trên hàng khác
   updatedAt: number
 }

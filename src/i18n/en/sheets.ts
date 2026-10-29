@@ -29,7 +29,9 @@ export const SHEETS: Record<string, string> = {
   'Đo mặt ngoài thùng. Thùng đứng đúng chiều mũi tên thì "cao" là chiều đứng.':
     'Measure the outside of the carton. With the arrows pointing up, "height" is the upright side.',
   'Để trống nếu chưa biết': 'Leave blank if unknown',
-  'Chồng tối đa': 'Max stack',
+  'Chồng trên pallet': 'Stack on pallet',
+  'Chồng khi xếp xá': 'Stack when loose',
+  'Trống = như trên pallet': 'Blank = same as on pallet',
   'Trống = theo chiều cao xe': 'Blank = up to truck height',
   'lớp': 'layers',
   'Tự động': 'Auto',
@@ -115,6 +117,7 @@ export const SHEETS: Record<string, string> = {
   'Cao (mm)': 'Height (mm)',
   'Kg/thùng': 'Kg/carton',
   'Chồng tối đa (lớp)': 'Max stack (layers)',
+  'Chồng xá (lớp)': 'Loose stack (layers)',
   'Hàng nhẹ (x)': 'Light goods (x)',
   'Cách chở (Thùng rời / Pallet)': 'Loading mode (Loose / Pallet)',
   'Dài lòng thùng (mm)': 'Cargo box length (mm)',
