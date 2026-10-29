@@ -494,7 +494,8 @@ export function computeTrip(input: TripInput): TripResult {
           warnings.push(`Không đặt được lên trên hàng khác: ${[...stuck].map(i => groups[i].label).join(', ')} — đã xếp như hàng thường.`) // i18n-ok
         }
       }
-      if (!input.quick) plan = spreadToDoor(T, gs, plan)
+      // trải dài theo % tải (tải hàng — chưa khai kg mã nào ⇒ chưa biết tải, theo % sàn)
+      if (!input.quick) plan = spreadToDoor(T, gs, plan, truck.payloadKg && totals.kgKnown ? (totals.kg / truck.payloadKg) * 100 : null)
     }
   }
 
@@ -520,12 +521,19 @@ export function computeTrip(input: TripInput): TripResult {
 
 const leftOf = (p: LoadPlan) => p.leftover.reduce((s, x) => s + x.count, 0)
 
-/** Xe XÁ đã gần đầy sàn (≥ 75% chiều dài) mà hàng chưa tới cửa: HẠ DẦN từng lớp của khối SÁT CỬA trước (giữ "cao thấp
- *  dần ra cửa"), mỗi lần chạy lại lõi — còn xếp đủ hàng thì giữ, tới cửa thì dừng ⇒ hàng trải dài TỚI SÁT CỬA (chủ dự
- *  án 29/10, container sữa đủ tải mới đầy 62% thể tích: "bốc xá cần phải bốc tới sát cửa" — chừa trống ở cửa thì hàng
- *  xô khi chạy). Lõi chồng tới số lớp tối đa rồi mới tiến ra cửa nên không tự làm được; không sửa lõi — hạ `maxLayers`
- *  từng mã. Xe còn ít hàng thì vẫn chồng gọn phía cabin như cũ. Nhiều nhất `SPREAD_RUNS` lần chạy lõi. */
-const SPREAD_FROM = 75, SPREAD_RUNS = 8
+/** Xe XÁ: hàng trải dài theo % TẢI (chủ dự án 29/10: "xem % tải để quyết định cho chiếm bao nhiêu % sàn") — tải nặng
+ *  thì trải dài cho tải chia đều các trục, chở gần đủ tải (≥ `SPREAD_FULL`%) thì TỚI SÁT CỬA ("bốc xá cần phải bốc
+ *  tới sát cửa" — container sữa đủ tải mới đầy 62% thể tích, trước chừa ~0,7 m ở cửa, hàng xô khi chạy). Sàn cần dùng =
+ *  % tải ÷ SPREAD_FULL (tải 50% ⇒ ≥ 59% sàn). Chưa biết tải (thiếu kg / xe chưa khai tải) ⇒ đã ≥ 75% sàn thì tới cửa.
+ *  Cách làm: HẠ DẦN từng lớp của khối SÁT CỬA trước (giữ "cao thấp dần ra cửa"), mỗi lần chạy lại lõi — còn xếp đủ
+ *  hàng thì giữ. Lõi chồng tới số lớp tối đa rồi mới tiến ra cửa nên không tự làm được; không sửa lõi — hạ `maxLayers`
+ *  từng mã. Nhiều nhất `SPREAD_RUNS` lần chạy lõi. */
+const SPREAD_FULL = 85, SPREAD_RUNS = 8
+/** % chiều dài sàn hàng xá nên chiếm theo % tải (≥ 100 = tới sát cửa). */
+export function spreadTarget(payloadPct: number | null, lengthUsedPct: number): number {
+  if (payloadPct == null) return lengthUsedPct >= 75 ? 100 : 0
+  return Math.min(100, (payloadPct / SPREAD_FULL) * 100)
+}
 
 /** Đếm THÁP: cột thùng lộ cao hơn xung quanh ở ≥ 3 phía (thành xe tính là tựa, phía cửa trống thì không) — cùng cách
  *  đo của bộ đo hình khối `scripts/out/q.mjs`. Trải hàng tới cửa không được đẻ thêm tháp (đo 29/10: 1 ca / 220). */
@@ -558,13 +566,16 @@ function towers(p: LoadPlan, T: { length: number; width: number }): number {
   }
   return C.filter(c => [0, 1, 2, 3].filter(s => c.top - Math.max(side(c, s), c.bot) > Math.max(2 * c.h, 250)).length >= 3).length
 }
-function spreadToDoor(T: { length: number; width: number; height: number }, groups: LoadGroup[], base: LoadPlan): LoadPlan {
+function spreadToDoor(T: { length: number; width: number; height: number }, groups: LoadGroup[], base: LoadPlan, payloadPct: number | null): LoadPlan {
   // tới cửa = khe còn lại dưới 1,5 cạnh thùng nhỏ nhất của hàng đứng sàn (không đứng thêm được hàng thùng nào cho ra
   // hồn; hàng nhẹ nằm trên nóc, không tính)
   const floorGs = groups.filter(g => !g.onTop)
   const minSide = Math.min(...(floorGs.length ? floorGs : groups).map(g => Math.min(g.l, g.w)))
-  const atDoor = (p: LoadPlan) => T.length - Math.max(0, ...p.placed.map(b => b.x + b.l)) < minSide * 1.5
-  if (leftOf(base) || !base.placed.length || atDoor(base) || base.lengthUsedPct < SPREAD_FROM) return base
+  const target = spreadTarget(payloadPct, base.lengthUsedPct)
+  const done = (p: LoadPlan) => (target >= 100
+    ? T.length - Math.max(0, ...p.placed.map(b => b.x + b.l)) < minSide * 1.5
+    : p.lengthUsedPct >= target)
+  if (leftOf(base) || !base.placed.length || done(base)) return base
   // số lớp từng mã đang chồng (cột thùng cùng mã cao nhất) + mã nào nằm sát cửa nhất
   const layersOf = (p: LoadPlan) => groups.map((_, gi) => {
     const col = new Map<string, number>()
@@ -576,7 +587,7 @@ function spreadToDoor(T: { length: number; width: number; height: number }, grou
   let best = base, cap = layersOf(base), runs = 0, failed = false
   const baseTowers = towers(base, T)
   for (const gi of order) {
-    while (cap[gi] > 1 && runs < SPREAD_RUNS && !atDoor(best)) {
+    while (cap[gi] > 1 && runs < SPREAD_RUNS && !done(best)) {
       const next = cap.map((c, i) => (i === gi ? c - 1 : c))
       runs++
       const p = computeLoadPlan(T, groups.map((g, i) => (next[i] > 0 ? { ...g, maxLayers: Math.min(g.maxLayers ?? Infinity, next[i]) } : g)))
@@ -584,7 +595,7 @@ function spreadToDoor(T: { length: number; width: number; height: number }, grou
       if (leftOf(p) || p.lengthUsedPct <= best.lengthUsedPct || towers(p, T) > baseTowers) { failed = true; break }
       best = p; cap = next
     }
-    if (failed || runs >= SPREAD_RUNS || atDoor(best)) break
+    if (failed || runs >= SPREAD_RUNS || done(best)) break
   }
   return best
 }

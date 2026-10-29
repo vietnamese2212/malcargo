@@ -95,6 +95,14 @@ for (const st of E.SAMPLE_TRIPS) {
   console.log(`• ${st.name} — ${r.plan.placedCount}/${r.plan.totalCount} · ${E.fmtKg(r.weightKg)} (${r.payloadPct?.toFixed(0)}% tải)${r.totals.pallets != null ? ` · ${r.totals.pallets} pallet` : ''}`)
 }
 
+// Hàng xá trải dài theo % TẢI (chủ dự án 29/10): sàn cần dùng = % tải ÷ 85%, từ 85% tải ⇒ tới sát cửa;
+// chưa biết tải ⇒ đã ≥ 75% sàn thì tới cửa
+{
+  const s = E.spreadTarget
+  ok(s(94, 50) === 100 && s(85, 10) === 100 && Math.round(s(50, 10)) === 59 && Math.round(s(30, 10)) === 35 && s(null, 80) === 100 && s(null, 60) === 0,
+    `sàn cần dùng theo % tải: 94% ⇒ ${s(94, 50)} · 50% ⇒ ${Math.round(s(50, 10))} · 30% ⇒ ${Math.round(s(30, 10))} · chưa biết tải ⇒ ${s(null, 80)} / ${s(null, 60)}`)
+}
+
 // Chồng khi XẾP XÁ (`looseLayers`, chủ dự án 29/10: 110ml pallet 14 lớp, xá 28): xe thùng rời chồng theo số xá,
 // chưa khai thì như pallet; xe pallet không đổi
 {
