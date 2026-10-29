@@ -52,13 +52,16 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
     } catch { setMsg(t('Không đọc được file. Hãy dùng file mẫu .xlsx.')) }
     if (fileRef.current) fileRef.current.value = ''
   }
-  const template = () => saveTemplate(tab).catch(() => setMsg(t('Không tạo được file mẫu.')))
+  // file mẫu kèm danh sách chọn lấy từ dữ liệu đang có (mã hàng, xe, đơn)
+  const template = () => saveTemplate(tab, { items, vehicles, orders }).catch(() => setMsg(t('Không tạo được file mẫu.')))
+  // mở từ Bàn xếp xe: đơn chưa thuộc chuyến nào vào chuyến này; chuyến dùng dòng xe của đơn ĐẦU có ghi (trống / sai ⇒ giữ như cũ)
   const save = () => {
     importBatch(res)
     if (trip) {
       const s = useData.getState(), cur = s.trips.find(x => x.id === trip.id)
       const loose = res.orders.map(o => o.id).filter(id => !s.trips.some(x => x.orderIds.includes(id)))
-      if (cur && loose.length) s.upsertTrip({ ...cur, orderIds: [...cur.orderIds, ...loose] })
+      const truck = res.orders.map(o => o.id).filter(id => loose.includes(id) || cur?.orderIds.includes(id)).map(id => res.orderTruck[id]).find(Boolean)
+      if (cur && (loose.length || truck)) s.upsertTrip({ ...cur, orderIds: [...cur.orderIds, ...loose], ...(truck ? { vehicleId: truck } : {}) })
     }
     const parts = SHEETS.filter(s => n[s.key]).map(s => t(COUNT[s.key], { n: fmtInt(n[s.key]) }))
     onDone?.(t('Đã nhập {list}', { list: parts.join(', ') }))
@@ -105,6 +108,7 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
         </div>
       )}
       {res.updated > 0 && <p className="mt-2 text-[13px] text-slate-700">{t('{n} dòng trùng với dữ liệu đã có sẽ được cập nhật.', { n: fmtInt(res.updated) })}</p>}
+      {!!res.unknownTrucks.length && <p className="mt-2 break-words text-[13px] text-slate-700">{t('Dòng xe không có trong app, bỏ qua: {list}', { list: res.unknownTrucks.join(', ') })}</p>}
       {!!errs && (
         <ul data-errors className="mt-2 space-y-1 rounded-md bg-red-50 px-3 py-2 text-[13px] text-red-800">
           {res.errors.slice(0, 20).map((e, i) => <li key={i} className="flex gap-1.5"><AlertTriangle size={14} className="mt-0.5 shrink-0" />{e}</li>)}

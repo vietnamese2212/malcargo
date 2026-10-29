@@ -102,6 +102,12 @@ export const SHEETS: Record<string, string> = {
   'Trang {sheet}: {msg}': 'Sheet {sheet}: {msg}',
   'cột {col} là "{got}", mẫu là "{want}"': 'column {col} is "{got}", the template has "{want}"',
   'thiếu cột {col} "{want}"': 'column {col} "{want}" is missing',
+  'Dòng xe không có trong app, bỏ qua: {list}': 'Trucks not in the app, ignored: {list}',
+  // ràng buộc ô trong file mẫu (Excel báo khi ghi sai)
+  'Nhập số nguyên từ {min} đến {max}.': 'Enter a whole number from {min} to {max}.',
+  'Nhập số từ {min} đến {max}.': 'Enter a number from {min} to {max}.',
+  'Trùng với dòng khác trong file.': 'Already used on another row.',
+  'Chọn trong danh sách — lấy từ dữ liệu trong app.': 'Pick from the list — it comes from the data in the app.',
 
   // ── nhập từ Excel: tiêu đề cột (trên màn + file mẫu tiếng Anh) ──
   'Dài (mm)': 'Length (mm)',

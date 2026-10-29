@@ -4,9 +4,10 @@
 // Chạy sau `npm run build`: node scripts/ui-tools.mjs
 import readXlsxFile from 'read-excel-file/node'
 import writeXlsxFile from 'write-excel-file/node'
+import { strFromU8, unzipSync } from 'fflate'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { DEVICES, OUT, T, launch, startPreview, watchErrors } from './ui-lib.mjs'
+import { DEVICES, OUT, T, TX, launch, startPreview, watchErrors } from './ui-lib.mjs'
 
 const srv = await startPreview(4184)
 const b = await launch()
@@ -63,11 +64,16 @@ for (const dev of [DEVICES[0], { ...DEVICES[1], name: 'tablet', viewport: { widt
   const sheet = p.locator('[data-sheet]')
   ok(await sheet.getByRole('tab', { name: new RegExp('^' + T('Đơn hàng')), selected: true }).count() === 1 || await sheet.getByRole('textbox', { name: T('Dán bảng {name}', { name: T('Đơn hàng') }) }).isVisible(), 'mở sẵn trang Đơn hàng')
   await p.screenshot({ path: `${OUT}/import-trip-${dev.name}.png` })
-  await paste(p, 'Đơn nhập 1\tCửa hàng X\tMAU-ST180\t50\nĐơn nhập 1\tCửa hàng X\tMAU-ST110\t20\nĐơn nhập 2\t\tMAU-ST180\t30', 2)
+  // cột Dòng xe: đơn đầu ghi xe 8 tấn ⇒ chuyến dùng xe đó; đơn sau ghi xe không có trong app ⇒ bỏ qua, chỉ báo
+  await sheet.getByRole('textbox', { name: T('Dán bảng {name}', { name: T('Đơn hàng') }) })
+    .fill(`Đơn nhập 1\tCửa hàng X\tMAU-ST180\t50\t${TX('Xe tải 8 tấn')}\nĐơn nhập 1\tCửa hàng X\tMAU-ST110\t20\nĐơn nhập 2\t\tMAU-ST180\t30\tXe ma`)
+  ok(await sheet.getByText(T('Dòng xe không có trong app, bỏ qua: {list}', { list: 'Xe ma' })).isVisible(), 'dòng xe không có trong app ⇒ báo bỏ qua, không chặn')
+  await sheet.getByRole('button', { name: T('Nhập {n} dòng dữ liệu', { n: 2 }) }).click(); await p.waitForTimeout(800)
   let d = await data(p)
   const tr = d.trips.find(t => t.id === tid)
   const names = (tr?.orderIds ?? []).map(id => d.orders.find(o => o.id === id)?.name)
   ok(names.join() === 'Đơn nhập 1,Đơn nhập 2', `chuyến trống, nhập 2 đơn ⇒ cả 2 vào chuyến đang mở (${names.join(', ')})`)
+  ok(tr?.vehicleId === 'adm-v-8t', `dòng xe của đơn đầu ⇒ chuyến dùng Xe tải 8 tấn (${tr?.vehicleId})`)
   ok(await p.getByText('Đơn nhập 2', { exact: true }).first().isVisible(), 'đơn hiện ngay trên cột hàng')
   // chuyến mẫu: nhập đơn ⇒ tách thành chuyến mới mang thêm đơn đó, chuyến mẫu giữ nguyên
   await p.evaluate(() => { location.hash = '#/trip/sample-t1' }); await p.waitForTimeout(2500)
@@ -148,10 +154,23 @@ for (const dev of [DEVICES[1], { ...DEVICES[1], name: 'phone-ngang', viewport: {
       const [fname, sname, head] = WANT[l][k]
       if (!rec?.bytes) { ok(false, `[${l}] ${k}: không lưu qua hộp Lưu thành…`); continue }
       files[l][k] = join(OUT, `template-${l}-${k}.xlsx`); writeFileSync(files[l][k], Buffer.from(rec.bytes))
-      const wb = await readXlsxFile(files[l][k])
-      ok(rec.name === fname && rec.ext.includes('.xlsx') && wb.length === 1 && wb[0].sheet === sname && wb[0].data[0][0] === head && wb[0].data.length >= 3,
+      const wb = await readXlsxFile(files[l][k]), shown = wb.filter(s => s.sheet !== '_lists')
+      ok(rec.name === fname && rec.ext.includes('.xlsx') && shown.length === 1 && wb[0].sheet === sname && wb[0].data[0][0] === head && wb[0].data.length >= 3,
         `[${l}] ${k}: hộp Lưu thành… gợi ý ${rec.name}, 1 trang "${wb[0].sheet}" [${wb[0].data[0].join(' | ')}] + ${wb[0].data.length - 1} dòng ví dụ`)
       if (l === 'en') ok(!/[à-ỹđ]/i.test(JSON.stringify([wb[0].sheet, wb[0].data[0]])), `[en] ${k}: tên trang / tiêu đề không còn chữ tiếng Việt`)
+      // ràng buộc ô (Data Validation) — danh sách lấy từ dữ liệu trong app, trang danh sách ẩn
+      const z = unzipSync(new Uint8Array(rec.bytes)), sx = strFromU8(z['xl/worksheets/sheet1.xml']), wbx = strFromU8(z['xl/workbook.xml'])
+      const dvs = [...sx.matchAll(/<dataValidation [^>]*sqref="([A-Z])2:[A-Z]5000"[^>]*>(.*?)<\/dataValidation>/g)].map(m => m[1] + ':' + (m[0].match(/type="(\w+)"/)?.[1] ?? '') + (m[2].includes("'_lists'!") ? '@list' : ''))
+      const lists = wb.find(s => s.sheet === '_lists')?.data.flat().filter(Boolean) ?? []
+      const truck5 = l === 'vi' ? 'Xe tải 5 tấn' : '5-ton truck'
+      const want = {
+        items: ['A:custom', 'C:decimal', 'D:decimal', 'E:decimal', 'F:decimal', 'G:whole', 'H:whole', 'I:list'],
+        vehicles: ['B:custom', 'C:list', 'D:decimal', 'E:decimal', 'F:decimal', 'G:decimal'],
+        orders: ['C:list@list', 'D:whole', 'E:list@list'], trips: ['B:list@list', 'C:list@list'],
+      }[k]
+      const listOk = k === 'orders' ? lists.includes('MAU-ST180') && lists.includes(truck5) : k === 'trips' ? lists.includes(truck5) && lists.length > 2 : !lists.length
+      ok(dvs.join() === want.join() && listOk && (lists.length ? /name="_lists" state="hidden"/.test(wbx) : true),
+        `[${l}] ${k}: ràng buộc ô ${dvs.join(' ')}${lists.length ? ` · danh sách ẩn ${lists.length} giá trị từ app` : ''}`)
     }
     if (i === 0) await p.screenshot({ path: `${OUT}/import-sheet-${l}.png` })
     await p.keyboard.press('Escape'); await p.waitForTimeout(200)

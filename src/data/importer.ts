@@ -3,14 +3,29 @@
 // Kiểm chặt (chủ dự án 29/10): tiêu đề cột đúng mẫu, số trong khoảng hợp lý, không trùng trong file — có lỗi là không nhập gì.
 import type { Item, Order, Trip, Vehicle } from './types'
 import { newId, type ImportBatch } from './store'
-import { getLang, numLocale, t, tx } from '../i18n'
+import { getLang, numLocale, t, tx, txEn } from '../i18n'
 import { EN } from '../i18n/en'
 import { saveFile } from '../ui/saveFile'
 
 export type SheetKey = 'items' | 'vehicles' | 'orders' | 'trips'
+
+// ── Số trong ô: khoảng hợp lệ (mm, kg) — cùng giới hạn form Thêm xe; số lẻ chỉ cho ở kích thước + kg.
+// Dùng HAI nơi: kiểm lúc nạp (`parseImport`) và ràng buộc ô trong file mẫu (`saveTemplate`).
+type Rule = { min: number; max: number; int?: boolean }
+const DIM: Rule = { min: 10, max: 3000 }                  // cạnh thùng (mm)
+const KG: Rule = { min: 0.01, max: 500 }                  // kg/thùng
+const PER_PALLET: Rule = { min: 1, max: 5000, int: true }
+const LAYERS: Rule = { min: 1, max: 50, int: true }
+const BOX_L: Rule = { min: 500, max: 20000 }, BOX_W: Rule = { min: 500, max: 3500 }, BOX_H: Rule = { min: 500, max: 4500 }
+const PAYLOAD: Rule = { min: 100, max: 60000 }
+const QTY: Rule = { min: 1, max: 100000, int: true }
+/** Danh sách chọn của cột trong file mẫu: lấy từ dữ liệu trong app (mã hàng, xe, đơn) hoặc giá trị cố định. */
+type Pick = 'codes' | 'trucks' | 'orders' | 'modes' | 'x'
+
 /** `text`: chữ hiện trên giao diện tiếng Anh khi nghĩa cột khác chữ dịch của `label` (vd cột "Mã hàng" = mã, không phải danh mục).
- *  `old`: tiêu đề cột đời trước vẫn nhận (file mẫu người dùng đã tải về). `file`: tên file mẫu của loại này. */
-type Col = { label: string; text?: string; old?: string[]; req?: boolean; w: number }
+ *  `old`: tiêu đề cột đời trước vẫn nhận (file mẫu người dùng đã tải về). `late`: cột thêm sau — file mẫu cũ thiếu cột
+ *  này vẫn nhận. `rule` / `pick` / `uniq` (không trùng dòng khác): ràng buộc ô. `file`: tên file mẫu của loại này. */
+type Col = { label: string; text?: string; old?: string[]; late?: boolean; req?: boolean; w: number; rule?: Rule; pick?: Pick; uniq?: boolean }
 export interface SheetDef { key: SheetKey; title: string; file: string; cols: Col[]; sample: (string | number)[][] }
 
 // Thứ tự cột = thứ tự trong file mẫu. Đổi ở đây là đổi cả file mẫu lẫn cách đọc.
@@ -21,29 +36,37 @@ export const SHEETS: SheetDef[] = [
   {
     key: 'items', title: 'Mã hàng', file: 'malcargo-mau-ma-hang.xlsx', // i18n-key
     cols: [
-      { label: 'Mã hàng', text: 'Mã', req: true, w: 14 }, { label: 'Tên hàng', req: true, w: 30 }, { label: 'Dài (mm)', req: true, w: 10 }, // i18n-key
-      { label: 'Rộng (mm)', req: true, w: 10 }, { label: 'Cao (mm)', req: true, w: 10 }, { label: 'Kg/thùng', w: 10 }, // i18n-key
-      { label: 'Thùng/pallet', w: 12 }, { label: 'Chồng tối đa (lớp)', w: 16 }, { label: 'Hàng nhẹ (x)', w: 12 }, // i18n-key
+      { label: 'Mã hàng', text: 'Mã', req: true, w: 14, uniq: true }, { label: 'Tên hàng', req: true, w: 30 }, { label: 'Dài (mm)', req: true, w: 10, rule: DIM }, // i18n-key
+      { label: 'Rộng (mm)', req: true, w: 10, rule: DIM }, { label: 'Cao (mm)', req: true, w: 10, rule: DIM }, { label: 'Kg/thùng', w: 10, rule: KG }, // i18n-key
+      { label: 'Thùng/pallet', w: 12, rule: PER_PALLET }, { label: 'Chồng tối đa (lớp)', w: 16, rule: LAYERS }, { label: 'Hàng nhẹ (x)', w: 12, pick: 'x' }, // i18n-key
     ],
     sample: [['SP001', 'Sữa 110ml x48', 420, 255, 100, 6.2, 140, 14, ''], ['SP002', 'Thạch túi 110ml x24', 310, 130, 130, 3.08, 216, 8, 'x']], // i18n-ok
   },
   {
     key: 'vehicles', title: 'Xe', file: 'malcargo-mau-xe.xlsx', // i18n-key
     cols: [
-      { label: 'Tên xe', req: true, w: 20 }, { label: 'Biển số', w: 12 }, { label: 'Cách chở (Thùng rời / Pallet)', w: 26 }, // i18n-key
-      { label: 'Dài lòng thùng (mm)', req: true, w: 18 }, { label: 'Rộng (mm)', req: true, w: 10 }, { label: 'Cao (mm)', req: true, w: 10 }, // i18n-key
-      { label: 'Tải trọng (kg)', w: 14 }, // i18n-key
+      { label: 'Tên xe', req: true, w: 20 }, { label: 'Biển số', w: 12, uniq: true }, { label: 'Cách chở (Thùng rời / Pallet)', w: 26, pick: 'modes' }, // i18n-key
+      { label: 'Dài lòng thùng (mm)', req: true, w: 18, rule: BOX_L }, { label: 'Rộng (mm)', req: true, w: 10, rule: BOX_W }, { label: 'Cao (mm)', req: true, w: 10, rule: BOX_H }, // i18n-key
+      { label: 'Tải trọng (kg)', w: 14, rule: PAYLOAD }, // i18n-key
     ],
     sample: [['Xe 5 tấn số 1', '29C12345', 'Thùng rời', 5700, 2000, 2000, 5000], ['Xe pallet 8 tấn', '29C67890', 'Pallet', 7400, 2350, 2300, 8000]], // i18n-ok
   },
   {
+    // Dòng xe (chủ dự án 29/10): xe trong app (tên hoặc biển số) — đơn vào chuyến thì chuyến dùng xe của đơn ĐẦU có ghi;
+    // trống / không có trong app ⇒ bỏ qua, app tự gợi ý xe như thường
     key: 'orders', title: 'Đơn hàng', file: 'malcargo-mau-don-hang.xlsx', // i18n-key
-    cols: [{ label: 'Tên đơn', req: true, w: 18 }, { label: 'Điểm giao', w: 24 }, { label: 'Mã hàng', text: 'Mã', req: true, w: 14 }, { label: 'Số thùng', req: true, w: 10 }], // i18n-key
-    sample: [['Đơn 101', 'Cửa hàng A', 'SP001', 120], ['Đơn 101', 'Cửa hàng A', 'SP002', 30], ['Đơn 102', 'Cửa hàng B', 'SP001', 80]], // i18n-ok
+    cols: [
+      { label: 'Tên đơn', req: true, w: 18 }, { label: 'Điểm giao', w: 24 }, { label: 'Mã hàng', text: 'Mã', req: true, w: 14, pick: 'codes' }, // i18n-key
+      { label: 'Số thùng', req: true, w: 10, rule: QTY }, { label: 'Dòng xe', w: 22, pick: 'trucks', late: true }, // i18n-key
+    ],
+    sample: [['Đơn 101', 'Cửa hàng A', 'SP001', 120, 'Xe tải 5 tấn'], ['Đơn 101', 'Cửa hàng A', 'SP002', 30, 'Xe tải 5 tấn'], ['Đơn 102', 'Cửa hàng B', 'SP001', 80, '']], // i18n-ok
   },
   {
     key: 'trips', title: 'Chuyến', file: 'malcargo-mau-chuyen.xlsx', // i18n-key
-    cols: [{ label: 'Tên chuyến', req: true, w: 18 }, { label: 'Xe (tên hoặc biển số)', w: 22 }, { label: 'Tên đơn (giao trước ghi trước)', old: ['Tên đơn'], req: true, w: 30 }], // i18n-key
+    cols: [
+      { label: 'Tên chuyến', req: true, w: 18 }, { label: 'Xe (tên hoặc biển số)', w: 22, pick: 'trucks' }, // i18n-key
+      { label: 'Tên đơn (giao trước ghi trước)', old: ['Tên đơn'], req: true, w: 30, pick: 'orders' }, // i18n-key
+    ],
     sample: [['Chuyến sáng 28/10', '29C12345', 'Đơn 101'], ['Chuyến sáng 28/10', '29C12345', 'Đơn 102']], // i18n-ok
   },
 ]
@@ -59,7 +82,8 @@ const sheetName = (s: SheetDef) => titles(s)[getLang() === 'vi' ? 0 : 1]
 const colHead = (c: Col) => heads(c)[getLang() === 'vi' ? 0 : 1]
 
 export type Rows = (string | number | boolean | null | undefined)[][]
-export interface ImportResult extends ImportBatch { errors: string[]; updated: number }
+/** `orderTruck`: id đơn → id xe ghi ở cột Dòng xe; `unknownTrucks`: dòng xe ghi mà app không có (bỏ qua, chỉ báo). */
+export interface ImportResult extends ImportBatch { errors: string[]; updated: number; orderTruck: Record<string, string>; unknownTrucks: string[] }
 
 const str = (v: unknown) => (v == null ? '' : String(v).trim())
 const num = (v: unknown): number | null => {
@@ -85,7 +109,7 @@ const names = (c: Col) => [...heads(c), ...(c.old ?? []).flatMap(o => [o, EN[o] 
 /** null = đúng mẫu; sai ⇒ cột nào sai. */
 export function headError(k: SheetKey, row: Rows[number] | undefined): string | null {
   for (const [i, c] of cols(k).entries()) {
-    if (names(c).includes(norm(row?.[i]))) continue
+    if (names(c).includes(norm(row?.[i])) || (c.late && !str(row?.[i]))) continue
     const got = str(row?.[i])
     return got ? t('cột {col} là "{got}", mẫu là "{want}"', { col: letter(i), got, want: colHead(c) })
       : t('thiếu cột {col} "{want}"', { col: letter(i), want: colHead(c) })
@@ -104,26 +128,17 @@ function body(rows: Rows, k: SheetKey, err: (line: number, msg: string) => void,
   return out.slice(1)
 }
 
-// ── Số trong ô: khoảng hợp lệ (mm, kg) — cùng giới hạn form Thêm xe; số lẻ chỉ cho ở kích thước + kg
-type Rule = { min: number; max: number; int?: boolean }
-const DIM: Rule = { min: 10, max: 3000 }                  // cạnh thùng (mm)
-const KG: Rule = { min: 0.01, max: 500 }                  // kg/thùng
-const PER_PALLET: Rule = { min: 1, max: 5000, int: true }
-const LAYERS: Rule = { min: 1, max: 50, int: true }
-const BOX_L: Rule = { min: 500, max: 20000 }, BOX_W: Rule = { min: 500, max: 3500 }, BOX_H: Rule = { min: 500, max: 4500 }
-const PAYLOAD: Rule = { min: 100, max: 60000 }
-const QTY: Rule = { min: 1, max: 100000, int: true }
 const YES = /^(x|1|có|co|yes|y|true)$/i, NO = /^(0|không|khong|no|n|false|-)$/i // i18n-ok — giá trị file (x / có / yes…)
 const LOOSE = /rời|roi|xá|loose/i // i18n-ok — giá trị file
 
 export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items: Item[]; vehicles: Vehicle[]; orders: Order[]; trips: Trip[] }): ImportResult {
-  const out: ImportResult = { items: [], vehicles: [], orders: [], trips: [], errors: [], updated: 0 }
+  const out: ImportResult = { items: [], vehicles: [], orders: [], trips: [], errors: [], updated: 0, orderTruck: {}, unknownTrucks: [] }
   const err = (k: SheetKey, line: number, msg: string) =>
     out.errors.push(t('{sheet}, dòng {line}: {msg}', { sheet: t(SHEETS.find(s => s.key === k)!.title), line, msg }))
-  // số ở cột i: trống ⇒ null (cột không bắt buộc; bắt buộc thì báo thiếu); sai ⇒ báo lỗi, trả undefined
-  const cell = (k: SheetKey, ln: number, r: Rows[number], i: number, rule: Rule, req?: boolean): number | null | undefined => {
-    const v = num(r[i]), col = colHead(cols(k)[i])
-    if (v == null) { if (req) err(k, ln, t('thiếu {col}', { col })); return req ? undefined : null }
+  // số ở cột i theo `rule` của cột: trống ⇒ null (cột bắt buộc thì báo thiếu); sai ⇒ báo lỗi, trả undefined
+  const cell = (k: SheetKey, ln: number, r: Rows[number], i: number): number | null | undefined => {
+    const c = cols(k)[i], rule = c.rule!, v = num(r[i]), col = colHead(c)
+    if (v == null) { if (c.req) err(k, ln, t('thiếu {col}', { col })); return c.req ? undefined : null }
     if (Number.isNaN(v)) err(k, ln, t('{col} phải là số', { col }))
     else if (rule.int && !Number.isInteger(v)) err(k, ln, t('{col} phải là số nguyên', { col }))
     else if (v < rule.min || v > rule.max) err(k, ln, t('{col} phải từ {min} đến {max}', { col, min: fmtN(rule.min), max: fmtN(rule.max) }))
@@ -140,8 +155,7 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     const dup = itemAt.get(key(code))
     if (dup) { err('items', ln, t('mã "{code}" trùng dòng {line}', { code, line: dup })); continue }
     itemAt.set(key(code), ln)
-    const l = cell('items', ln, r, 2, DIM, true), w = cell('items', ln, r, 3, DIM, true), h = cell('items', ln, r, 4, DIM, true)
-    const kg = cell('items', ln, r, 5, KG), pp = cell('items', ln, r, 6, PER_PALLET), ml = cell('items', ln, r, 7, LAYERS)
+    const [l, w, h, kg, pp, ml] = [2, 3, 4, 5, 6, 7].map(i => cell('items', ln, r, i))
     const light = str(r[8]), badLight = !!light && !YES.test(light) && !NO.test(light)
     if (badLight) err('items', ln, t('{col}: ghi x hoặc để trống', { col: colHead(cols('items')[8]) }))
     if (l == null || w == null || h == null || [kg, pp, ml].includes(undefined) || badLight) continue
@@ -160,8 +174,7 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     const dup = truckAt.get(key(plate || name))
     if (dup) { err('vehicles', ln, t('xe "{name}" trùng dòng {line}', { name: plate || name, line: dup })); continue }
     truckAt.set(key(plate || name), ln)
-    const l = cell('vehicles', ln, r, 3, BOX_L, true), w = cell('vehicles', ln, r, 4, BOX_W, true), h = cell('vehicles', ln, r, 5, BOX_H, true)
-    const kg = cell('vehicles', ln, r, 6, PAYLOAD)
+    const [l, w, h, kg] = [3, 4, 5, 6].map(i => cell('vehicles', ln, r, i))
     const kind = /pallet/i.test(mode) ? 'pallet' as const : !mode || LOOSE.test(mode) ? 'loose' as const : null
     if (!kind) err('vehicles', ln, t('cách chở phải là "{a}" hoặc "{b}"', { a: tx('Thùng rời'), b: 'Pallet' })) // i18n-ok — giá trị ghi trong file, như dòng ví dụ
     if (l == null || w == null || h == null || kg === undefined || !kind) continue
@@ -170,16 +183,22 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     out.vehicles.push({ id: old?.id ?? newId(), owner: 'me', name: name || plate, plate, kind, l, w, h, payloadKg: kg, updatedAt: 0 })
   }
 
-  // ── Đơn hàng (gom dòng theo tên đơn; cùng mã ghi hai dòng thì cộng dồn; một đơn chỉ một điểm giao)
+  // xe theo biển số, rồi theo tên (tên xe / đơn mẫu khớp cả bản tiếng Anh — file mẫu tiếng Anh ghi tên tiếng Anh)
+  const named = (name: string, s: string) => key(name) === key(s) || key(txEn(name)) === key(s)
+  const allVehicles = [...out.vehicles, ...have.vehicles]
+  const findVehicle = (s: string) => allVehicles.find(v => v.plate && key(v.plate) === key(s)) ?? allVehicles.find(v => named(v.name, s))
+
+  // ── Đơn hàng (gom dòng theo tên đơn; cùng mã ghi hai dòng thì cộng dồn; một đơn chỉ một điểm giao;
+  // dòng xe: lấy dòng đầu có ghi xe có trong app, ghi sai thì bỏ qua — không chặn)
   const allItems = [...out.items, ...have.items]
   const findItem = (code: string) => allItems.find(i => key(i.code) === key(code)) ?? allItems.find(i => key(i.code) === key(`MAU-${code}`))
   const orderMap = new Map<string, Order>(), placeAt = new Map<string, [string, number]>()
   for (const [ln, r] of body(src.orders ?? [], 'orders', (l, m) => err('orders', l, m), 3)) {
-    const name = str(r[0]), place = str(r[1]), code = str(r[2])
+    const name = str(r[0]), place = str(r[1]), code = str(r[2]), truck = str(r[4])
     if (!name || !code) { err('orders', ln, t('thiếu tên đơn hoặc mã hàng')); continue }
     const it = findItem(code)
     if (!it) { err('orders', ln, t('không thấy mã hàng "{code}"', { code })); continue }
-    const qty = cell('orders', ln, r, 3, QTY, true)
+    const qty = cell('orders', ln, r, 3)
     if (qty == null) continue
     const p0 = placeAt.get(key(name))
     if (place && p0 && key(p0[0]) !== key(place)) { err('orders', ln, t('đơn "{name}": điểm giao khác dòng {line} ("{place}")', { name, line: p0[1], place: p0[0] })); continue }
@@ -194,18 +213,20 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     if (place) o.place = place
     const line = o.lines.find(l => l.itemId === it.id)
     if (line) line.qty += qty; else o.lines.push({ itemId: it.id, qty })
+    const v = truck ? findVehicle(truck) : null
+    if (v && !out.orderTruck[o.id]) out.orderTruck[o.id] = v.id
+    if (truck && !v && !out.unknownTrucks.includes(truck)) out.unknownTrucks.push(truck)
   }
   out.orders = [...orderMap.values()]
 
-  // ── Chuyến (gom dòng theo tên chuyến, giữ thứ tự dòng = thứ tự giao; một chuyến một xe, mỗi đơn một dòng)
-  const allVehicles = [...out.vehicles, ...have.vehicles]
-  const findVehicle = (s: string) => allVehicles.find(v => v.plate && key(v.plate) === key(s)) ?? allVehicles.find(v => key(v.name) === key(s))
+  // ── Chuyến (gom dòng theo tên chuyến, giữ thứ tự dòng = thứ tự giao; một chuyến một xe, mỗi đơn một dòng;
+  // không dòng nào ghi xe ⇒ lấy dòng xe của đơn ĐẦU có ghi ở file Đơn hàng)
   const allOrders = [...out.orders, ...have.orders]
   const tripMap = new Map<string, Trip>(), truckOf = new Map<string, [string, number]>(), orderAt = new Map<string, number>()
   for (const [ln, r] of body(src.trips ?? [], 'trips', (l, m) => err('trips', l, m))) {
     const name = str(r[0]), vs = str(r[1]), on = str(r[2])
     if (!name || !on) { err('trips', ln, t('thiếu tên chuyến hoặc tên đơn')); continue }
-    const o = allOrders.find(x => key(x.name) === key(on))
+    const o = allOrders.find(x => named(x.name, on))
     if (!o) { err('trips', ln, t('không thấy đơn "{name}"', { name: on })); continue }
     const v = vs ? findVehicle(vs) : null
     if (vs && !v) { err('trips', ln, t('không thấy xe "{name}"', { name: vs })); continue }
@@ -226,21 +247,76 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     if (v) trip.vehicleId = v.id
     trip.orderIds.push(o.id)
   }
+  for (const [k, trip] of tripMap) {
+    const v = truckOf.has(k) ? undefined : trip.orderIds.map(id => out.orderTruck[id]).find(Boolean)
+    if (v) trip.vehicleId = v
+  }
   out.trips = [...tripMap.values()]
   return out
 }
 
-/** File mẫu .xlsx của MỘT loại: một trang, dòng tiêu đề + 2–3 dòng ví dụ, theo ngôn ngữ. Có hộp "Lưu thành…" thì người
- *  dùng chọn chỗ lưu (`saveFile`). Trả về false khi bấm Huỷ. */
-export function saveTemplate(k: SheetKey) {
+// ── Ràng buộc ô trong file mẫu (Data Validation của Excel — chủ dự án 29/10: "ép người dùng không làm sai, list lấy
+// luôn dữ liệu trong app"): số theo `rule`, cột `uniq` không trùng dòng khác, cột `pick` chỉ chọn trong danh sách.
+// Danh sách lấy từ app (mã hàng, xe, đơn) nằm ở trang ẩn `_lists`; ghi sai ⇒ Excel chặn, báo lý do.
+const LAST = 5000            // số dòng dữ liệu có ràng buộc
+const LISTS = '_lists'       // trang ẩn chứa danh sách chọn — đọc file thì bỏ qua
+const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+const xmlEsc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+const dv = (type: string, ref: string, msg: string, f1: string, f2?: string) =>
+  `<dataValidation ${type} allowBlank="1" showErrorMessage="1" errorTitle="MalCargo" error="${xmlEsc(msg)}" sqref="${ref}">` +
+  `<formula1>${xmlEsc(f1)}</formula1>${f2 == null ? '' : `<formula2>${f2}</formula2>`}</dataValidation>`
+type Have = { items: Item[]; vehicles: Vehicle[]; orders: Order[] }
+
+function checks(s: SheetDef, have: Have): { xml: string; lists: string[][] } {
+  const uniq = (l: string[]) => [...new Set(l.filter(Boolean))]
+  const pick: Record<Pick, string[]> = {
+    codes: uniq(have.items.map(i => i.code)), orders: uniq(have.orders.map(o => tx(o.name))),
+    trucks: uniq(have.vehicles.flatMap(v => [tx(v.name), v.plate])),   // tên (tên mẫu theo ngôn ngữ) + biển số
+    modes: [tx('Thùng rời'), 'Pallet'], x: ['x'], // i18n-ok — giá trị ghi trong file
+  }
+  const lists: string[][] = [], out: string[] = []
+  s.cols.forEach((c, i) => {
+    const L = letter(i), ref = `${L}2:${L}${LAST}`
+    if (c.rule) {
+      const { min, max, int } = c.rule, vars = { min: fmtN(min), max: fmtN(max) }
+      out.push(dv(`type="${int ? 'whole' : 'decimal'}" operator="between"`, ref,
+        int ? t('Nhập số nguyên từ {min} đến {max}.', vars) : t('Nhập số từ {min} đến {max}.', vars), String(min), String(max)))
+    }
+    if (c.uniq) out.push(dv('type="custom"', ref, t('Trùng với dòng khác trong file.'), `COUNTIF($${L}$2:$${L}$${LAST},${L}2)<=1`))
+    const vals = c.pick ? pick[c.pick] : []
+    if (!vals.length) return
+    let f = `"${vals.join(',')}"`                         // giá trị cố định ghi thẳng
+    if (c.pick === 'codes' || c.pick === 'trucks' || c.pick === 'orders') {
+      lists.push(vals)
+      const C = letter(lists.length - 1)
+      f = `'${LISTS}'!$${C}$1:$${C}$${vals.length}`
+    }
+    out.push(dv('type="list"', ref, t('Chọn trong danh sách — lấy từ dữ liệu trong app.'), f))
+  })
+  return { xml: out.length ? `<dataValidations count="${out.length}">${out.join('')}</dataValidations>` : '', lists }
+}
+
+/** File mẫu .xlsx của MỘT loại: một trang, dòng tiêu đề + 2–3 dòng ví dụ, theo ngôn ngữ, kèm ràng buộc ô (`checks`) lấy
+ *  danh sách từ dữ liệu trong app (`have`). Có hộp "Lưu thành…" thì người dùng chọn chỗ lưu (`saveFile`). False = bấm Huỷ. */
+export function saveTemplate(k: SheetKey, have: Have) {
   const s = SHEETS.find(x => x.key === k)!
   return saveFile(t(s.file), async () => {
-    const { default: writeXlsxFile } = await import('write-excel-file/browser')
+    const [{ default: writeXlsxFile }, { unzipSync, zipSync, strFromU8, strToU8 }] = await Promise.all([import('write-excel-file/browser'), import('fflate')])
     const head = (label: string, req?: boolean) => ({ value: req ? `${label} *` : label, fontWeight: 'bold' as const, textColor: '#ffffff', backgroundColor: req ? '#1a66ff' : '#0b1424' })
-    return writeXlsxFile([{
-      sheet: sheetName(s), stickyRowsCount: 1, columns: s.cols.map(c => ({ width: Math.max(c.w, colHead(c).length + 4) })),
-      data: [s.cols.map(c => head(colHead(c), c.req)), ...sampleRows(s)],
-    }], { fontFamily: 'Arial', fontSize: 11 }).toBlob()
+    const { xml, lists } = checks(s, have)
+    const blob = await writeXlsxFile([
+      {
+        sheet: sheetName(s), stickyRowsCount: 1, columns: s.cols.map(c => ({ width: Math.max(c.w, colHead(c).length + 4) })),
+        data: [s.cols.map(c => head(colHead(c), c.req)), ...sampleRows(s)],
+      },
+      ...(lists.length ? [{ sheet: LISTS, data: Array.from({ length: Math.max(...lists.map(l => l.length)) }, (_, r) => lists.map(l => l[r] ?? null)) }] : []),
+    ], { fontFamily: 'Arial', fontSize: 11 }).toBlob()
+    // thư viện ghi Excel chưa có ràng buộc ô ⇒ chèn thẳng vào XML của trang, ẩn trang danh sách
+    const z = unzipSync(new Uint8Array(await blob.arrayBuffer()))
+    const edit = (f: string, fn: (x: string) => string) => { z[f] = strToU8(fn(strFromU8(z[f]))) }
+    edit('xl/worksheets/sheet1.xml', x => x.replace('</sheetData>', `</sheetData>${xml}`))
+    if (lists.length) edit('xl/workbook.xml', x => x.replace(`name="${LISTS}"/>`, `name="${LISTS}" state="hidden"/>`))
+    return new Blob([zipSync(z)], { type: XLSX })
   })
 }
 
@@ -254,7 +330,7 @@ export async function readWorkbook(file: File, k: SheetKey): Promise<{ rows: Par
   const sheets = (await readXlsxFile(file)).map(x => ({ name: x.sheet, data: cells(x.data) }))
   const rows: Partial<Record<SheetKey, Rows>> = {}, errors: string[] = []
   const bad = (sheet: string, msg: string) => errors.push(t('Trang {sheet}: {msg}', { sheet, msg }))
-  for (const x of sheets) {
+  for (const x of sheets.filter(x => x.name !== LISTS)) {
     const s = SHEETS.find(s => titles(s).map(key).includes(key(x.name))) ?? SHEETS.find(s => !headError(s.key, x.data[0]))
     if (!s) continue
     const e = headError(s.key, x.data[0])

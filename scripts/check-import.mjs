@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url'
 
 const dir = mkdtempSync(join(tmpdir(), 'malcargo-'))
 const out = join(dir, 'importer.mjs')
-buildSync({ stdin: { contents: "export * from './src/data/importer'; export { useLang } from './src/i18n'", resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', outfile: out, logLevel: 'error' })
+buildSync({ stdin: { contents: "export * from './src/data/importer'; export { useLang, tx } from './src/i18n'", resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', outfile: out, logLevel: 'error' })
 const I = await import(pathToFileURL(out).href)
 rmSync(dir, { recursive: true, force: true })
 I.useLang.getState().setLang('vi')
@@ -89,6 +89,30 @@ r = parse({ trips: [head('trips'), ['C1', 'Xe 9', 'Đ1'], ['C2', '29C1', 'Đ1'],
 ok(has(r, 2, /không thấy xe "Xe 9"/), 'xe không có ⇒ lỗi (trước đây vẫn nhập, chưa gán xe)')
 ok(has(r, 4, /xe khác dòng 3/), 'một chuyến hai xe ⇒ lỗi')
 ok(has(r, 6, /đơn "Đ1" đã ghi ở dòng 5/), 'một đơn ghi hai lần trong chuyến ⇒ lỗi')
+
+console.log('• Dòng xe ở file Đơn hàng (trống / sai ⇒ bỏ qua, không chặn)')
+const fleet = [...vehicles, { id: 'adm-v-5t', owner: 'admin', name: 'Xe tải 5 tấn', plate: '', kind: 'loose', l: 5700, w: 2000, h: 2000, payloadKg: 5000, updatedAt: 0 }]
+r = parse({ orders: [head('orders'), ['Đ1', '', 'SP1', 10, 'Xe tải 5 tấn'], ['Đ1', '', 'SP2', 5, '29C2'], ['Đ2', '', 'SP1', 4, '29c2'], ['Đ3', '', 'SP1', 4, 'Xe ma'], ['Đ4', '', 'SP1', 4, '']] }, { ...none, items, vehicles: fleet })
+const oid = n => r.orders.find(o => o.name === n)?.id
+ok(!r.errors.length && r.orders.length === 4, `ghi xe sai / để trống ⇒ không lỗi (${r.errors.join(' | ')})`)
+ok(r.orderTruck[oid('Đ1')] === 'adm-v-5t', 'một đơn ghi hai xe ⇒ lấy dòng đầu (theo tên xe)')
+ok(r.orderTruck[oid('Đ2')] === 'v2', 'ghi biển số (khác hoa thường) ⇒ đúng xe')
+ok(!r.orderTruck[oid('Đ3')] && !r.orderTruck[oid('Đ4')] && r.unknownTrucks.join() === 'Xe ma', 'xe không có trong app ⇒ bỏ qua, chỉ liệt kê để báo')
+I.useLang.getState().setLang('en')
+const enName = I.tx('Xe tải 5 tấn')
+r = parse({ orders: [['Order name *', 'Delivery point', 'Code *', 'Cartons *', 'Vehicle type'], ['Đ1', '', 'SP1', 10, enName]] }, { ...none, items, vehicles: fleet })
+I.useLang.getState().setLang('vi')
+ok(enName !== 'Xe tải 5 tấn' && r.orderTruck[r.orders[0]?.id] === 'adm-v-5t', `file mẫu tiếng Anh ghi tên xe mẫu đã dịch ("${enName}") ⇒ đúng xe`)
+r = parse({ orders: [head('orders'), ['Đ1', '', 'SP1', 10, enName]] }, { ...none, items, vehicles: fleet })
+ok(r.orderTruck[r.orders[0]?.id] === 'adm-v-5t', 'app đang tiếng Việt, file ghi tên xe mẫu tiếng Anh ⇒ vẫn đúng xe')
+ok(I.headError('orders', ['Tên đơn', 'Điểm giao', 'Mã hàng', 'Số thùng']) === null, 'file mẫu Đơn hàng đời trước (chưa có cột Dòng xe) ⇒ vẫn nhận')
+ok(/cột E/.test(I.headError('orders', ['Tên đơn', 'Điểm giao', 'Mã hàng', 'Số thùng', 'Ghi chú']) ?? ''), 'cột E ghi tiêu đề khác ⇒ sai mẫu')
+r = parse({
+  orders: [head('orders'), ['Đ7', '', 'SP1', 1], ['Đ8', '', 'SP1', 1, '29C2'], ['Đ9', '', 'SP1', 1, 'Xe tải 5 tấn']],
+  trips: [head('trips'), ['C7', '', 'Đ7'], ['C7', '', 'Đ8'], ['C7', '', 'Đ9'], ['C8', '29C1', 'Đ9']],
+}, { ...none, items, vehicles: fleet })
+ok(!r.errors.length && r.trips.find(x => x.name === 'C7')?.vehicleId === 'v2', 'chuyến không ghi xe ⇒ lấy dòng xe của đơn ĐẦU có ghi (Đ8)')
+ok(r.trips.find(x => x.name === 'C8')?.vehicleId === 'v1', 'chuyến có ghi xe ⇒ giữ xe của chuyến')
 
 console.log(fail ? `\nĐỎ — ${fail} lỗi` : '\nXANH')
 process.exit(fail ? 1 : 0)

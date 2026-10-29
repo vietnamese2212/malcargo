@@ -43,12 +43,17 @@ export function t(vi: string, vars?: Vars): string {
 
 /** Chữ do dữ liệu mẫu / thuật toán sinh: tên mẫu (bảng tên) → luật mẫu (nhãn ghép, cảnh báo) → giữ nguyên. */
 export function tx(s: string): string {
-  if (getLang() === 'vi' || !s) return s
+  return getLang() === 'vi' ? s : txEn(s)
+}
+
+/** Bản tiếng Anh của chữ mẫu, KHÔNG theo ngôn ngữ đang chọn — đọc file Excel ghi tên mẫu tiếng Anh lúc app đang tiếng Việt. */
+export function txEn(s: string): string {
+  if (!s) return s
   const hit = EN_NAMES[s] ?? EN[s]
   if (hit != null) return hit
   for (const [re, f] of EN_RULES) {
     const m = s.match(re)
-    if (m) return f(m, tx)
+    if (m) return f(m, txEn)
   }
   return s
 }
