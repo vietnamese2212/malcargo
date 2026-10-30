@@ -43,6 +43,7 @@ export const TRIP: Record<string, string> = {
   'MAL Cargo, về bàn xếp xe': 'MAL Cargo, back to the loading desk',
   'Chuyến đang mở: {name}. Bấm để xem các chuyến': 'Current trip: {name}. Tap to see all trips',
   'Tên chuyến': 'Trip name',
+  'Chuyến xe': 'Trip',
   'Đổi tên chuyến này': 'Rename this trip',
   'đang mở': 'open',
   'Chưa chọn xe': 'No truck chosen',

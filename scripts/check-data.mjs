@@ -84,6 +84,23 @@ const kept = mine(D().trips), keptNames = kept[0]?.orderIds.map(id => D().orders
 ok(samples() === want && kept.length === 1 && keptNames === 'Đơn 1,Đơn 2' && kept[0].name === kept[0].code && kept[0].vehicleId === 'adm-v-5t',
   `mẫu đời trước đã sửa ⇒ thành chuyến ${kept[0]?.name} (${keptNames}, xe cũ), mẫu về bản mới`)
 
+// Bản từ tài khoản (jsonb) đảo thứ tự trường trong dòng hàng {"qty","itemId"} — trước 30/10 so chuỗi JSON ⇒ tưởng mẫu
+// bị sửa, mở app nào cũng tự tách 2 chuyến rác (tài khoản chủ dự án: 34 chuyến). Kèm: dọn bản sao rác y hệt mẫu
+{
+  const flip = o => ({ ...o, lines: o.lines.map(l => ({ qty: l.qty, itemId: l.itemId })) })
+  D().replaceAll({ ...base, orders: S.SAMPLE_ORDERS.map(flip), trips: S.SAMPLE_TRIPS, deleted: {} })
+  ok(!mine(D().trips).length && !mine(D().orders).length && samples() === want, `mẫu về từ máy chủ (trường đảo thứ tự) ⇒ KHÔNG tách chuyến (${mine(D().trips).length} chuyến của tôi)`)
+  const st = S.SAMPLE_TRIPS[0], so = S.SAMPLE_ORDERS.find(o => o.id === st.orderIds[0])
+  const clone = (id, oid, n, extra = {}) => [trip(id, '291026-2235-12', [oid], { code: '291026-2235-12', vehicleId: st.vehicleId, ...extra }), order(oid, `Đơn ${n}`, so.lines.map(l => ({ qty: l.qty, itemId: l.itemId })), { place: so.place })]
+  const [t1, o1c] = clone('t-clone', 'o-clone', 13)
+  const [t2, o2c] = clone('t-real', 'o-real', 19)
+  o2c.lines = o2c.lines.map((l, i) => (i ? l : { ...l, qty: l.qty - 31 }))   // chuyến anh sửa thật (2.452 thùng)
+  const [t3, o3c] = clone('t-light', 'o-light', 20, { lightOwnPallet: true })   // chỉ bật công tắc hàng nhẹ ⇒ vẫn là của anh
+  D().replaceAll({ ...base, orders: [...S.SAMPLE_ORDERS.map(flip), o1c, o2c, o3c], trips: [...S.SAMPLE_TRIPS, t1, t2, t3], deleted: {} })
+  ok(ids(mine(D().trips)) === 't-light,t-real' && !D().orders.some(o => o.id === 'o-clone') && D().deleted['t-clone'] && D().deleted['o-clone'],
+    `bản sao y hệt mẫu ⇒ dọn + đánh dấu đã xoá; chuyến đã sửa / bật công tắc ⇒ giữ (${ids(mine(D().trips))})`)
+}
+
 // Chủ dự án 29/10: "chọn đơn mẫu, thay đổi gì ⇒ ra đơn mới (đơn 1), từ đó sửa mãi trên đơn 1; chỉ ra đơn 2 khi
 // tạo chuyến mới hoặc chọn lại đơn mẫu làm tiếp"
 D().replaceAll({ ...base, orders: [], trips: [], deleted: {} })

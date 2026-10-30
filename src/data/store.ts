@@ -144,22 +144,41 @@ const OLD_SAMPLE_LINES: Record<string, Order['lines']> = {
   'sample-o2': [{ itemId: 'adm-i-mi', qty: 90 }, { itemId: 'adm-i-dau', qty: 60 }],
 }
 
-/** Nạp dữ liệu (mở app, nạp file, đồng bộ): chuyến mẫu đã bị sửa ở bản cũ ⇒ giữ thay đổi thành chuyến mới, mẫu về gốc. */
-function resetSamples(d: TO): TO {
-  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+// So dòng hàng theo NỘI DUNG (mã × số thùng), không so chuỗi JSON: dữ liệu về từ máy chủ (jsonb) bị đảo thứ tự trường
+// ({"qty","itemId"}) ⇒ so chuỗi tưởng mẫu đã bị sửa, mở app (đã đăng nhập) lần nào cũng tự tách 2 chuyến rác
+// (chủ dự án 30/10: tài khoản có 34 chuyến — ~28 là bản sao y hệt mẫu, mọc theo cặp mỗi lần mở app)
+const linesKey = (ls?: Order['lines']) => (ls ? ls.map(l => `${l.itemId}×${l.qty}`).join(',') : '\0')
+const SAMPLE_SETS = [{ trips: SAMPLE_TRIPS, orders: SAMPLE_ORDERS }, ...PREV_SAMPLES]
+
+/** Nạp dữ liệu (mở app, nạp file, đồng bộ): chuyến mẫu đã bị sửa ở bản cũ ⇒ giữ thay đổi thành chuyến mới, mẫu về gốc.
+ *  Kèm dọn chuyến RÁC = bản sao y hệt một chuyến mẫu (tên vẫn là mã chuyến, cùng xe, từng đơn cùng điểm giao + hàng,
+ *  không bật gì) — do lỗi so chuỗi ở trên đẻ ra; bỏ đi không mất gì. `dropped` ⇒ người gọi đánh dấu đã xoá. */
+function resetSamples(d: TO): TO & { dropped: string[] } {
   let { trips, orders } = d
   // khớp bản mẫu hiện tại HOẶC bản mẫu đời trước (chưa ai sửa) ⇒ chỉ thay mẫu, không tách chuyến
-  const pristineO = (o: Order) => same(o.lines, OLD_SAMPLE_LINES[o.id])
-    || [...SAMPLE_ORDERS, ...PREV_ORDERS].some(p => p.id === o.id && same([o.name, o.place, o.lines], [p.name, p.place, p.lines]))
-  const pristineT = (t: Trip) => [...SAMPLE_TRIPS, ...PREV_TRIPS].some(p => p.id === t.id && same([t.name, t.vehicleId, t.orderIds], [p.name, p.vehicleId, p.orderIds]))
+  const pristineO = (o: Order) => linesKey(o.lines) === linesKey(OLD_SAMPLE_LINES[o.id])
+    || [...SAMPLE_ORDERS, ...PREV_ORDERS].some(p => p.id === o.id && o.name === p.name && (o.place ?? '') === p.place && linesKey(o.lines) === linesKey(p.lines))
+  const pristineT = (t: Trip) => [...SAMPLE_TRIPS, ...PREV_TRIPS].some(p => p.id === t.id && t.name === p.name && t.vehicleId === p.vehicleId && t.orderIds.join() === p.orderIds.join())
   for (const st of trips.filter(t => isSample(t.id))) {
     const changed = !pristineT(st) || st.orderIds.some(oid => { const o = orders.find(x => x.id === oid); return o && !pristineO(o) })
     if (changed) { const k = makeFork({ trips, orders }, st); trips = [k.trip, ...trips]; orders = [...k.orders, ...orders] }
   }
+  // chuyến rác: bản sao y hệt một chuyến mẫu (mọi đời) — đơn của nó không nằm ở chuyến nào khác
+  const byId = new Map(orders.map(o => [o.id, o]))
+  const isClone = (t: Trip) => !isSample(t.id) && t.name === t.code && !t.lightOwnPallet && SAMPLE_SETS.some(v => v.trips.some(s =>
+    s.vehicleId === t.vehicleId && s.orderIds.length === t.orderIds.length && s.orderIds.every((sid, i) => {
+      const p = v.orders.find(x => x.id === sid), o = byId.get(t.orderIds[i])
+      return !!p && !!o && (o.place ?? '') === p.place && (o.name === p.name || DEFAULT_ORDER.test(o.name)) && linesKey(o.lines) === linesKey(p.lines)
+    })))
+  const clones = trips.filter(isClone)
+  const cloneOrders = new Set(clones.flatMap(t => t.orderIds))
+  trips.filter(t => !clones.includes(t)).forEach(t => t.orderIds.forEach(o => cloneOrders.delete(o)))
+  const dropped = [...clones.map(t => t.id), ...cloneOrders]
+  trips = trips.filter(t => !clones.includes(t)); orders = orders.filter(o => !cloneOrders.has(o.id))
   trips = trips.filter(t => !isSample(t.id)).map(t => {
     const k = detachSampleOrders({ trips, orders }, t); orders = [...k.added, ...orders]; return k.trip
   })
-  return { trips: [...trips, ...SAMPLE_TRIPS], orders: [...orders.filter(o => !isSample(o.id)), ...SAMPLE_ORDERS] }
+  return { trips: [...trips, ...SAMPLE_TRIPS], orders: [...orders.filter(o => !isSample(o.id)), ...SAMPLE_ORDERS], dropped }
 }
 
 export const useData = create<DataState>()(
@@ -234,21 +253,22 @@ export const useData = create<DataState>()(
       setPallet: pallet => set({ pallet }),
       // thay cả bộ (nạp file, xoá hết, bản từ tài khoản): thứ biến mất ⇒ đánh dấu đã xoá; thứ có trong bộ mới ⇒ bỏ dấu
       replaceAll: d => set(s => {
-        const next = resetSamples(d)
-        const alive = new Set([...d.items, ...d.vehicles, ...next.orders, ...next.trips].map(x => x.id))
+        const { trips, orders, dropped } = resetSamples(d)
+        const alive = new Set([...d.items, ...d.vehicles, ...orders, ...trips].map(x => x.id))
         const gone = [...s.items, ...s.vehicles, ...s.orders, ...s.trips].map(x => x.id).filter(id => !alive.has(id))
-        const deleted = mark(marks(s.deleted, d.deleted), gone)
+        const deleted = mark(marks(s.deleted, d.deleted), [...gone, ...dropped])
         alive.forEach(id => delete deleted[id])
-        return { items: d.items, vehicles: d.vehicles, pallet: d.pallet, ...next, deleted }
+        return { items: d.items, vehicles: d.vehicles, pallet: d.pallet, trips, orders, deleted }
       }),
       importBatch: d => set(s => {
         const now = Date.now()
         const put = <T extends { id: string }>(list: T[], add: T[], extra: Partial<T>) => add.reduce((l, x) => upsert(l, { ...x, ...extra, updatedAt: now }), list)
+        // file nhập có ghi đè đơn mẫu / gắn đơn mẫu vào chuyến khác ⇒ vẫn giữ chuyến mẫu nguyên gốc
+        const { trips, orders, dropped } = resetSamples({ orders: put(s.orders, d.orders, {}), trips: put(s.trips, d.trips, {}) })
         return {
           items: put(s.items, d.items, { owner: 'me' } as Partial<Item>),
           vehicles: put(s.vehicles, d.vehicles, { owner: 'me' } as Partial<Vehicle>),
-          // file nhập có ghi đè đơn mẫu / gắn đơn mẫu vào chuyến khác ⇒ vẫn giữ chuyến mẫu nguyên gốc
-          ...resetSamples({ orders: put(s.orders, d.orders, {}), trips: put(s.trips, d.trips, {}) }),
+          trips, orders, deleted: mark(s.deleted, dropped),
         }
       }),
     }),
@@ -258,7 +278,8 @@ export const useData = create<DataState>()(
       // máy đã lỡ xoá / sửa chuyến mẫu ở bản trước ⇒ mở app là chuyến mẫu về gốc (bản đã sửa thành chuyến mới)
       merge: (saved, cur) => {
         const s = { ...cur, ...(saved as Partial<DataState>) }
-        return { ...s, ...resetSamples(s) }
+        const { trips, orders, dropped } = resetSamples(s)
+        return { ...s, trips, orders, deleted: mark(s.deleted ?? {}, dropped) }
       },
     },
   ),

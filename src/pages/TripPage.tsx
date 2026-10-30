@@ -524,9 +524,16 @@ function TripSwitcher({ trip, trips, onRename, onDelete, onAll, onNew }: {
     <Popover className="min-w-0" panelClass="w-[330px] max-w-[calc(100vw-24px)] overflow-hidden"
       trigger={({ open, toggle }) => (
         <h1 className="min-w-0">
+          {/* nhãn "Chuyến xe" phía trên tên (chủ dự án 30/10: "làm rõ để user không rối" — đơn vị lớn nhất, chọn xe trong
+              đó; bên trong là các Đơn). Tên dài ⇒ cắt "…" ở đây (đã đủ chỗ ở 360px), đọc đủ ở danh sách chuyến / rê chuột */}
           <button onClick={() => { setRenaming(false); toggle() }} aria-expanded={open} aria-label={t('Chuyến đang mở: {name}. Bấm để xem các chuyến', { name: tx(trip.name) })}
-            className="hit flex h-9 w-full min-w-0 max-w-[170px] items-center gap-1 rounded-md border border-white/20 px-2 text-[13px] font-semibold text-white transition-colors hover:bg-white/10 sm:max-w-[260px] sm:px-2.5 sm:text-sm">
-            <span className="truncate">{tx(trip.name)}</span><ChevronDown size={16} className={cx('shrink-0 text-slate-300 transition-transform', open && 'rotate-180')} />
+            title={tx(trip.name)}
+            className="hit flex h-10 w-full min-w-0 max-w-[170px] items-center gap-1 rounded-md border border-white/20 px-2 text-white transition-colors hover:bg-white/10 sm:h-11 sm:max-w-[260px] sm:px-2.5">
+            <span className="flex min-w-0 flex-col items-start leading-tight">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-slate-300 sm:text-[11px]">{t('Chuyến xe')}</span>
+              <span className="w-full truncate text-left text-[13px] font-semibold sm:text-sm">{tx(trip.name)}</span>
+            </span>
+            <ChevronDown size={16} className={cx('ml-auto shrink-0 text-slate-300 transition-transform', open && 'rotate-180')} />
           </button>
         </h1>
       )}>
@@ -534,7 +541,7 @@ function TripSwitcher({ trip, trips, onRename, onDelete, onAll, onNew }: {
         <>
           <div className="flex items-center gap-1 border-b border-slate-200 py-1 pl-3 pr-1">
             {renaming ? (
-              <input autoFocus defaultValue={trip.name} aria-label={t('Tên chuyến')}
+              <input autoFocus defaultValue={trip.name} aria-label={t('Tên chuyến')} maxLength={80}
                 onBlur={e => { e.target.value.trim() && onRename(e.target.value.trim()); setRenaming(false) }}
                 onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setRenaming(false) }}
                 // chữ < 16px thì iPhone tự phóng to cả trang khi chạm vào ô
@@ -828,7 +835,7 @@ function TitleBlock({ r, busy, error, hasCargo, vehicle, tripName, orders, sug, 
               </div>
             )
           })}
-          <div className="truncate border-t border-navy-950 px-2 py-1 text-[11px] text-slate-700">{tx(tripName)} · {tx(vehicle.name)}</div>
+          <div className="break-words border-t border-navy-950 px-2 py-1 text-[11px] leading-snug text-slate-700">{tx(tripName)} · {tx(vehicle.name)}</div>
         </div>
       )}
       {sug ? (
@@ -1230,7 +1237,8 @@ function CountSheet({ r, colors, focus, onFocus, tripName, vehicle, onToast }: {
     const c = document.querySelector<HTMLCanvasElement>('[data-scene] canvas')
     if (!c) return
     const png = c.toDataURL('image/png')   // chụp ngay lúc bấm, trước khi hộp "Lưu thành…" mở
-    const name = t('so-do-{name}.png', { name: tx(tripName).replace(/\s+/g, '-').toLowerCase() })
+    // tên chuyến người dùng đặt có thể dài / có "/" ":" (vd "Chuyến 30/10") — tên file Windows không nhận
+    const name = t('so-do-{name}.png', { name: tx(tripName).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '-').toLowerCase().slice(0, 60) })
     if (await saveFile(name, () => fetch(png).then(r => r.blob()))) onToast(t('Đã lưu ảnh sơ đồ'))
   }
   return (
