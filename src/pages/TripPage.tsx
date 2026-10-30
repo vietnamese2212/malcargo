@@ -530,7 +530,7 @@ function TripHead({ trip, trips, onRename, onDelete, onAll, onNew }: {
   // khung xanh ôm trọn phần Xe + Đơn hàng của chuyến
   const caption = <span className="block text-[11px] font-semibold uppercase tracking-wide text-brand-100">{t('Chuyến xe')}</span>
   return (
-    <div className="flex shrink-0 items-start gap-1 bg-brand-500 py-1.5 pl-2 pr-1 text-white sm:pl-3 sm:pr-2">
+    <div className="flex shrink-0 items-center gap-2 bg-brand-500 px-3 py-2 text-white sm:px-4">
       {renaming ? (
         <label className="min-w-0 flex-1 px-1 py-0.5">
           {caption}
@@ -546,10 +546,15 @@ function TripHead({ trip, trips, onRename, onDelete, onAll, onNew }: {
           trigger={({ open, toggle }) => (
             <h1 className="min-w-0">
               <button onClick={toggle} aria-expanded={open} aria-label={t('Chuyến đang mở: {name}. Bấm để xem các chuyến', { name: tx(trip.name) })}
-                className={cx('min-h-[44px] max-w-full rounded-md px-1.5 py-0.5 text-left transition-colors hover:bg-white/10', open && 'bg-white/15')}>
-                {caption}
-                <span className="block break-words text-[17px] font-bold leading-snug text-white">
-                  {tx(trip.name)}<ChevronDown size={18} className={cx('ml-1 inline align-[-3px] text-brand-100 transition-transform', open && 'rotate-180')} />
+                // trông như Ô CHỌN (chủ dự án 30/10: "cho cái gì vào để người ta biết bấm được"): khung viền + nút tròn ▾
+                className={cx('flex min-h-[44px] max-w-full items-center gap-2.5 rounded-lg border border-white/40 py-1 pl-2.5 pr-1.5 text-left transition-colors hover:bg-white/20',
+                  open ? 'bg-white/20' : 'bg-white/10')}>
+                <span className="min-w-0">
+                  {caption}
+                  <span className="block break-words text-[17px] font-bold leading-snug text-white">{tx(trip.name)}</span>
+                </span>
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-brand-600">
+                  <ChevronDown size={18} strokeWidth={2.5} className={cx('transition-transform', open && 'rotate-180')} />
                 </span>
               </button>
             </h1>
@@ -583,7 +588,7 @@ function TripHead({ trip, trips, onRename, onDelete, onAll, onNew }: {
           )}
         </Popover>
       )}
-      {!renaming && <IconButton label={t('Đổi tên chuyến này')} onClick={() => setRenaming(true)} className="mt-0.5 shrink-0 !text-brand-100 hover:!bg-white/15 hover:!text-white"><Pencil size={17} /></IconButton>}
+      {!renaming && <IconButton label={t('Đổi tên chuyến này')} onClick={() => setRenaming(true)} className="shrink-0 rounded-lg border border-white/40 !text-white hover:!bg-white/20"><Pencil size={17} /></IconButton>}
     </div>
   )
 }

@@ -84,7 +84,9 @@ for (const st of E.SAMPLE_TRIPS) {
       `${st.name}: ${r.totals.pallets} pallet (cần 17, có pallet gộp, thạch lẻ nằm trên pallet gộp)`)
     const on = run(true)
     invariants(st.name + ' · hàng nhẹ pallet riêng', on)
-    ok(on.fits && on.totals.pallets === 18 && lightIn(on).every(c => c.kind === 'own'), `${st.name}: bật hàng nhẹ pallet riêng ⇒ ${on.totals.pallets} pallet (cần 18, thạch lẻ đứng riêng, vừa xe)`)
+    // chủ dự án tự sửa xe pallet 15 tấn lòng 9,5 m (30/10) ⇒ bật lên thì pallet thứ 18 không còn chỗ (báo thiếu 1) —
+    // công tắc vẫn thấy khác; chỉ giữ: 18 pallet, thạch đứng riêng
+    ok(on.totals.pallets === 18 && lightIn(on).every(c => c.kind === 'own'), `${st.name}: bật hàng nhẹ pallet riêng ⇒ ${on.totals.pallets} pallet (cần 18, thạch lẻ đứng riêng)`)
   } else {
     ok(r.count.some(c => c.onTopOfOthers && os.some(o => o.lines.some(l => l.item.light && l.item.name === c.label))), `${st.name}: hàng nhẹ không nằm trên nóc`)
     ok(r.payloadPct >= 90, `${st.name}: chở ${r.payloadPct?.toFixed(0)}% tải (cần ≥ 90% để thử được)`)
