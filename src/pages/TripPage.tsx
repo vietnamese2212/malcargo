@@ -286,7 +286,7 @@ export default function TripPage({ id }: { id: string }) {
             <LangSwitch />
             <AccountButton onData={() => setPanel('account')} />
           </span>
-          <a href="#/trips" aria-label={t('MAL Cargo, về bàn xếp xe')} className="shrink-0"><Logo dark compact /></a>
+          <a href="#/trips" aria-label={t('MAL Cargo, về bàn xếp xe')} className="hit shrink-0"><Logo dark compact /></a>
         </div>
       </header>
 
@@ -378,7 +378,7 @@ export default function TripPage({ id }: { id: string }) {
             </ul>
           )}
 
-          <Block title={t('Đơn hàng của chuyến')} open={open.cargo} onToggle={() => setOpen(o => ({ ...o, cargo: !o.cargo }))}
+          <Block title={t('Đơn hàng')} open={open.cargo} onToggle={() => setOpen(o => ({ ...o, cargo: !o.cargo }))}
             summary={hasCargo ? (
               <span className="flex flex-wrap gap-x-3">
                 <SumChip label={t('Đơn')} value={fmtInt(rawOrders.length)} /><SumChip label={t('Thùng')} value={fmtInt(all.cartons)} />
@@ -419,7 +419,7 @@ export default function TripPage({ id }: { id: string }) {
                           <div className="py-1.5 pl-3 pr-1">
                             <div className="flex items-center gap-1">
                               <button type="button" onClick={() => pick(o.id, l.itemId)} aria-pressed={isSel} title={t('Xem mã này nằm đâu trên xe')}
-                                className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md py-0.5 pr-1 text-left hover:bg-slate-50">
+                                className="flex min-w-0 flex-1 items-center gap-2.5 self-stretch rounded-md py-0.5 pr-1 text-left hover:bg-slate-50">
                                 <BoxGlyph w={it.w} h={it.h} light={it.light} color={itemColor(it.id)} />
                                 <span className="min-w-0 flex-1 break-words text-sm font-semibold leading-snug text-slate-900">{tx(it.name)}</span>
                               </button>
@@ -526,9 +526,11 @@ function TripHead({ trip, trips, onRename, onDelete, onAll, onNew }: {
     const os = tr.orderIds.map(id => orders.find(o => o.id === id)).filter((o): o is Order => !!o).map(o => resolveOrder(o, items))
     return { tr, v: findVehicle(vehicles, tr.vehicleId), tot: orderTotals(os.flatMap(o => o.lines), pallet) }
   }), [trips, orders, items, vehicles, pallet])
-  const caption = <span className="block text-[11px] font-semibold uppercase tracking-wide text-brand-700">{t('Chuyến xe')}</span>
+  // dải XANH thương hiệu (chủ dự án 30/10: "chuyến cần nổi bật hơn — bằng màu sắc") nối liền vạch xanh bên trái ⇒
+  // khung xanh ôm trọn phần Xe + Đơn hàng của chuyến
+  const caption = <span className="block text-[11px] font-semibold uppercase tracking-wide text-brand-100">{t('Chuyến xe')}</span>
   return (
-    <div className="flex shrink-0 items-start gap-1 border-b border-slate-200 bg-white py-1.5 pl-2 pr-1 sm:pl-3 sm:pr-2">
+    <div className="flex shrink-0 items-start gap-1 bg-brand-500 py-1.5 pl-2 pr-1 text-white sm:pl-3 sm:pr-2">
       {renaming ? (
         <label className="min-w-0 flex-1 px-1 py-0.5">
           {caption}
@@ -536,7 +538,7 @@ function TripHead({ trip, trips, onRename, onDelete, onAll, onNew }: {
             onBlur={e => { e.target.value.trim() && onRename(e.target.value.trim()); setRenaming(false) }}
             onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setRenaming(false) }}
             // chữ < 16px thì iPhone tự phóng to cả trang khi chạm vào ô
-            className="tap mt-0.5 w-full rounded-md border border-brand-500 px-2 text-base font-semibold outline-none ring-2 ring-brand-100" />
+            className="tap mt-0.5 w-full rounded-md border border-white bg-white px-2 text-base font-semibold text-slate-900 outline-none ring-2 ring-brand-200" />
         </label>
       ) : (
         // điện thoại: ✏ ở mép phải; máy tính: ✏ ngay sau tên
@@ -544,10 +546,10 @@ function TripHead({ trip, trips, onRename, onDelete, onAll, onNew }: {
           trigger={({ open, toggle }) => (
             <h1 className="min-w-0">
               <button onClick={toggle} aria-expanded={open} aria-label={t('Chuyến đang mở: {name}. Bấm để xem các chuyến', { name: tx(trip.name) })}
-                className="min-h-[44px] max-w-full rounded-md px-1 py-0.5 text-left transition-colors hover:bg-slate-50">
+                className={cx('min-h-[44px] max-w-full rounded-md px-1.5 py-0.5 text-left transition-colors hover:bg-white/10', open && 'bg-white/15')}>
                 {caption}
-                <span className="block break-words text-[17px] font-bold leading-snug text-slate-900">
-                  {tx(trip.name)}<ChevronDown size={18} className={cx('ml-1 inline align-[-3px] text-slate-500 transition-transform', open && 'rotate-180')} />
+                <span className="block break-words text-[17px] font-bold leading-snug text-white">
+                  {tx(trip.name)}<ChevronDown size={18} className={cx('ml-1 inline align-[-3px] text-brand-100 transition-transform', open && 'rotate-180')} />
                 </span>
               </button>
             </h1>
@@ -581,7 +583,7 @@ function TripHead({ trip, trips, onRename, onDelete, onAll, onNew }: {
           )}
         </Popover>
       )}
-      {!renaming && <IconButton label={t('Đổi tên chuyến này')} onClick={() => setRenaming(true)} className="mt-0.5 shrink-0 text-slate-500"><Pencil size={17} /></IconButton>}
+      {!renaming && <IconButton label={t('Đổi tên chuyến này')} onClick={() => setRenaming(true)} className="mt-0.5 shrink-0 !text-brand-100 hover:!bg-white/15 hover:!text-white"><Pencil size={17} /></IconButton>}
     </div>
   )
 }
@@ -729,8 +731,6 @@ function SpecStrip({ vehicle, pallet, lightOwn, keep, picker, onSpecs, onKind, o
               className={cx(chip, 'w-full min-w-0 font-semibold', open && 'border-brand-500 ring-2 ring-brand-100')}>
               <span className="max-sm:hidden"><TruckGlyph pallet={vehicle.kind === 'pallet'} small /></span>
               <span className="min-w-0 text-left leading-tight">
-                {/* nhãn phần Xe của chuyến — cùng kiểu nhãn "Chuyến xe" ở tiêu đề */}
-                <span className="block text-[10px] font-semibold uppercase tracking-wide text-brand-700">{t('Xe của chuyến')}</span>
                 <span className="block break-words sm:whitespace-nowrap">{tx(vehicle.name)}</span>
                 {/* điện thoại: lòng thùng + tải gộp vào dòng phụ */}
                 <span className="num block text-[11px] font-normal text-slate-600 sm:hidden">
@@ -806,7 +806,8 @@ function TitleBlock({ r, busy, error, hasCargo, vehicle, tripName, orders, sug, 
   return (
     <div className="pointer-events-none min-w-0">
       <button onClick={() => setMore(v => !v)} aria-expanded={more} aria-label={t('Kết quả: {head}. Bấm để xem chi tiết', { head })}
-        className={cx(frame, 'flex max-w-full items-stretch text-left transition-opacity', busy && 'opacity-80')}>
+        // máy cảm ứng: dải cao 40px cho dễ chạm (vùng chạm vô hình sẽ đè lên nút "Dùng" xe gợi ý ngay dưới)
+        className={cx(frame, 'flex max-w-full items-stretch text-left transition-opacity [@media(pointer:coarse)]:min-h-[40px]', busy && 'opacity-80')}>
         <span className={cx('flex items-center gap-1 whitespace-nowrap px-2 py-1 text-[12px] font-semibold', r.fits ? 'bg-emerald-50 text-emerald-900' : 'bg-red-50 text-red-900')}>
           {busy ? <Loader2 size={13} className="shrink-0 animate-spin" /> : r.fits ? <Check size={13} className="shrink-0" /> : <AlertTriangle size={13} className="shrink-0" />}{head}
         </span>
@@ -846,7 +847,7 @@ function TitleBlock({ r, busy, error, hasCargo, vehicle, tripName, orders, sug, 
         </div>
       )}
       {sug ? (
-        <button onClick={() => onPick(sug.id)} className={cx(frame, 'mt-1 flex max-w-full items-center gap-1.5 border bg-brand-50 px-2 py-1 text-left text-[12px] text-slate-800 hover:bg-brand-100')}>
+        <button onClick={() => onPick(sug.id)} className={cx(frame, 'mt-1 flex max-w-full items-center gap-1.5 border bg-brand-50 px-2 py-1 text-left text-[12px] text-slate-800 hover:bg-brand-100 [@media(pointer:coarse)]:min-h-[40px]')}>
           <Sparkles size={13} className="shrink-0 text-brand-600" />
           <span className="min-w-0 truncate">{r.fits ? t('Xe nhỏ hơn vẫn vừa') : t('Xe vừa nhất')}: <b>{tx(sug.name)}</b></span>
           <span className="shrink-0 font-semibold text-brand-700">{t('Dùng')}</span>
@@ -864,7 +865,7 @@ const pctBar = (pct: number) => (pct > 100 ? 'bg-red-500' : pct >= 85 ? 'bg-ambe
 /** Một ô của dải khung tên: nhãn nhỏ + số, thanh 2 px ở đáy ô = % đã dùng. */
 function Cell({ label, value, pct, bad, className }: { label: string; value: string; pct?: number | null; bad?: boolean; className?: string }) {
   return (
-    <span className={cx('relative flex items-baseline gap-1 whitespace-nowrap border-l border-slate-300 px-2 py-1', className)}>
+    <span className={cx('relative flex items-center gap-1 whitespace-nowrap border-l border-slate-300 px-2 py-1', className)}>
       <span className="text-[11px] text-slate-600">{label}</span>
       <span className={cx('num text-[12px] font-semibold', bad ? 'text-red-700' : pctTone(pct))}>{value}</span>
       {pct != null && <span className={cx('absolute bottom-0 left-0 h-[2px]', pctBar(pct))} style={{ width: `${Math.min(100, pct)}%` }} />}

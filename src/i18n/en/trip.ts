@@ -44,7 +44,6 @@ export const TRIP: Record<string, string> = {
   'Chuyến đang mở: {name}. Bấm để xem các chuyến': 'Current trip: {name}. Tap to see all trips',
   'Tên chuyến': 'Trip name',
   'Chuyến xe': 'Trip',
-  'Xe của chuyến': 'Truck',
   'Đổi tên chuyến này': 'Rename this trip',
   'đang mở': 'open',
   'Chưa chọn xe': 'No truck chosen',
@@ -158,7 +157,6 @@ export const TRIP: Record<string, string> = {
   'Của tôi': 'Mine',
 
   // ── cột khai hàng · thẻ đơn · dòng hàng ──
-  'Đơn hàng của chuyến': 'Orders in this trip',
   'Đơn': 'Orders',
   'Nặng': 'Weight',
   'Chưa có hàng': 'No goods yet',
