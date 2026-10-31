@@ -33,7 +33,7 @@ import { t, tx } from '../i18n'
 import { ItemPicker } from '../ui/ItemPicker'
 import { ImportSheet } from '../ui/ImportSheet'
 import { saveFile } from '../ui/saveFile'
-import { go, replaceRoute } from '../ui/route'
+import { go, replaceRoute, useBackClose } from '../ui/route'
 import ItemsPage from './ItemsPage'
 import VehiclesPage from './VehiclesPage'
 import OrdersPage from './OrdersPage'
@@ -82,12 +82,27 @@ export default function TripPage({ id }: { id: string }) {
   // danh sách chọn xe đang mở ⇒ thử hàng trên MỌI xe để đánh dấu ✓ / ✗
   const { result, suggestion, fits, busy, error } = useTripPlan(input, candidates, picking ? allTrucks : undefined)
 
+  // Tự chọn xe khi người dùng GÕ XONG: chọn theo kết quả của phím đầu thì gõ "1200" thành xe 1,5 tấn chở 1 thùng (thử 31/10).
+  // Ô số còn đang gõ ⇒ chờ 2,5 s không có kết quả mới; rời ô ⇒ chọn ngay. Đang tính ⇒ kết quả cũ, chưa chọn.
+  const [typing, setTyping] = useState(false)
   useEffect(() => {
-    if (!trip || trip.vehicleId || !result || !hasCargo) return
+    const on = () => setTimeout(() => setTyping(!!(document.activeElement as HTMLElement | null)?.matches('input:not([type=range]):not([type=checkbox]), textarea')))
+    document.addEventListener('focusin', on); document.addEventListener('focusout', on)
+    return () => { document.removeEventListener('focusin', on); document.removeEventListener('focusout', on) }
+  }, [])
+  useEffect(() => {
+    if (!trip || trip.vehicleId || !result || !hasCargo || busy) return
     const pick = suggestion ?? fallback?.id
-    if (pick) { upsertTrip({ ...trip, vehicleId: pick }); setToast(suggestion ? t('Đã chọn xe nhỏ nhất chở hết hàng') : t('Không xe nào chở hết, tạm chọn xe lớn nhất')) }
+    if (!pick) return
+    const go = setTimeout(() => {
+      const cur = useData.getState().trips.find(x => x.id === trip.id)
+      if (!cur || cur.vehicleId) return
+      upsertTrip({ ...cur, vehicleId: pick })
+      setToast(suggestion ? t('Đã chọn xe nhỏ nhất chở hết hàng') : t('Không xe nào chở hết, tạm chọn xe lớn nhất'))
+    }, typing ? 2500 : 0)
+    return () => clearTimeout(go)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [result, suggestion])
+  }, [result, suggestion, busy, typing])
 
   const [step, setStep] = useState<number | null>(null)
   const [playing, setPlaying] = useState(false)
@@ -203,6 +218,10 @@ export default function TripPage({ id }: { id: string }) {
     if (!vehicle) return
     if (vehicle.owner === 'admin') {
       const v: Vehicle = { ...vehicle, ...patch, id: newId(), owner: 'me', name: `${vehicle.name} (của tôi)` } // i18n-ok — dữ liệu lưu; tx() dịch lúc hiện
+      // đã có bản "của tôi" y hệt (vd. đổi Thùng rời ↔ Pallet cùng xe mẫu ở chuyến khác) ⇒ dùng lại, đừng đẻ thêm xe trùng (thử 31/10)
+      const same = vehicles.find(x => x.owner === 'me' && x.name === v.name && x.kind === v.kind && x.l === v.l && x.w === v.w && x.h === v.h
+        && x.payloadKg === v.payloadKg && !!x.container === !!v.container && (x.plate ?? '') === (v.plate ?? ''))
+      if (same) { upsertTrip({ ...trip, vehicleId: same.id }); setToast(t('Đã đổi xe')); return }
       upsertVehicle(v); upsertTrip({ ...trip, vehicleId: v.id })
       setToast(t('Đã tạo xe của bạn từ xe mẫu'))
     } else upsertVehicle({ ...vehicle, ...patch })
@@ -310,7 +329,9 @@ export default function TripPage({ id }: { id: string }) {
         <TripHead trip={trip} trips={trips} onRename={name => upsertTrip({ ...trip, name })} onDelete={setDelTrip}
           onAll={() => setPanel('trips')} onNew={newTrip} />
       </div>
-      <div className="lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(380px,440px)_1fr]">
+      {/* hàng lưới cao ĐÚNG phần màn còn lại (minmax(0,1fr)): hàng `auto` lấy cỡ theo khung vẽ 3D đã đặt lúc mở trang — dải thông
+          số xuống dòng sau đó thì khung không co lại, trang dài thêm, thanh xem từng bước chìm dưới đáy (1366×768, thử 31/10) */}
+      <div className="lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(380px,440px)_1fr] lg:grid-rows-[minmax(0,1fr)]">
         {/* ── BẢN VẼ: dải thông số xe + 3D + khung tên ── */}
         {/* toàn màn hình: khung 3D phủ kín màn (máy có Fullscreen API thì ẩn luôn thanh trình duyệt) */}
         <section data-scene style={{ ['--trip-h' as string]: `${headH}px` }} className={full
@@ -396,7 +417,7 @@ export default function TripPage({ id }: { id: string }) {
             summary={hasCargo ? (
               <span className="flex flex-wrap gap-x-3">
                 <SumChip label={t('Đơn')} value={fmtInt(rawOrders.length)} /><SumChip label={t('Thùng')} value={fmtInt(all.cartons)} />
-                <SumChip label={t('Nặng')} value={fmtKgShort(all.kg)} /><SumChip label={t('Khối')} value={fmtM3(all.m3)} />
+                <SumChip label={t('Nặng')} value={all.kgKnown ? fmtKgShort(all.kg) : all.kg > 0 ? `≥${fmtKgShort(all.kg)}` : '?'} /><SumChip label={t('Khối')} value={fmtM3(all.m3)} />
               </span>
             ) : t('Chưa có hàng')}>
             {!rawOrders.length ? (
@@ -822,6 +843,9 @@ function TitleBlock({ r, busy, error, hasCargo, vehicle, tripName, orders, sug, 
     : t('{n} thùng', { n: fmtInt(left) })
   const head = r.errors.length ? t('Không xếp được') : r.fits ? t('Vừa xe') : left ? t('Thiếu {what}', { what: leftWhat }) : t('Quá tải')
   const count = pal ? `${fmtInt(palPlaced)}/${fmtInt(palTotal)}` : `${fmtInt(p.placedCount)}/${fmtInt(p.totalCount)}`
+  // có mã chưa khai kg ⇒ tải chưa rõ: đừng ghi "Tải 0%" (thử 31/10) — biết được một phần thì ghi "≥", chưa biết gì thì "?"
+  const kgPart = (s: string) => (r.totals.kgKnown ? s : r.weightKg > 0 ? `≥${s}` : '?')
+  const loadPct = r.totals.kgKnown || r.weightKg > 0 ? r.payloadPct : null
   return (
     <div className="pointer-events-none min-w-0">
       <button onClick={() => setMore(v => !v)} aria-expanded={more} aria-label={t('Kết quả: {head}. Bấm để xem chi tiết', { head })}
@@ -831,17 +855,17 @@ function TitleBlock({ r, busy, error, hasCargo, vehicle, tripName, orders, sug, 
           {busy ? <Loader2 size={13} className="shrink-0 animate-spin" /> : r.fits ? <Check size={13} className="shrink-0" /> : <AlertTriangle size={13} className="shrink-0" />}{head}
         </span>
         <Cell label={pal ? 'Pallet' : t('Thùng')} value={count} bad={pal ? palPlaced < palTotal : left > 0} className="max-sm:hidden" />
-        <Cell label={t('Tải')} value={r.payloadPct != null ? `${fmtDec(r.payloadPct, 0)}%` : fmtKgShort(r.weightKg)} pct={r.payloadPct} />
+        <Cell label={t('Tải')} value={kgPart(r.payloadPct != null ? `${fmtDec(r.payloadPct, 0)}%` : fmtKgShort(r.weightKg))} pct={loadPct} />
         <Cell label={t('Khối')} value={`${fmtDec(p.volumePct, 0)}%`} pct={p.volumePct} />
-        {/* màn hẹp (360px) / chữ trạng thái dài ("Thiếu 5 pallet") trên điện thoại: bớt ô Sàn (vẫn có trong chi tiết ▾) —
-            dải không chui dưới nút góc phải */}
-        <Cell label={t('Sàn')} value={`${fmtDec(p.lengthUsedPct, 0)}%`} pct={p.lengthUsedPct} className={r.fits ? 'max-[379px]:hidden' : 'max-sm:hidden'} />
+        {/* điện thoại: bớt ô Sàn (vẫn có trong chi tiết ▾) — dải không chui dưới nút góc phải (31/10 đo 360–412px: tiếng Anh
+            "Payload / Volume" thò 37px, tiếng Việt chuyến mẫu pallet 390px thò 5px) */}
+        <Cell label={t('Sàn')} value={`${fmtDec(p.lengthUsedPct, 0)}%`} pct={p.lengthUsedPct} className="max-sm:hidden" />
         <span className="grid place-items-center border-l border-slate-300 px-1 text-slate-500"><ChevronDown size={14} className={cx('transition-transform', more && 'rotate-180')} /></span>
       </button>
       {more && (
         <div className={cx(frame, 'mt-1 max-h-[calc(50vh-80px)] w-[272px] overflow-y-auto lg:max-h-[60vh]')}>
           <Row label={pal ? 'Pallet' : t('Thùng')} value={`${count}${pal && topTotal ? ` ${t('+{n} th', { n: fmtInt(topPlaced) })}` : ''}`} bad={pal ? palPlaced < palTotal : left > 0} />
-          <Row label={t('Tải')} value={`${fmtKgShort(r.weightKg)}${vehicle.payloadKg ? ` / ${fmtKgShort(vehicle.payloadKg)}` : ''}`} pct={r.payloadPct} />
+          <Row label={t('Tải')} value={`${kgPart(fmtKgShort(r.weightKg))}${vehicle.payloadKg ? ` / ${fmtKgShort(vehicle.payloadKg)}` : ''}`} pct={loadPct} />
           <Row label={t('Thể tích')} value={fmtM3(r.totals.m3)} pct={p.volumePct} />
           <Row label={t('Sàn')} value={`${m((vehicle.l * p.lengthUsedPct) / 100)}/${m(vehicle.l)} m`} pct={p.lengthUsedPct} />
           {/* từng đơn trên xe: bao nhiêu thùng, đã lên xe đủ chưa */}
@@ -912,6 +936,7 @@ function Row({ label, value, pct, bad }: { label: string; value: string; pct?: n
 // Fullscreen API thì xin luôn để ẩn thanh trình duyệt — thoát bằng Esc / cử chỉ của máy ⇒ khung về chỗ cũ.
 function useToggleFull(): [boolean, (on: boolean) => void] {
   const [full, setFull] = useState(false)
+  useBackClose(full, () => setFull(false))   // Back của máy thoát toàn màn hình, không rời màn
   const set = (on: boolean) => {
     setFull(on)
     if (on) document.documentElement.requestFullscreen?.()?.catch(() => {})
@@ -1048,6 +1073,7 @@ function SpecPopup({ vehicle, sharedWith, onClose, onPatch }: {
   const pallet = useData(s => s.pallet)
   const box = useViewportBox(true)
   const { kb } = useVisualView()
+  useBackClose(true, onClose)
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && !document.querySelector('[data-sheet]')) onClose() }
     window.addEventListener('keydown', k)
@@ -1292,7 +1318,8 @@ function CountSheet({ r, colors, focus, onFocus, tripName, vehicle, onToast }: {
               </span>
               <span className={cx('num text-right text-sm font-semibold', short ? 'text-red-700' : 'text-slate-900')}>
                 {fmtInt(c.placed)}{short && <span className="text-[13px]">/{fmtInt(c.total)}</span>}
-                <span className="block text-[12px] font-normal text-slate-600">{tx(c.unit)}</span>
+                {/* số ít / nhiều theo số đang đếm (tiếng Anh từng ghi "1 pallets") */}
+                <span className="block text-[12px] font-normal text-slate-600">{c.unit === 'pallet' ? t('{n:pallet|pallet}', { n: c.total }) : t('{n:thùng|thùng}', { n: c.total })}</span>
               </span>
             </button>
           )

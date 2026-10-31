@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Copy, Trash2 } from 'lucide-react'
 import type { Vehicle } from '../data/types'
 import { newId, useData } from '../data/store'
@@ -30,7 +30,7 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
   const adminEdit = sample && isAdmin
   const saveShared = async () => {
     setTried(true)
-    if (!valid) return
+    if (!valid || badNum()) return
     setBusy(true)
     const e = await saveCatalog('vehicle', { ...f, name: f.name.trim() || f.plate.trim().toUpperCase(), plate: f.plate.trim().toUpperCase() })
     setBusy(false)
@@ -49,12 +49,19 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
     payload: f.payloadKg != null && (f.payloadKg < 100 || f.payloadKg > 60000) ? t('Nhập số từ {min} đến {max}.', { min: fmtInt(100), max: fmtInt(60000) }) : null,
   }
   const valid = !errs.name && !errs.dims && !errs.payload
+  // ô số đang ĐỎ không đổi giá trị đã lưu — Lưu lúc đó là bỏ âm thầm số vừa gõ (như form Mã hàng)
+  const box = useRef<HTMLFieldSetElement>(null)
+  const badNum = () => {
+    const bad = !!box.current?.querySelector('[aria-invalid=true]')
+    setErr(bad ? t('Còn ô số gõ sai (viền đỏ), sửa lại hoặc xoá trống.') : null)
+    return bad
+  }
   const m3 = dimsOk ? (f.l * f.w * f.h) / 1e9 : 0
   const slots = dimsOk && f.kind === 'pallet' ? palletFloorSlots({ l: pallet.l, w: pallet.w, h: pallet.maxH, baseH: pallet.baseH, baseColor: '' }, { length: f.l, width: f.w, height: f.h }) : 0
 
   const save = () => {
     setTried(true)
-    if (!valid) return
+    if (!valid || badNum()) return
     let name = f.name.trim() || f.plate.trim().toUpperCase()
     if (sample && name === vehicle?.name) name = `${name} (của tôi)` // i18n-ok — tên lưu vào dữ liệu, tx() dịch lúc hiện
     const v: Vehicle = { ...f, name, plate: f.plate.trim().toUpperCase(), ...(sample ? { id: newId(), owner: 'me' as const } : {}) }
@@ -90,7 +97,7 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
           </div>
         )}
       </div>
-      <fieldset className="space-y-4">
+      <fieldset ref={box} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('Tên xe')} error={tried ? errs.name : null}><TextInput value={f.name} onChange={e => set('name', e.target.value)} placeholder={t('Xe 5 tấn số 1')} /></Field>
           <Field label={t('Biển số')}><TextInput value={f.plate} onChange={e => set('plate', e.target.value)} placeholder="29C12345" /></Field>

@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { ChevronLeft, X } from 'lucide-react'
 import { IconButton, KeyboardShield, cx, useViewportBox } from './kit'
 import { t } from '../i18n'
+import { useBackClose } from './route'
 
 /** Chữ ký MAL (cùng kiểu logo mal.com.vn): "MAL" nghiêng đậm + nhãn sản phẩm CARGO nền xanh. */
 export function Logo({ dark, compact }: { dark?: boolean; compact?: boolean }) {
@@ -34,6 +35,7 @@ export function Panel({ open, onClose, children }: { open: boolean; onClose: () 
     return () => { window.removeEventListener('keydown', k); document.body.style.overflow = prev }
   }, [open, onClose])
   const box = useViewportBox(open)
+  useBackClose(open, onClose)
   if (!open) return null
   return createPortal(
     <div className="fixed inset-0 z-40 flex justify-end" style={box}>

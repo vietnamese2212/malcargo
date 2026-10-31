@@ -285,6 +285,13 @@ export const useData = create<DataState>()(
   ),
 )
 
+// Hai tab / app cài + tab trình duyệt trên cùng máy: mỗi tab giữ một bản trong bộ nhớ và lưu là ghi đè CẢ BỘ ⇒ tab cũ
+// lưu là xoá mất thay đổi của tab kia (thử 31/10: thêm mã ở tab A, sửa số ở tab B, tải lại A ⇒ mã của A mất).
+// Tab khác vừa lưu ⇒ nạp lại ngay (nạp lại không ghi ngược ra, không thành vòng qua lại giữa hai tab).
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', e => { if (e.key === 'malcargo-data-v1') void useData.persist.rehydrate() })
+}
+
 // ── Mẫu chung: admin sửa trên giao diện, lưu ở máy chủ (cloud.ts nạp về). Chưa nối máy chủ
 //    hoặc đang mất mạng ⇒ dùng bản mặc định đóng gói trong catalog.ts / bản đã nạp lần trước.
 export const useCatalog = create<{ items: Item[]; vehicles: Vehicle[] }>(() => ({ items: ADMIN_ITEMS, vehicles: ADMIN_VEHICLES }))

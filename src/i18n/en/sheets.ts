@@ -12,6 +12,8 @@ export const SHEETS: Record<string, string> = {
 
   // ── form mã hàng ──
   'Nhập mã hàng': 'Enter a code',
+  'Mã {code} đã có, đặt mã khác.': 'Code {code} already exists, use another code.',
+  'Còn ô số gõ sai (viền đỏ), sửa lại hoặc xoá trống.': 'Some number boxes are invalid (red), fix or clear them.',
   'Nhập tên hàng': 'Enter an item name',
   'Nhập đủ dài, rộng, cao của thùng': 'Enter the carton length, width and height',
   'Mã mẫu: {name}': 'Sample item: {name}',

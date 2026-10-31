@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, 
 import { createPortal } from 'react-dom'
 import { Search, Trash2, X } from 'lucide-react'
 import { numLocale, t } from '../i18n'
+import { useBackClose } from './route'
 
 export const cx = (...a: (string | false | null | undefined)[]) => a.filter(Boolean).join(' ')
 
@@ -422,6 +423,7 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, wide }
   }, [open, onClose])
   const box = useViewportBox(open)
   const { kb } = useVisualView()
+  useBackClose(open, onClose)
   // điện thoại đang gõ mà chạm ra ngoài tấm: chỉ cất bàn phím, KHÔNG đóng tấm — khỏi mất chữ vừa gõ
   const keepOpen = useRef(false)
   if (!open) return null
@@ -512,6 +514,7 @@ export function Confirm({ open, title, body, okText = t('Xoá'), danger = true, 
   open: boolean; title: string; body?: ReactNode; okText?: string; danger?: boolean; onOk: () => void; onClose: () => void
 }) {
   const box = useViewportBox(open)
+  useBackClose(open, onClose)
   // Esc đóng hộp hỏi (tấm bên dưới giữ nguyên — xem Sheet)
   useEffect(() => {
     if (!open) return

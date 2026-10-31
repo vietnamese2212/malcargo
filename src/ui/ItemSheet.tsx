@@ -1,11 +1,11 @@
 // Form mã hàng — 4 ô bắt buộc (mã, tên, kích thước thùng), phần còn lại có mặc định.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Copy, Trash2, X } from 'lucide-react'
 import type { Item } from '../data/types'
 import { newId, useData } from '../data/store'
 import { removeCatalog, saveCatalog, useAuth } from '../data/cloud'
 import { t, tx } from '../i18n'
-import { Badge, Button, Confirm, Field, NumInput, Sheet, Switch, TextInput, fmtDims, fmtInt } from './kit'
+import { Badge, Button, Confirm, Field, NumInput, Sheet, Switch, TextInput, fmtDec, fmtDims, fmtInt } from './kit'
 
 const blank = (owner: Item['owner'] = 'me'): Item => ({ id: newId(), owner, code: '', name: '', l: 0, w: 0, h: 0, kg: null, perPallet: null, maxLayers: null, looseLayers: null, light: false, updatedAt: 0 })
 
@@ -17,12 +17,14 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample, onUnlink }: 
   const upsert = useData(s => s.upsertItem)
   const remove = useData(s => s.removeItem)
   const orders = useData(s => s.orders)
+  const mine = useData(s => s.items)
   const isAdmin = useAuth(s => s.isAdmin)
   const [f, setF] = useState<Item>(item ?? blank())
   const [tried, setTried] = useState(false)
   const [askDel, setAskDel] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const box = useRef<HTMLFieldSetElement>(null)
   useEffect(() => { if (open) { setF(item ?? blank(asSample ? 'admin' : 'me')); setTried(false); setErr(null) } }, [open, item, asSample])
 
   // Mẫu chung vẫn sửa được: bấm Lưu ⇒ thành mã CỦA TÔI (id mới), mẫu giữ nguyên. Admin thì lưu thẳng vào mẫu chung.
@@ -30,7 +32,7 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample, onUnlink }: 
   const adminEdit = sample && isAdmin
   const saveShared = async () => {
     setTried(true)
-    if (!valid) return
+    if (!valid || badNum()) return
     setBusy(true)
     const e = await saveCatalog('item', { ...f, code: f.code.trim(), name: f.name.trim() })
     setBusy(false)
@@ -42,21 +44,34 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample, onUnlink }: 
   }
   const set = <K extends keyof Item>(k: K, v: Item[K]) => setF(x => ({ ...x, [k]: v }))
   const dimsOk = f.l > 0 && f.w > 0 && f.h > 0
+  const range = (v: number | null | undefined, min: number, max: number) =>
+    v != null && (v < min || v > max) ? t('Nhập số từ {min} đến {max}.', { min: fmtDec(min, 2), max: fmtInt(max) }) : null
+  // mã của tôi trùng (khác dòng) — file Excel coi mã là duy nhất (trùng = ghi đè); lưu từ mã mẫu thì app tự đặt mã, không hỏi
+  const dup = !sample && mine.some(x => x.id !== f.id && x.code.trim().toLowerCase() === f.code.trim().toLowerCase())
+  // cùng khoảng với file Excel nhập Mã hàng (cạnh thùng 10–3.000 mm, kg ≤ 500, thùng/pallet ≤ 5.000, lớp ≤ 50)
   const errs = {
-    code: !f.code.trim() ? t('Nhập mã hàng') : null,
+    code: !f.code.trim() ? t('Nhập mã hàng') : dup ? t('Mã {code} đã có, đặt mã khác.', { code: f.code.trim() }) : null,
     name: !f.name.trim() ? t('Nhập tên hàng') : null,
-    // cùng khoảng với file Excel nhập Mã hàng (cạnh thùng 10–3.000 mm)
     dims: !dimsOk ? t('Nhập đủ dài, rộng, cao của thùng')
       : [f.l, f.w, f.h].some(v => v < 10 || v > 3000) ? t('Nhập số từ {min} đến {max}.', { min: fmtInt(10), max: fmtInt(3000) }) : null,
+    kg: range(f.kg, 0.01, 500),
+    perPallet: range(f.perPallet, 1, 5000),
+    layers: range(f.maxLayers, 1, 50) ?? range(f.looseLayers, 1, 50),
   }
   // Ai cũng có lúc gõ cm vào ô mm — cả 3 số dưới 100 thì hỏi lại
   const looksCm = dimsOk && f.l < 100 && f.w < 100 && f.h < 100
-  const valid = !errs.code && !errs.name && !errs.dims
+  const valid = Object.values(errs).every(e => !e)
+  // ô số đang ĐỎ (chữ, số âm…) không đổi giá trị đã lưu — Lưu lúc đó là bỏ âm thầm số vừa gõ (thử 31/10: "abc" lưu thành trống)
+  const badNum = () => {
+    const bad = !!box.current?.querySelector('[aria-invalid=true]')
+    setErr(bad ? t('Còn ô số gõ sai (viền đỏ), sửa lại hoặc xoá trống.') : null)
+    return bad
+  }
   const usedIn = orders.filter(o => o.lines.some(l => l.itemId === f.id)).length
 
   const save = () => {
     setTried(true)
-    if (!valid) return
+    if (!valid || badNum()) return
     const it: Item = { ...f, code: f.code.trim(), name: f.name.trim(), ...(sample ? { id: newId(), owner: 'me' as const, code: f.code.trim().replace(/^MAU-/, '') } : {}) }
     upsert(it); onSaved?.(it); onClose()
   }
@@ -79,7 +94,7 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample, onUnlink }: 
           </>}
         </div>
       </>}>
-      <fieldset className="space-y-4">
+      <fieldset ref={box} className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-[1fr_2fr]">
           <Field label={t('Mã')} error={tried ? errs.code : null}><TextInput value={f.code} onChange={e => set('code', e.target.value)} placeholder="SP001" autoFocus={!item} /></Field>
           <Field label={t('Tên hàng')} error={tried ? errs.name : null}><TextInput value={f.name} onChange={e => set('name', e.target.value)} placeholder={t('Sữa 110ml x48')} /></Field>
@@ -93,10 +108,11 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample, onUnlink }: 
           </div>
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={t('Khối lượng')} hint={t('Để trống nếu chưa biết')}><NumInput value={f.kg} onChange={v => set('kg', v)} suffix={t('kg/thùng')} placeholder="0" /></Field>
-          <Field label={t('Số thùng trên 1 pallet')} hint={t('Chỉ cần khi chở bằng xe pallet')}><NumInput value={f.perPallet} onChange={v => set('perPallet', v == null ? null : Math.round(v))} suffix={t('thùng')} placeholder="—" /></Field>
+          <Field label={t('Khối lượng')} hint={t('Để trống nếu chưa biết')} error={tried ? errs.kg : null}><NumInput value={f.kg} onChange={v => set('kg', v)} suffix={t('kg/thùng')} placeholder="0" /></Field>
+          <Field label={t('Số thùng trên 1 pallet')} hint={t('Chỉ cần khi chở bằng xe pallet')} error={tried ? errs.perPallet : null}><NumInput value={f.perPallet} onChange={v => set('perPallet', v == null ? null : Math.round(v))} suffix={t('thùng')} placeholder="—" /></Field>
         </div>
         {/* số lớp chồng: trên pallet và khi xếp XÁ khác nhau (chủ dự án 29/10: 110ml pallet 14 lớp, xá 28) — xá để trống = như pallet */}
+        {tried && errs.layers && <p className="-mb-2 text-[13px] text-red-700">{errs.layers}</p>}
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('Chồng trên pallet')} hint={t('Trống = theo chiều cao xe')}><NumInput value={f.maxLayers} onChange={v => set('maxLayers', v == null ? null : Math.max(1, Math.round(v)))} suffix={t('lớp')} placeholder={t('Tự động')} /></Field>
           <Field label={t('Chồng khi xếp xá')} hint={t('Trống = như trên pallet')}><NumInput value={f.looseLayers ?? null} onChange={v => set('looseLayers', v == null ? null : Math.max(1, Math.round(v)))} suffix={t('lớp')} placeholder={f.maxLayers ? String(f.maxLayers) : t('Tự động')} /></Field>

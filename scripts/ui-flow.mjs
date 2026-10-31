@@ -41,6 +41,56 @@ await p.reload({ waitUntil: 'networkidle' }); await p.waitForTimeout(3500)
 ok(p.url() === url && await p.locator('text=/Vừa xe/').first().isVisible(), 'tải lại trang: chuyến vẫn còn, vẫn tính ra')
 ok(!errs.length, `không lỗi trình duyệt${errs.length ? ': ' + errs.join(' | ') : ''}`)
 
+// Form Mã hàng chặn trùng mã + ô số đỏ (chữ / âm) — trước 31/10 vẫn Lưu được, số gõ sai bỏ âm thầm
+{
+  await p.evaluate(() => { location.hash = '#/items' }); await p.waitForTimeout(400)
+  await p.getByRole('button', { name: 'Thêm mã', exact: true }).click()
+  const sh = p.locator('[role=dialog]')
+  await sh.getByPlaceholder('SP001').fill('sp01'); await sh.getByPlaceholder('Sữa 110ml x48').fill('Thùng trùng mã')
+  await sh.getByPlaceholder('Dài').fill('500'); await sh.getByPlaceholder('Rộng').fill('400'); await sh.getByPlaceholder('Cao').fill('300')
+  await sh.getByRole('button', { name: 'Lưu', exact: true }).click(); await p.waitForTimeout(300)
+  const dupMsg = await sh.getByText('Mã sp01 đã có, đặt mã khác.').isVisible()
+  await sh.getByPlaceholder('SP001').fill('SP02')
+  await sh.getByPlaceholder('—').fill('abc')   // thùng/pallet
+  await sh.getByRole('button', { name: 'Lưu', exact: true }).click(); await p.waitForTimeout(300)
+  const badMsg = await sh.getByText('Còn ô số gõ sai (viền đỏ), sửa lại hoặc xoá trống.').isVisible()
+  const codes = await p.evaluate(() => JSON.parse(localStorage.getItem('malcargo-data-v1')).state.items.map(i => i.code))
+  ok(dupMsg && badMsg && !codes.includes('SP02') && codes.filter(c => c.toLowerCase() === 'sp01').length === 1,
+    `form Mã hàng: trùng mã ⇒ báo (${dupMsg}), ô số đỏ ⇒ không lưu (${badMsg}); mã đang có: ${codes.join(', ')}`)
+  await sh.getByRole('button', { name: 'Huỷ' }).click(); await p.waitForTimeout(300)
+}
+
+// Chuyến mới chưa có xe: app tự chọn xe theo số GÕ XONG, không theo phím đầu (thử 31/10: gõ "1200" ⇒ xe 1,5 tấn, tải 788%)
+{
+  const q = await (await b.newContext(DEVICES[1])).newPage()
+  await q.goto(srv.base + '#/trip/sample-t1', { waitUntil: 'networkidle' }); await q.waitForTimeout(1000)
+  await q.getByRole('button', { name: 'Chuyến mới' }).click(); await q.waitForTimeout(800)
+  await q.getByRole('button', { name: 'Thêm hàng' }).first().click(); await q.waitForTimeout(400)
+  await q.locator('[role=dialog]').getByText('Sữa 180ml x48').first().click()
+  await q.getByRole('button', { name: /Xong/ }).click(); await q.waitForTimeout(400)
+  await q.locator('input[inputmode=numeric]').first().pressSequentially('1200', { delay: 250 }); await q.waitForTimeout(4500)
+  const veh = await q.locator('text=/Xe tải [0-9,]+ tấn/').first().textContent().catch(() => '')
+  ok(/15 tấn/.test(veh ?? ''), `chuyến mới gõ từng phím "1200" ⇒ xe tự chọn: ${veh} (phải là xe 15 tấn)`)
+  await q.close()
+}
+
+// Hai tab cùng máy: tab kia lưu ⇒ tab này nạp lại, không ghi đè mất (thử 31/10: thêm mã ở tab A, sửa số ở tab B ⇒ mã của A mất)
+{
+  const c = await b.newContext(DEVICES[0])
+  const A = await c.newPage(), B = await c.newPage()
+  await A.goto(srv.base + '#/items', { waitUntil: 'networkidle' })
+  await B.goto(srv.base + '#/trip/sample-t2', { waitUntil: 'networkidle' }); await B.waitForTimeout(1500)
+  await A.getByRole('button', { name: 'Thêm mã', exact: true }).click()
+  await A.getByPlaceholder('SP001').fill('TABA'); await A.getByPlaceholder('Sữa 110ml x48').fill('Mã tab A')
+  await A.getByPlaceholder('Dài').fill('500'); await A.getByPlaceholder('Rộng').fill('400'); await A.getByPlaceholder('Cao').fill('300')
+  await A.getByRole('button', { name: 'Lưu', exact: true }).click(); await A.waitForTimeout(500)
+  await B.locator('input[inputmode=numeric]').first().fill('1000'); await B.waitForTimeout(800)
+  await A.reload({ waitUntil: 'networkidle' }); await A.waitForTimeout(500)
+  const codes = await A.evaluate(() => JSON.parse(localStorage.getItem('malcargo-data-v1')).state.items.map(i => i.code))
+  ok(codes.includes('TABA'), `hai tab: sửa số ở tab B không xoá mã vừa thêm ở tab A (mã: ${codes.join(', ')})`)
+  await c.close()
+}
+
 // Việc ĐẦU TIÊN của người mới: sửa số thùng ở chuyến mẫu (thử 29/10: phím đầu tách chuyến, ô mất con trỏ, "150" → "200"
 // lưu thành 15). Trang đơn mẫu cũng vậy.
 for (const [hash, label, typed] of [['#/trip/sample-t1', 'chuyến mẫu', '200'], ['#/order/sample-o1?back=trip:sample-t1', 'trang đơn mẫu', '175']]) {
@@ -78,6 +128,35 @@ for (const [hash, label] of [['#/trip/sample-t1', 'chuyến mẫu'], ['#/order/s
   const vals = await q.evaluate(() => window.__vals)
   ok(!vals.includes(was), `${label}: phím đầu tách chuyến, ô không nháy lại số mẫu ${was} (${vals.join(' → ') || 'không gán lại'})`)
   await c.close()
+}
+
+// Nút Back của máy (Android / app cài) đóng tấm đang mở TRÊN CÙNG, không rời màn (thử 31/10: đang mở danh mục mà Back ⇒
+// thoát hẳn app). Đóng bằng nút thì mục lịch sử của tấm tự lùi; tách chuyến mẫu lúc đang mở tấm ⇒ đóng xong vẫn ở chuyến mới.
+{
+  const q = await (await b.newContext(DEVICES[1])).newPage()
+  await q.goto(srv.base + '#/trip/sample-t1', { waitUntil: 'networkidle' }); await q.waitForTimeout(1200)
+  const dialogs = () => q.locator('[role=dialog]').count()
+  const back = async () => { await q.evaluate(() => history.back()); await q.waitForTimeout(500) }
+  await q.getByRole('button', { name: 'Danh mục' }).click(); await q.waitForTimeout(200)
+  await q.locator('[data-popover]').getByRole('button', { name: 'Mã hàng', exact: true }).click(); await q.waitForTimeout(400)
+  await q.getByRole('button', { name: 'Thêm mã', exact: true }).click(); await q.waitForTimeout(400)
+  const two = await dialogs()
+  await back(); const one = await dialogs()
+  await back(); const zero = await dialogs()
+  ok(two === 2 && one === 1 && zero === 0 && q.url().endsWith('#/trip/sample-t1'), `Back: đóng tấm Thêm mã (${two} → ${one}) rồi danh mục (→ ${zero}), vẫn ở chuyến mẫu`)
+  // đóng bằng nút: lịch sử về đúng như trước khi mở (không còn mục "tấm" phải Back suông)
+  await q.getByRole('button', { name: 'Danh mục' }).click(); await q.waitForTimeout(200)
+  await q.locator('[data-popover]').getByRole('button', { name: 'Mã hàng', exact: true }).click(); await q.waitForTimeout(400)
+  await q.locator('[role=dialog]').getByRole('button', { name: 'Đóng' }).first().click(); await q.waitForTimeout(500)
+  const st = await q.evaluate(() => history.state?.overlay ?? null)
+  ok(!(await dialogs()) && !st, `đóng danh mục bằng nút ⇒ lịch sử không còn mục của tấm (${st})`)
+  // tách chuyến mẫu lúc đang mở tấm (Sửa mã ở dòng hàng → Lưu thành mã của tôi) ⇒ đóng tấm vẫn ở chuyến MỚI, không về mẫu
+  await q.getByRole('button', { name: 'Sửa Sữa 180ml x48' }).first().click(); await q.waitForTimeout(400)
+  await q.locator('[role=dialog]').getByPlaceholder('0', { exact: true }).fill('10')
+  await q.getByRole('button', { name: 'Lưu thành mã của tôi' }).click(); await q.waitForTimeout(1200)
+  const head = await q.locator('h1').innerText()
+  ok(!q.url().includes('sample-t1') && !(await dialogs()) && !/Mẫu pallet/.test(head), `tách chuyến khi đang mở tấm ⇒ đóng xong ở chuyến mới (${q.url().split('#')[1]}, "${head.replace(/\s+/g, ' ')}")`)
+  await q.close()
 }
 
 // Sửa đơn (popup) sửa được cả HÀNG trong đơn: đổi số thùng, bỏ một mã, Lưu (chủ dự án 29/10) — trên máy tính
