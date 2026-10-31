@@ -30,6 +30,7 @@ const scan = async (p, dev, where) => {
       if (!el.childNodes.length || el.children.length > 3) continue
       const cs = getComputedStyle(el)
       if (cs.textOverflow !== 'ellipsis' && !/line-clamp/.test(el.className)) continue
+      if (el.closest('[data-cut-ok]')) continue   // cắt có chủ ý, chữ đủ ở chỗ khác (tên chuyến > 2 dòng ⇒ bấm ▾ xem đủ)
       const r = el.getBoundingClientRect()
       if (!r.width || !r.height || cs.visibility === 'hidden') continue
       if (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 2) out.push((el.innerText || el.value || '').trim().replace(/\s+/g, ' ').slice(0, 70))

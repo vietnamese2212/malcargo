@@ -74,6 +74,21 @@ ok(!errs.length, `không lỗi trình duyệt${errs.length ? ': ' + errs.join(' 
   await q.close()
 }
 
+// Tên chuyến dài: tiêu đề tối đa 2 dòng (dải dính trên đầu khi cuộn), bấm ▾ thấy tên đầy đủ (chủ dự án 31/10)
+{
+  const q = await (await b.newContext({ ...DEVICES[1], viewport: { width: 360, height: 760 } })).newPage()
+  await q.goto(srv.base + '#/trip/sample-t2', { waitUntil: 'networkidle' }); await q.waitForTimeout(1200)
+  const long = 'Chuyến giao Hà Nội – Hải Phòng – Quảng Ninh sáng thứ Hai tuần sau, xe anh Tuấn'   // ≤ 80 ký tự (ô tên)
+  await q.getByRole('button', { name: 'Đổi tên chuyến này' }).click()
+  await q.getByLabel('Tên chuyến').fill(long); await q.getByLabel('Tên chuyến').press('Enter'); await q.waitForTimeout(1500)
+  const h = await q.locator('h1').evaluate(e => Math.round(e.getBoundingClientRect().height))
+  await q.locator('h1 button').click(); await q.waitForTimeout(300)
+  const full = await q.locator('[data-popover]').getByText(long).first().isVisible()
+  await q.screenshot({ path: `${OUT}/flow-longname-360.png` })
+  ok(h <= 80 && full, `tên chuyến dài: tiêu đề cao ${h}px (nhãn + ≤ 2 dòng), bấm ▾ thấy tên đầy đủ: ${full}`)
+  await q.close()
+}
+
 // Hai tab cùng máy: tab kia lưu ⇒ tab này nạp lại, không ghi đè mất (thử 31/10: thêm mã ở tab A, sửa số ở tab B ⇒ mã của A mất)
 {
   const c = await b.newContext(DEVICES[0])

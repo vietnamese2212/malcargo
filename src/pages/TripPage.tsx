@@ -548,7 +548,8 @@ export default function TripPage({ id }: { id: string }) {
 }
 
 // ── Tiêu đề CHUYẾN (đầu màn, trên phần Xe + Đơn hàng): bấm tên ▾ ⇒ các chuyến (mở / xoá); ✏ ⇒ đổi tên tại chỗ.
-// Tên dài xuống dòng, không cắt "…" ─────────────
+// Tên dài xuống dòng, tối đa 2 dòng rồi "…" — dải này dính trên đầu khi cuộn, tên 4 dòng chiếm hết chỗ của danh sách đơn
+// (chủ dự án 31/10: "dài quá thì bật lên xem ở detail") ⇒ bị cắt thì bảng ▾ ghi tên đầy đủ trên cùng ─────────────
 function TripHead({ trip, trips, onRename, onDelete, onAll, onNew }: {
   trip: Trip; trips: Trip[]; onRename: (name: string) => void; onDelete: (t: Trip) => void; onAll: () => void; onNew: () => void
 }) {
@@ -557,6 +558,15 @@ function TripHead({ trip, trips, onRename, onDelete, onAll, onNew }: {
   const items = useAllItems()
   const vehicles = useAllVehicles()
   const [renaming, setRenaming] = useState(false)
+  // tên đang bị cắt ở dòng 2 (đo theo bề ngang thật — xoay máy / đổi tên thì đo lại)
+  const [nameEl, setNameEl] = useState<HTMLSpanElement | null>(null)
+  const [clamped, setClamped] = useState(false)
+  useEffect(() => {
+    if (!nameEl) return
+    const ro = new ResizeObserver(() => setClamped(nameEl.scrollHeight > nameEl.clientHeight + 1))
+    ro.observe(nameEl)
+    return () => ro.disconnect()
+  }, [nameEl, trip.name])
   const rows = useMemo(() => [...trips].sort((a, b) => b.updatedAt - a.updatedAt).map(tr => {
     const os = tr.orderIds.map(id => orders.find(o => o.id === id)).filter((o): o is Order => !!o).map(o => resolveOrder(o, items))
     return { tr, v: findVehicle(vehicles, tr.vehicleId), tot: orderTotals(os.flatMap(o => o.lines), pallet) }
@@ -586,7 +596,7 @@ function TripHead({ trip, trips, onRename, onDelete, onAll, onNew }: {
                   open ? 'bg-white/20' : 'bg-white/10')}>
                 <span className="min-w-0">
                   {caption}
-                  <span className="block break-words text-[17px] font-bold leading-snug text-white">{tx(trip.name)}</span>
+                  <span ref={setNameEl} data-cut-ok title={clamped ? tx(trip.name) : undefined} className="line-clamp-2 break-words text-[17px] font-bold leading-snug text-white">{tx(trip.name)}</span>
                 </span>
                 <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-brand-600">
                   <ChevronDown size={18} strokeWidth={2.5} className={cx('transition-transform', open && 'rotate-180')} />
@@ -596,6 +606,12 @@ function TripHead({ trip, trips, onRename, onDelete, onAll, onNew }: {
           )}>
           {close => (
             <>
+              {clamped && (
+                <div className="border-b border-slate-200 bg-brand-50 px-3 py-2">
+                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-brand-700">{t('Tên chuyến đầy đủ')}</span>
+                  <span className="block break-words text-sm font-semibold text-slate-900">{tx(trip.name)}</span>
+                </div>
+              )}
               <div className="border-b border-slate-200 px-3 py-2 text-[13px] font-semibold text-slate-700">{t('Các chuyến')} · {rows.length}</div>
               <div className="max-h-[55vh] divide-y divide-slate-100 overflow-y-auto">
                 {rows.map(({ tr, v, tot }) => {

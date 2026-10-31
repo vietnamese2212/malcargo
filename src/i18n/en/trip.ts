@@ -9,6 +9,7 @@ export const TRIP: Record<string, string> = {
   'Xe': 'Trucks',
   'Đơn hàng': 'Orders',
   'Các chuyến': 'Trips',
+  'Tên chuyến đầy đủ': 'Full trip name',
 
   // ── thông báo nhanh ──
   'Đã chọn xe nhỏ nhất chở hết hàng': 'Picked the smallest truck that fits everything',
