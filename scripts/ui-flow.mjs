@@ -74,18 +74,57 @@ ok(!errs.length, `không lỗi trình duyệt${errs.length ? ': ' + errs.join(' 
   await q.close()
 }
 
-// Tên chuyến dài: tiêu đề tối đa 2 dòng (dải dính trên đầu khi cuộn), bấm ▾ thấy tên đầy đủ (chủ dự án 31/10)
+// Chuyến nằm TRÊN thanh navy (chủ dự án 31/10: "đưa chuyến xe lên trên — để ở dưới chiếm không gian quá"): tên dài một
+// dòng "…", thanh không cao thêm, khung 3D ngay dưới thanh; bấm ▾ ⇒ đầu bảng ghi tên đầy đủ + Đổi tên, bảng không tràn mép
+// 360px; đang đổi tên mà chạm ra ngoài (bảng đóng trước khi ô kịp rời) ⇒ vẫn lưu; cuộn trang chuyến vẫn ở trên đầu
 {
   const q = await (await b.newContext({ ...DEVICES[1], viewport: { width: 360, height: 760 } })).newPage()
   await q.goto(srv.base + '#/trip/sample-t2', { waitUntil: 'networkidle' }); await q.waitForTimeout(1200)
   const long = 'Chuyến giao Hà Nội – Hải Phòng – Quảng Ninh sáng thứ Hai tuần sau, xe anh Tuấn'   // ≤ 80 ký tự (ô tên)
+  const open = () => q.getByRole('button', { name: /^Chuyến đang mở/ }).click()
+  await open(); await q.waitForTimeout(300)
   await q.getByRole('button', { name: 'Đổi tên chuyến này' }).click()
   await q.getByLabel('Tên chuyến').fill(long); await q.getByLabel('Tên chuyến').press('Enter'); await q.waitForTimeout(1500)
-  const h = await q.locator('h1').evaluate(e => Math.round(e.getBoundingClientRect().height))
-  await q.locator('h1 button').click(); await q.waitForTimeout(300)
-  const full = await q.locator('[data-popover]').getByText(long).first().isVisible()
+  const pop = q.locator('[data-popover]')
+  const full = await pop.getByText(long).first().isVisible()
+  const pb = await pop.boundingBox()
   await q.screenshot({ path: `${OUT}/flow-longname-360.png` })
-  ok(h <= 80 && full, `tên chuyến dài: tiêu đề cao ${h}px (nhãn + ≤ 2 dòng), bấm ▾ thấy tên đầy đủ: ${full}`)
+  const hd = await q.locator('header').evaluate(e => Math.round(e.getBoundingClientRect().height))
+  const sc = await q.locator('[data-scene]').evaluate(e => Math.round(e.getBoundingClientRect().top))
+  ok(hd === 48 && sc === 48 && full && pb.x >= 0 && pb.x + pb.width <= 360,
+    `chuyến trên thanh: thanh cao ${hd}px, khung 3D từ ${sc}px; tên dài ⇒ đầu bảng ▾ ghi đủ: ${full}; bảng ${Math.round(pb.x)}–${Math.round(pb.x + pb.width)}px`)
+  await q.getByRole('button', { name: 'Đổi tên chuyến này' }).click()
+  await q.getByLabel('Tên chuyến').fill('Chuyến đổi tên dở'); await q.touchscreen.tap(180, 600); await q.waitForTimeout(800)
+  const names = await q.evaluate(() => JSON.parse(localStorage.getItem('malcargo-data-v1')).state.trips.map(t => t.name))
+  const closed = !(await pop.count())
+  await q.evaluate(() => window.scrollTo(0, 900)); await q.waitForTimeout(300)
+  const top = await q.getByRole('button', { name: /^Chuyến đang mở/ }).evaluate(e => Math.round(e.getBoundingClientRect().top))
+  ok(closed && names.includes('Chuyến đổi tên dở') && top >= 0 && top < 48,
+    `đang đổi tên chạm ra ngoài ⇒ bảng đóng (${closed}), tên vẫn lưu (${names.includes('Chuyến đổi tên dở')}); cuộn trang ⇒ ô chuyến vẫn ở đầu (${top}px)`)
+  await q.close()
+}
+
+// Nút "Sửa đơn" trên dải thông số xe (chủ dự án 31/10: "gần nút thay đổi thông tin xe"): một đơn ⇒ mở luôn tấm Sửa đơn;
+// nhiều đơn ⇒ chọn đơn trước, tấm mở đúng đơn đã chọn
+{
+  const q = await (await b.newContext(DEVICES[0])).newPage()
+  await q.goto(srv.base + '#/trip/sample-t1', { waitUntil: 'networkidle' }); await q.waitForTimeout(1500)
+  const edit = q.getByRole('button', { name: 'Sửa đơn', exact: true })
+  await edit.click(); await q.waitForTimeout(400)
+  const one = await q.locator('[role=dialog]').getByRole('textbox').first().inputValue()
+  await q.keyboard.press('Escape'); await q.waitForTimeout(300)
+  await q.getByRole('button', { name: 'Thêm đơn / điểm giao khác' }).click(); await q.waitForTimeout(400)
+  await q.locator('[role=dialog]').getByRole('button', { name: /^Đơn mẫu 40ft/ }).click()
+  await q.getByRole('button', { name: /^Thêm 1 đơn/ }).click(); await q.waitForTimeout(1500)
+  await edit.click(); await q.waitForTimeout(300)
+  const rows = q.locator('[data-popover] button')
+  const n = await rows.count()
+  const second = (await rows.nth(1).locator('span.block').first().textContent())?.trim()
+  await q.screenshot({ path: `${OUT}/flow-order-edit.png` })
+  await rows.nth(1).click(); await q.waitForTimeout(400)
+  const got = await q.locator('[role=dialog]').getByRole('textbox').first().inputValue()
+  ok(one === 'Đơn mẫu pallet' && n === 2 && !!second && got === second,
+    `nút Sửa đơn: một đơn ⇒ mở "${one}"; hai đơn ⇒ chọn (${n} dòng), chọn "${second}" ⇒ tấm mở "${got}"`)
   await q.close()
 }
 

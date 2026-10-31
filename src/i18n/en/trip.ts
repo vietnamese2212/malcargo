@@ -9,7 +9,6 @@ export const TRIP: Record<string, string> = {
   'Xe': 'Trucks',
   'Đơn hàng': 'Orders',
   'Các chuyến': 'Trips',
-  'Tên chuyến đầy đủ': 'Full trip name',
 
   // ── thông báo nhanh ──
   'Đã chọn xe nhỏ nhất chở hết hàng': 'Picked the smallest truck that fits everything',
@@ -45,7 +44,10 @@ export const TRIP: Record<string, string> = {
   'Chuyến đang mở: {name}. Bấm để xem các chuyến': 'Current trip: {name}. Tap to see all trips',
   'Tên chuyến': 'Trip name',
   'Chuyến xe': 'Trip',
+  'Chuyến đang mở': 'Current trip',
+  'Đổi tên': 'Rename',
   'Đổi tên chuyến này': 'Rename this trip',
+  'Sửa đơn nào?': 'Which order?',
   'đang mở': 'open',
   'Chưa chọn xe': 'No truck chosen',
   'Chuyến mặc định của app, không xoá được': 'The app’s default trip, cannot be deleted',

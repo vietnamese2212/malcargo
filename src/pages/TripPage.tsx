@@ -1,10 +1,10 @@
 // BÀN XẾP XE — màn làm việc duy nhất. Khung 3D đọc như một BẢN VẼ KỸ THUẬT: dải thông số xe ở đầu
 // (một chạm đổi xá/pallet, chạm để chỉnh thùng xe), khung tên gọn ở góc trên trái (chạm để xem chi tiết).
-// Cột trái: đơn hàng của chuyến + bảng đếm chân. Tiêu đề màn = tên chuyến (bấm ⇒ chọn / xoá chuyến, ✏ đổi tên).
+// Cột trái: đơn hàng của chuyến + bảng đếm chân. Thanh trên: chuyến đang mở ▾ (chọn / đổi tên / xoá chuyến).
 // Sửa mã hàng / xe MẪU CHUNG ⇒ tự thành bản "của tôi" rồi gắn vào chuyến, mẫu giữ nguyên.
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  AlertTriangle, ArrowDown, ArrowUp, Camera, Check, ChevronDown, ClipboardCopy, ClipboardList, CloudOff, Crosshair, ExternalLink, Eye, EyeOff,
+  AlertTriangle, ArrowDown, ArrowUp, Camera, Check, ChevronDown, ClipboardCopy, ClipboardList, ClipboardPen, CloudOff, Crosshair, ExternalLink, Eye, EyeOff,
   FileSpreadsheet, Layers, Loader2, LogOut, MapPin, Maximize2, Menu, Minimize2, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Rotate3d, Ruler,
   Settings, SlidersHorizontal, Smartphone, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, X,
 } from 'lucide-react'
@@ -129,15 +129,6 @@ export default function TripPage({ id }: { id: string }) {
   // Bàn phím mở thì khung 3D thôi dính, trôi theo trang — ô đang gõ luôn thấy được.
   const { kb } = useVisualView()
   const [full, setFull] = useToggleFull()
-  // chiều cao tên chuyến đang dính (tên dài xuống dòng ⇒ cao thêm) — khung 3D dính ngay dưới nó; không dính ⇒ 0
-  const [head, setHead] = useState<HTMLDivElement | null>(null)
-  const [headH, setHeadH] = useState(0)
-  useEffect(() => {
-    if (!head) return
-    const ro = new ResizeObserver(() => setHeadH(getComputedStyle(head).position === 'sticky' ? head.offsetHeight : 0))
-    ro.observe(head)
-    return () => ro.disconnect()
-  }, [head, kb])
 
   // Sửa chuyến mẫu ⇒ kho đã tách thành chuyến mới: chuyển sang chuyến đó tại chỗ (màn giữ nguyên, ô đang mở
   // trỏ sang đơn bản sao), rồi báo mã chuyến mới. Chuyến mẫu không đổi.
@@ -264,6 +255,7 @@ export default function TripPage({ id }: { id: string }) {
   const pickOrder = rawOrders.find(o => o.id === pickFor)
   const itemColor = (itemId: string) => (colors.has(itemId) ? tint(colors.get(itemId)!) : undefined)
   const all = orderTotals(tripOrders.flatMap(o => o.lines), pallet)
+  const orderRows = rawOrders.map((o, i) => ({ id: o.id, name: o.name, place: o.place, cartons: orderTotals(tripOrders[i].lines, pallet).cartons }))
   const byId = new Map(items.map(i => [i.id, i]))
   // dòng hàng đang mở popup sửa mã (`editing` = "đơn:mã")
   const editLine = (() => {
@@ -298,10 +290,12 @@ export default function TripPage({ id }: { id: string }) {
 
   return (
     <div className="flex min-h-[100dvh] flex-col lg:h-[100dvh]">
-      {/* ── thanh trên navy: nút danh mục (3 vạch) · chuyến mới · … · Login · logo MAL ── */}
+      {/* ── thanh trên navy: nút danh mục (3 vạch) · chuyến mới · CHUYẾN đang mở ▾ · … · Login · logo MAL ── */}
       <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-1 bg-navy-950 pl-1 pr-3 text-white sm:h-14 sm:gap-2 sm:pl-2 sm:pr-4">
         <MainMenu onPanel={setPanel} onImport={() => setImporting('menu')} />
         <Button variant="primary" onClick={newTrip} aria-label={t('Chuyến mới')} title={t('Tạo chuyến mới')} className="w-10 shrink-0 px-0 sm:w-auto sm:px-3.5"><Plus size={18} /><span className="hidden sm:inline">{t('Chuyến mới')}</span></Button>
+        <TripSwitch trip={trip} trips={trips} onRename={name => upsertTrip({ ...trip, name })} onDelete={setDelTrip}
+          onAll={() => setPanel('trips')} onNew={newTrip} />
         <nav className="ml-3 hidden items-center gap-0.5 xl:flex">
           {MENU.map(mn => (
             <button key={mn.p} onClick={() => setPanel(mn.p)} className="flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 hover:text-white">
@@ -318,26 +312,16 @@ export default function TripPage({ id }: { id: string }) {
         </div>
       </header>
 
-      {/* ── CHUYẾN = khối lớn nhất (chủ dự án 30/10: "user tập trung ở cái xe, nhưng chuyến bao phủ cả xe, cả đơn"):
-          tên chuyến là tiêu đề màn, dưới là hai phần của nó — Xe (ô chọn xe + 3D) và Đơn hàng; vạch xanh bên trái
-          gom tiêu đề với hai phần ── */}
-      <div className="flex flex-col border-l-[3px] border-brand-500 lg:min-h-0 lg:flex-1">
-      {/* cuộn trang (điện thoại / máy tính bảng): tên chuyến dính dưới thanh trên, khung 3D dính ngay dưới nó
-          (chủ dự án 31/10: "chuyến xe không freeze ở trên khi cuộn"). Bàn phím mở / máy nằm ngang thấp thì thôi dính —
-          màn còn quá ít chỗ cho ô đang gõ */}
-      <div ref={setHead} className={cx('sticky top-12 z-20 shrink-0 sm:top-14 [@media(max-height:499px)]:static', kb && 'max-lg:static')}>
-        <TripHead trip={trip} trips={trips} onRename={name => upsertTrip({ ...trip, name })} onDelete={setDelTrip}
-          onAll={() => setPanel('trips')} onNew={newTrip} />
-      </div>
       {/* hàng lưới cao ĐÚNG phần màn còn lại (minmax(0,1fr)): hàng `auto` lấy cỡ theo khung vẽ 3D đã đặt lúc mở trang — dải thông
           số xuống dòng sau đó thì khung không co lại, trang dài thêm, thanh xem từng bước chìm dưới đáy (1366×768, thử 31/10) */}
       <div className="lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(380px,440px)_1fr] lg:grid-rows-[minmax(0,1fr)]">
         {/* ── BẢN VẼ: dải thông số xe + 3D + khung tên ── */}
         {/* toàn màn hình: khung 3D phủ kín màn (máy có Fullscreen API thì ẩn luôn thanh trình duyệt) */}
-        <section data-scene style={{ ['--trip-h' as string]: `${headH}px` }} className={full
+        <section data-scene className={full
           ? 'fixed inset-0 z-40 flex flex-col bg-[#e7ecf2] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)]'
-          : cx('sticky top-[calc(3rem+var(--trip-h))] z-10 flex flex-col bg-[#e7ecf2] sm:top-[calc(3.5rem+var(--trip-h))] lg:relative lg:top-0 lg:order-2 lg:h-full', kb && 'max-lg:relative max-lg:top-0')}>
+          : cx('sticky top-12 z-10 flex flex-col bg-[#e7ecf2] sm:top-14 lg:relative lg:top-0 lg:order-2 lg:h-full', kb && 'max-lg:relative max-lg:top-0')}>
           <SpecStrip vehicle={vehicle} pallet={pallet} keep={full} onSpecs={() => setSpec(true)} onKind={k => patchVehicle({ kind: k })}
+            orders={orderRows} onEditOrder={setEditOrder}
             picker={close => (
               <VehicleList vehicle={vehicle} vehicles={vehicles} suggestion={suggestion} fits={hasCargo ? fits : {}} onShown={setPicking}
                 onPick={id => { close(); if (id !== vehicle?.id) pickVehicle(id) }}
@@ -353,7 +337,7 @@ export default function TripPage({ id }: { id: string }) {
 
             <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between gap-2">
               <TitleBlock r={r} busy={busy} error={error} hasCargo={hasCargo} vehicle={vehicle} tripName={trip.name}
-                orders={tripOrders.map(o => ({ id: o.id, name: o.name, cartons: orderTotals(o.lines, pallet).cartons }))}
+                orders={orderRows}
                 sug={suggestion && vehicle && suggestion !== vehicle.id ? vehicles.find(v => v.id === suggestion) : undefined}
                 noneFits={!suggestion} onPick={vid => { pickVehicle(vid); setToast(t('Đã đổi xe')) }} />
               {/* điện thoại: nút diễn giải chỉ biểu tượng, xếp dưới nút góc nhìn — dải số liệu bên trái cần đủ bề ngang */}
@@ -509,7 +493,6 @@ export default function TripPage({ id }: { id: string }) {
           </Block>
         </aside>
       </div>
-      </div>
 
       <PalletSheet open={palletOpen} onClose={() => setPalletOpen(false)} />
       <ExplainPopup open={explain} onClose={() => setExplain(false)} r={r} vehicle={vehicle} items={items} colors={colors} tripName={trip.name} onToast={setToast} />
@@ -547,10 +530,10 @@ export default function TripPage({ id }: { id: string }) {
   )
 }
 
-// ── Tiêu đề CHUYẾN (đầu màn, trên phần Xe + Đơn hàng): bấm tên ▾ ⇒ các chuyến (mở / xoá); ✏ ⇒ đổi tên tại chỗ.
-// Tên dài xuống dòng, tối đa 2 dòng rồi "…" — dải này dính trên đầu khi cuộn, tên 4 dòng chiếm hết chỗ của danh sách đơn
-// (chủ dự án 31/10: "dài quá thì bật lên xem ở detail") ⇒ bị cắt thì bảng ▾ ghi tên đầy đủ trên cùng ─────────────
-function TripHead({ trip, trips, onRename, onDelete, onAll, onNew }: {
+// ── CHUYẾN đang mở ▾ trên thanh navy, ngay sau nút "+" (chủ dự án 31/10: "đưa chuyến xe lên trên — để ở dưới chiếm
+// không gian quá"; trước đó là dải xanh riêng dưới thanh). Bấm ⇒ đầu bảng: tên ĐẦY ĐỦ + Đổi tên; dưới: các chuyến
+// (mở / xoá), chuyến mới. Ở thanh trên tên chỉ một dòng, dài thì "…" (data-cut-ok) — đọc đủ ở đầu bảng ─────────────
+function TripSwitch({ trip, trips, onRename, onDelete, onAll, onNew }: {
   trip: Trip; trips: Trip[]; onRename: (name: string) => void; onDelete: (t: Trip) => void; onAll: () => void; onNew: () => void
 }) {
   const orders = useData(s => s.orders)
@@ -558,89 +541,93 @@ function TripHead({ trip, trips, onRename, onDelete, onAll, onNew }: {
   const items = useAllItems()
   const vehicles = useAllVehicles()
   const [renaming, setRenaming] = useState(false)
-  // tên đang bị cắt ở dòng 2 (đo theo bề ngang thật — xoay máy / đổi tên thì đo lại)
-  const [nameEl, setNameEl] = useState<HTMLSpanElement | null>(null)
-  const [clamped, setClamped] = useState(false)
-  useEffect(() => {
-    if (!nameEl) return
-    const ro = new ResizeObserver(() => setClamped(nameEl.scrollHeight > nameEl.clientHeight + 1))
-    ro.observe(nameEl)
-    return () => ro.disconnect()
-  }, [nameEl, trip.name])
   const rows = useMemo(() => [...trips].sort((a, b) => b.updatedAt - a.updatedAt).map(tr => {
     const os = tr.orderIds.map(id => orders.find(o => o.id === id)).filter((o): o is Order => !!o).map(o => resolveOrder(o, items))
     return { tr, v: findVehicle(vehicles, tr.vehicleId), tot: orderTotals(os.flatMap(o => o.lines), pallet) }
   }), [trips, orders, items, vehicles, pallet])
-  // dải XANH thương hiệu (chủ dự án 30/10: "chuyến cần nổi bật hơn — bằng màu sắc") nối liền vạch xanh bên trái ⇒
-  // khung xanh ôm trọn phần Xe + Đơn hàng của chuyến
-  const caption = <span className="block text-[11px] font-semibold uppercase tracking-wide text-brand-100">{t('Chuyến xe')}</span>
   return (
-    <div className="flex shrink-0 items-center gap-2 bg-brand-500 px-3 py-2 text-white sm:px-4">
-      {renaming ? (
-        <label className="min-w-0 flex-1 px-1 py-0.5">
-          {caption}
-          <input autoFocus defaultValue={trip.name} aria-label={t('Tên chuyến')} maxLength={80}
-            onBlur={e => { e.target.value.trim() && onRename(e.target.value.trim()); setRenaming(false) }}
-            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setRenaming(false) }}
-            // chữ < 16px thì iPhone tự phóng to cả trang khi chạm vào ô
-            className="tap mt-0.5 w-full rounded-md border border-white bg-white px-2 text-base font-semibold text-slate-900 outline-none ring-2 ring-brand-200" />
-        </label>
-      ) : (
-        // điện thoại: ✏ ở mép phải; máy tính: ✏ ngay sau tên
-        <Popover className="min-w-0 flex-1 sm:flex-none" panelClass="w-[330px] max-w-[calc(100vw-24px)] overflow-hidden"
-          trigger={({ open, toggle }) => (
-            <h1 className="min-w-0">
-              <button onClick={toggle} aria-expanded={open} aria-label={t('Chuyến đang mở: {name}. Bấm để xem các chuyến', { name: tx(trip.name) })}
-                // trông như Ô CHỌN (chủ dự án 30/10: "cho cái gì vào để người ta biết bấm được"): khung viền + nút tròn ▾
-                className={cx('flex min-h-[44px] max-w-full items-center gap-2.5 rounded-lg border border-white/40 py-1 pl-2.5 pr-1.5 text-left transition-colors hover:bg-white/20',
-                  open ? 'bg-white/20' : 'bg-white/10')}>
-                <span className="min-w-0">
-                  {caption}
-                  <span ref={setNameEl} data-cut-ok title={clamped ? tx(trip.name) : undefined} className="line-clamp-2 break-words text-[17px] font-bold leading-snug text-white">{tx(trip.name)}</span>
-                </span>
-                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-brand-600">
-                  <ChevronDown size={18} strokeWidth={2.5} className={cx('transition-transform', open && 'rotate-180')} />
-                </span>
-              </button>
-            </h1>
-          )}>
-          {close => (
-            <>
-              {clamped && (
-                <div className="border-b border-slate-200 bg-brand-50 px-3 py-2">
-                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-brand-700">{t('Tên chuyến đầy đủ')}</span>
-                  <span className="block break-words text-sm font-semibold text-slate-900">{tx(trip.name)}</span>
+    // điện thoại: bảng trải gần hết bề ngang màn, ngay dưới thanh (bám theo nút thì tràn mép phải)
+    <Popover className="min-w-0" panelClass="w-[330px] max-w-[calc(100vw-24px)] overflow-hidden max-sm:fixed max-sm:inset-x-3 max-sm:top-[52px] max-sm:mt-0 max-sm:w-auto"
+      trigger={({ open, toggle }) => (
+        <h1 className="min-w-0">
+          {/* trông như Ô CHỌN (chủ dự án 30/10: "cho cái gì vào để người ta biết bấm được"): khung viền xanh + nút tròn ▾ */}
+          <button onClick={() => { setRenaming(false); toggle() }} aria-expanded={open} aria-label={t('Chuyến đang mở: {name}. Bấm để xem các chuyến', { name: tx(trip.name) })}
+            title={tx(trip.name)}
+            className={cx('hit flex h-10 w-full min-w-0 max-w-[320px] items-center gap-1.5 rounded-lg border border-brand-500 pl-2 pr-1 text-left transition-colors hover:bg-white/15 sm:h-11 sm:gap-2 sm:pl-2.5 sm:pr-1.5',
+              open ? 'bg-white/15' : 'bg-white/[0.07]')}>
+            <span className="min-w-0 flex-1 leading-tight">
+              <span className="block text-[10px] font-semibold uppercase tracking-wide text-brand-200 sm:text-[11px]">{t('Chuyến xe')}</span>
+              <span data-cut-ok className="block truncate text-[13px] font-bold text-white sm:text-[15px]">{tx(trip.name)}</span>
+            </span>
+            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand-500 text-white sm:h-6 sm:w-6">
+              <ChevronDown size={15} strokeWidth={2.5} className={cx('transition-transform', open && 'rotate-180')} />
+            </span>
+          </button>
+        </h1>
+      )}>
+      {close => (
+        <>
+          <div className="border-b border-slate-200 bg-brand-50 pb-2 pl-3 pr-1">
+            <div className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 text-[11px] font-semibold uppercase tracking-wide text-brand-700">{t('Chuyến đang mở')}</span>
+              {!renaming && <Button variant="ghost" aria-label={t('Đổi tên chuyến này')} className="px-2.5 text-[13px] text-brand-700" onClick={() => setRenaming(true)}><Pencil size={14} />{t('Đổi tên')}</Button>}
+            </div>
+            {renaming
+              ? <RenameInput name={trip.name} onDone={v => { if (v && v !== trip.name) onRename(v); setRenaming(false) }} />
+              : <span className="block break-words pr-2 text-[15px] font-bold leading-snug text-slate-900">{tx(trip.name)}</span>}
+          </div>
+          <div className="border-b border-slate-200 px-3 py-2 text-[13px] font-semibold text-slate-700">{t('Các chuyến')} · {rows.length}</div>
+          <div className="max-h-[55vh] divide-y divide-slate-100 overflow-y-auto">
+            {rows.map(({ tr, v, tot }) => {
+              const cur = tr.id === trip.id
+              return (
+                <div key={tr.id} className={cx('flex items-center', cur && 'bg-brand-50')}>
+                  <a href={`#/trip/${tr.id}`} onClick={close} aria-current={cur ? 'page' : undefined} className="min-w-0 flex-1 px-3 py-2 hover:bg-slate-50">
+                    <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+                      <span className="min-w-0 break-words">{tx(tr.name)}</span>{cur && <Badge tone="blue">{t('đang mở')}</Badge>}
+                    </span>
+                    <span className="num block break-words text-[12px] leading-snug text-slate-600">{tr.code && tr.code !== tr.name && `${tr.code} · `}{v ? tx(v.name) : t('Chưa chọn xe')} · {t('{n} thùng', { n: fmtInt(tot.cartons) })} · {fmtKgShort(tot.kg)}</span>
+                  </a>
+                  {isSample(tr.id)
+                    ? <span className="mr-2 w-[60px] shrink-0 text-right" title={t('Chuyến mặc định của app, không xoá được')}><Badge>{t('mặc định')}</Badge></span>
+                    : <IconButton label={t('Xoá {name}', { name: tx(tr.name) })} onClick={() => { close(); onDelete(tr) }} className="mr-1 text-slate-500 hover:text-red-700"><Trash2 size={16} /></IconButton>}
                 </div>
-              )}
-              <div className="border-b border-slate-200 px-3 py-2 text-[13px] font-semibold text-slate-700">{t('Các chuyến')} · {rows.length}</div>
-              <div className="max-h-[55vh] divide-y divide-slate-100 overflow-y-auto">
-                {rows.map(({ tr, v, tot }) => {
-                  const cur = tr.id === trip.id
-                  return (
-                    <div key={tr.id} className={cx('flex items-center', cur && 'bg-brand-50')}>
-                      <a href={`#/trip/${tr.id}`} onClick={close} aria-current={cur ? 'page' : undefined} className="min-w-0 flex-1 px-3 py-2 hover:bg-slate-50">
-                        <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
-                          <span className="min-w-0 break-words">{tx(tr.name)}</span>{cur && <Badge tone="blue">{t('đang mở')}</Badge>}
-                        </span>
-                        <span className="num block break-words text-[12px] leading-snug text-slate-600">{tr.code && tr.code !== tr.name && `${tr.code} · `}{v ? tx(v.name) : t('Chưa chọn xe')} · {t('{n} thùng', { n: fmtInt(tot.cartons) })} · {fmtKgShort(tot.kg)}</span>
-                      </a>
-                      {isSample(tr.id)
-                        ? <span className="mr-2 w-[60px] shrink-0 text-right" title={t('Chuyến mặc định của app, không xoá được')}><Badge>{t('mặc định')}</Badge></span>
-                        : <IconButton label={t('Xoá {name}', { name: tx(tr.name) })} onClick={() => { close(); onDelete(tr) }} className="mr-1 text-slate-500 hover:text-red-700"><Trash2 size={16} /></IconButton>}
-                    </div>
-                  )
-                })}
-              </div>
-              <div className="flex gap-2 border-t border-slate-200 p-2">
-                <Button variant="primary" className="flex-1" onClick={() => { close(); onNew() }}><Plus size={17} />{t('Chuyến mới')}</Button>
-                <Button onClick={() => { close(); onAll() }}><Table2 size={16} />{t('Dạng bảng')}</Button>
-              </div>
-            </>
-          )}
-        </Popover>
+              )
+            })}
+          </div>
+          <div className="flex gap-2 border-t border-slate-200 p-2">
+            <Button variant="primary" className="flex-1" onClick={() => { close(); onNew() }}><Plus size={17} />{t('Chuyến mới')}</Button>
+            <Button onClick={() => { close(); onAll() }}><Table2 size={16} />{t('Dạng bảng')}</Button>
+          </div>
+        </>
       )}
-      {!renaming && <IconButton label={t('Đổi tên chuyến này')} onClick={() => setRenaming(true)} className="shrink-0 rounded-lg border border-white/40 !text-white hover:!bg-white/20"><Pencil size={17} /></IconButton>}
-    </div>
+    </Popover>
+  )
+}
+
+/** Ô đổi tên chuyến trong bảng ▾: Enter / rời ô ⇒ lưu, Esc ⇒ thôi. Bảng đóng khi đang gõ (chạm ra ngoài — bảng đóng
+ *  TRƯỚC khi ô kịp rời) ⇒ vẫn lưu chữ đã gõ. */
+function RenameInput({ name, onDone }: { name: string; onDone: (v: string | null) => void }) {
+  const ref = useRef<HTMLInputElement>(null)
+  const done = useRef(false)
+  const cb = useRef(onDone)
+  cb.current = onDone
+  const finish = (save: boolean) => {
+    if (done.current) return
+    done.current = true
+    cb.current(save ? ref.current?.value.trim() || null : null)
+  }
+  useEffect(() => {
+    const el = ref.current
+    // ô còn trên trang (StrictMode chạy thử gỡ / gắn lại) ⇒ chưa phải đóng thật
+    return () => { setTimeout(() => { if (el && !el.isConnected && !done.current) { done.current = true; cb.current(el.value.trim() || null) } }) }
+  }, [])
+  return (
+    <input ref={ref} autoFocus defaultValue={name} aria-label={t('Tên chuyến')} maxLength={80}
+      onBlur={() => finish(true)}
+      onKeyDown={e => { if (e.key === 'Enter') finish(true); if (e.key === 'Escape') { e.stopPropagation(); finish(false) } }}
+      // chữ < 16px thì iPhone tự phóng to cả trang khi chạm vào ô
+      className="tap mt-0.5 w-[calc(100%-8px)] rounded-md border border-brand-500 bg-white px-2 text-base font-semibold text-slate-900 outline-none ring-2 ring-brand-100 sm:text-sm" />
   )
 }
 
@@ -769,34 +756,40 @@ function AccountButton({ onData }: { onData: () => void }) {
 // ── Dải thông số xe ở đầu bản vẽ: đọc một dòng là biết đang cấu hình gì; xá/pallet một chạm ──────
 // Không đủ chỗ thì XUỐNG DÒNG (không cắt chữ, không đẩy nút ra ngoài mép). `lightOwn` null = không hiện
 // công tắc hàng nhẹ (chuyến không có hàng nhẹ).
-function SpecStrip({ vehicle, pallet, lightOwn, keep, picker, onSpecs, onKind, onLightOwn, onPallet }: {
+function SpecStrip({ vehicle, pallet, lightOwn, keep, picker, orders, onSpecs, onKind, onLightOwn, onPallet, onEditOrder }: {
   vehicle?: Vehicle; pallet: { l: number; w: number; maxH: number }; lightOwn: boolean | null; keep: boolean
   picker: (close: () => void) => ReactNode   // danh sách xe thả xuống ngay dưới ô tên xe (như bộ lọc Excel)
+  orders: OrderRow[]
   onSpecs: () => void; onKind: (k: VehicleKind) => void; onLightOwn: (v: boolean) => void; onPallet: () => void
+  onEditOrder: (id: string) => void
 }) {
   const chip = 'hit flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[13px] text-slate-900 transition-colors hover:border-slate-400 hover:bg-slate-50'
   // Đổi Thùng rời ↔ Pallet không được làm khung 3D đổi cỡ (chủ dự án 29/10): nút riêng của xe pallet vẫn GIỮ CHỖ
   // khi xếp rời (vô hình, cuối hàng nên chỉ thấy khoảng trống) — dải thông số cao như nhau. Điện thoại (ngoài toàn
   // màn hình) khung 3D cao cố định, dải thông số cao thêm thì đẩy phần dưới xuống ⇒ không cần giữ chỗ.
   const palOnly = vehicle?.kind === 'pallet' ? '' : keep ? 'invisible' : 'max-lg:hidden lg:invisible'
+  const orderEdit = (className?: string) => <OrderEdit orders={orders} onEdit={onEditOrder} chip={chip} className={className} />
   return (
     <div className="flex min-h-[56px] shrink-0 flex-wrap items-center gap-2 border-b border-slate-300 bg-white px-3 py-2 sm:min-h-[48px] sm:gap-1.5 sm:py-1.5">
       {!vehicle ? (
-        <Popover panelClass="w-[min(400px,calc(100vw-24px))] overflow-hidden" trigger={({ open, toggle }) => (
-          <button onClick={toggle} aria-expanded={open} className={chip}><Truck size={16} />{t('Chọn xe')}<ChevronDown size={15} className="text-slate-500" /></button>
-        )}>{close => picker(close)}</Popover>
+        <>
+          <Popover panelClass="w-[min(400px,calc(100vw-24px))] overflow-hidden" trigger={({ open, toggle }) => (
+            <button onClick={toggle} aria-expanded={open} className={chip}><Truck size={16} />{t('Chọn xe')}<ChevronDown size={15} className="text-slate-500" /></button>
+          )}>{close => picker(close)}</Popover>
+          {orderEdit()}
+        </>
       ) : (
         <>
           {/* Ô TÊN XE = ô chọn: bấm ⇒ danh sách xe thả NGAY DƯỚI (chủ dự án 29/10: "như mở filter Excel, bấm vào là hiện").
-              Điện thoại: chiếm phần còn lại của hàng đầu, tên dài thì xuống dòng; máy tính: rộng theo chữ */}
+              Điện thoại: chiếm phần còn lại của hàng đầu, tên dài thì xuống dòng; máy tính: rộng theo chữ. Lòng thùng + tải
+              là dòng phụ trong ô (31/10: bỏ hai chip Lòng / Tải riêng — nhường chỗ nút Sửa đơn, dải máy tính giữ một hàng) */}
           <Popover className="min-w-0 flex-1 sm:flex-none" panelClass="w-[min(400px,calc(100vw-24px))] overflow-hidden" trigger={({ open, toggle }) => (
             <button onClick={toggle} aria-expanded={open} aria-label={t('Đổi xe')}
               className={cx(chip, 'w-full min-w-0 font-semibold', open && 'border-brand-500 ring-2 ring-brand-100')}>
               <span className="max-sm:hidden"><TruckGlyph pallet={vehicle.kind === 'pallet'} small /></span>
               <span className="min-w-0 text-left leading-tight">
                 <span className="block break-words sm:whitespace-nowrap">{tx(vehicle.name)}</span>
-                {/* điện thoại: lòng thùng + tải gộp vào dòng phụ */}
-                <span className="num block text-[11px] font-normal text-slate-600 sm:hidden">
+                <span className="num block text-[11px] font-normal text-slate-600" title={t('Lòng thùng dài × rộng × cao')}>
                   <span className="whitespace-nowrap">{m(vehicle.l)} × {m(vehicle.w)} × {m(vehicle.h)} m</span>
                   {vehicle.payloadKg != null && <> · <span className="whitespace-nowrap">{fmtKgShort(vehicle.payloadKg)}</span></>}
                 </span>
@@ -804,12 +797,6 @@ function SpecStrip({ vehicle, pallet, lightOwn, keep, picker, onSpecs, onKind, o
               <ChevronDown size={15} className={cx('ml-auto shrink-0 text-slate-500 transition-transform', open && 'rotate-180')} />
             </button>
           )}>{close => picker(close)}</Popover>
-          <button onClick={onSpecs} className={cx(chip, 'max-sm:hidden')} title={t('Lòng thùng dài × rộng × cao')}>
-            <span className="text-slate-600">{t('Lòng')}</span><span className="num font-semibold">{m(vehicle.l)} × {m(vehicle.w)} × {m(vehicle.h)} m</span>
-          </button>
-          <button onClick={onSpecs} className={cx(chip, 'max-sm:hidden')}>
-            <span className="text-slate-600">{t('Tải')}</span><span className="num font-semibold">{vehicle.payloadKg != null ? fmtKgShort(vehicle.payloadKg) : '—'}</span>
-          </button>
           <div className="flex h-9 shrink-0 rounded-md border border-slate-300 bg-slate-100 p-0.5" role="group" aria-label={t('Cách chất xếp')}>
             {(['loose', 'pallet'] as const).map(k => (
               <button key={k} onClick={() => k !== vehicle.kind && onKind(k)} aria-pressed={vehicle.kind === k}
@@ -825,22 +812,71 @@ function SpecStrip({ vehicle, pallet, lightOwn, keep, picker, onSpecs, onKind, o
             <span className="num font-semibold max-2xl:hidden">{m(pallet.l)} × {m(pallet.w)} m</span>
             <span className="num text-slate-600 max-2xl:hidden">· ≤ {fmtDec(pallet.maxH / 1000, 2)} m</span>
           </button>
-          {lightOwn != null && (
-            <button role="switch" aria-checked={lightOwn} onClick={() => onLightOwn(!lightOwn)}
-              title={lightOwn ? t('Phần lẻ hàng nhẹ đứng pallet riêng') : t('Phần lẻ hàng nhẹ dồn lên trên cùng pallet gộp')}
-              className={cx(chip, 'gap-2 font-semibold max-sm:w-full max-sm:justify-between', palOnly)}>
-              {t('Hàng nhẹ: pallet riêng')}
-              <span className={cx('relative h-5 w-9 shrink-0 rounded-full transition-colors', lightOwn ? 'bg-brand-500' : 'bg-slate-300')}>
-                <span className={cx('absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform', lightOwn && 'translate-x-4')} />
-              </span>
-            </button>
-          )}
-          <button onClick={onSpecs} aria-label={t('Chỉnh thông số thùng xe')} title={t('Chỉnh thông số thùng xe')} className={cx(chip, 'ml-auto text-brand-700 max-sm:hidden')}>
+          {/* Sửa đơn cạnh xe (chủ dự án 31/10). Điện thoại: hàng thứ hai, ngay dưới ô tên xe, chung hàng với công tắc
+              hàng nhẹ; màn rộng: cuối dải, cạnh nút chỉnh thông số thùng xe (`contents` ⇒ hai nút vào thẳng hàng của dải) */}
+          {/* chưa có đơn thì cũng chưa có hàng nhẹ ⇒ không dựng hàng rỗng (vẫn ăn một khoảng cách dòng của dải) */}
+          {!!orders.length && <div className="flex w-full items-center gap-2 sm:contents">
+            {orderEdit('sm:order-1 sm:ml-auto')}
+            {lightOwn != null && (
+              <button role="switch" aria-checked={lightOwn} onClick={() => onLightOwn(!lightOwn)}
+                title={lightOwn ? t('Phần lẻ hàng nhẹ đứng pallet riêng') : t('Phần lẻ hàng nhẹ dồn lên trên cùng pallet gộp')}
+                className={cx(chip, 'gap-2 font-semibold max-sm:min-w-0 max-sm:flex-1 max-sm:justify-between', palOnly)}>
+                {t('Hàng nhẹ: pallet riêng')}
+                <span className={cx('relative h-5 w-9 shrink-0 rounded-full transition-colors', lightOwn ? 'bg-brand-500' : 'bg-slate-300')}>
+                  <span className={cx('absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform', lightOwn && 'translate-x-4')} />
+                </span>
+              </button>
+            )}
+          </div>}
+          <button onClick={onSpecs} aria-label={t('Chỉnh thông số thùng xe')} title={t('Chỉnh thông số thùng xe')} className={cx(chip, 'text-brand-700 max-sm:hidden sm:order-2')}>
             <SlidersHorizontal size={16} />
           </button>
         </>
       )}
     </div>
+  )
+}
+
+type OrderRow = { id: string; name: string; place: string; cartons: number }
+
+// ── Sửa đơn trên dải thông số xe (chủ dự án 31/10: "nút sửa đơn gần nút thay đổi thông tin xe" — khỏi cuộn xuống
+// khối Đơn hàng): một đơn ⇒ mở luôn tấm Sửa đơn; nhiều đơn ⇒ chọn đơn trước. Chuyến chưa có đơn ⇒ không hiện (khối
+// Đơn hàng trống đã có nút Thêm hàng) ─────────────
+function OrderEdit({ orders, onEdit, chip, className }: {
+  orders: OrderRow[]; onEdit: (id: string) => void; chip: string; className?: string
+}) {
+  const btn = cx(chip, 'font-semibold')
+  const icon = <ClipboardPen size={15} className="shrink-0 text-brand-700" />
+  if (!orders.length) return null
+  if (orders.length === 1) return (
+    <button onClick={() => onEdit(orders[0].id)} aria-haspopup="dialog" title={t('Tên, điểm giao và hàng trong đơn')} className={cx(btn, className)}>{icon}{t('Sửa đơn')}</button>
+  )
+  return (
+    <Popover align="right" className={className} panelClass="w-[300px] max-w-[calc(100vw-24px)] overflow-hidden max-sm:left-0 max-sm:right-auto"
+      trigger={({ open, toggle }) => (
+        <button onClick={toggle} aria-expanded={open} className={cx(btn, open && 'border-brand-500 ring-2 ring-brand-100')}>
+          {icon}{t('Sửa đơn')}<ChevronDown size={15} className={cx('shrink-0 text-slate-500 transition-transform', open && 'rotate-180')} />
+        </button>
+      )}>
+      {close => (
+        <>
+          <div className="border-b border-slate-200 px-3 py-2 text-[13px] font-semibold text-slate-700">{t('Sửa đơn nào?')}</div>
+          <div className="max-h-[50vh] divide-y divide-slate-100 overflow-y-auto">
+            {orders.map((o, i) => (
+              <button key={o.id} onClick={() => { close(); onEdit(o.id) }} aria-haspopup="dialog"
+                className="tap flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-50">
+                <span className="num grid h-5 min-w-5 shrink-0 place-items-center rounded-sm bg-navy-950 px-1 text-[11px] font-bold text-white">{i + 1}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block break-words text-sm font-semibold leading-snug text-slate-900">{tx(o.name)}</span>
+                  {o.place && <span className="block break-words text-[12px] leading-snug text-slate-600">{tx(o.place)}</span>}
+                </span>
+                <span className="num shrink-0 text-[12px] text-slate-700">{t('{n} thùng', { n: fmtInt(o.cartons) })}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </Popover>
   )
 }
 
