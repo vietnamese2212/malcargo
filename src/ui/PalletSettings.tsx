@@ -20,7 +20,7 @@ export function PalletFields({ cols = 'grid-cols-2 sm:grid-cols-3' }: { cols?: s
         <LiveNum label={t('Cao đế pallet')} value={p.baseH} valid={n => n >= 50 && n <= 300} suffix="mm" onCommit={v => v && set({ baseH: v })} />
         <LiveNum label={t('Nặng pallet rỗng')} value={p.kg} valid={n => n >= 0 && n <= 100} suffix="kg" onCommit={v => v != null && set({ kg: v })} />
       </div>
-      <p className="mt-2 text-[12px] leading-snug text-slate-600">{t('Pallet gộp hàng lẻ không cao quá mức này (tính cả đế). Pallet chẵn cao theo số thùng/pallet và số lớp của từng mã.')}</p>
+      <p className="mt-2 text-[12px] leading-snug text-slate-600">{t('Cao tối đa chỉ áp cho pallet gộp hàng lẻ; pallet chẵn cao theo quy cách từng mã.')}</p>
       <button type="button" className="tap mt-1 text-[13px] font-medium text-brand-700 hover:text-brand-600" onClick={() => useData.getState().setPallet(DEFAULT_PALLET_SETTINGS)}>
         {t('Về mặc định 1200 × 1000')}
       </button>

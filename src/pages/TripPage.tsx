@@ -4,8 +4,8 @@
 // Sửa mã hàng / xe MẪU CHUNG ⇒ tự thành bản "của tôi" rồi gắn vào chuyến, mẫu giữ nguyên.
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  AlertTriangle, ArrowDown, ArrowUp, Camera, Check, ChevronDown, ClipboardCopy, ClipboardList, ClipboardPen, CloudOff, Crosshair, ExternalLink, Eye, EyeOff,
-  FileSpreadsheet, Layers, Loader2, LogOut, MapPin, Maximize2, Menu, Minimize2, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Rotate3d, Ruler,
+  AlertTriangle, ArrowDown, ArrowUp, Camera, Check, ChevronDown, ClipboardCopy, ClipboardList, ClipboardPen, Crosshair, ExternalLink, Eye, EyeOff,
+  FileSpreadsheet, HelpCircle, Layers, Loader2, LogOut, MapPin, Maximize2, Menu, Minimize2, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Rotate3d, Ruler,
   Settings, SlidersHorizontal, Smartphone, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, X,
 } from 'lucide-react'
 import { findVehicle, isBlankOrder, isSample, newId, newTripLabel, nextName, useAllItems, useAllVehicles, useData } from '../data/store'
@@ -22,14 +22,14 @@ import {
   Badge, BoxGlyph, Button, Confirm, Empty, Field, IconButton, KeyboardShield, LiveNum, MenuItem, Popover, SearchInput, SectionBand, Segmented, Sheet,
   TextInput, cx, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3, usePhone, useViewportBox, useVisualView,
 } from '../ui/kit'
-import { Logo, PageHeader, Panel } from '../ui/Shell'
+import { GoogleG, Logo, PageHeader, Panel } from '../ui/Shell'
 import { TruckGlyph } from './VehiclesPage'
 import { VehicleSheet } from '../ui/VehicleSheet'
 import { ItemSheet } from '../ui/ItemSheet'
 import { ExplainPopup } from './TripExplain'
 import { PalletFields, PalletSheet } from '../ui/PalletSettings'
 import { LangSwitch } from '../ui/LangSwitch'
-import { t, tx } from '../i18n'
+import { t, tx, untx } from '../i18n'
 import { ItemPicker } from '../ui/ItemPicker'
 import { ImportSheet } from '../ui/ImportSheet'
 import { saveFile } from '../ui/saveFile'
@@ -38,7 +38,8 @@ import ItemsPage from './ItemsPage'
 import VehiclesPage from './VehiclesPage'
 import OrdersPage from './OrdersPage'
 import TripsPage from './TripsPage'
-import AccountPage from './AccountPage'
+import AccountPage, { SyncStatus } from './AccountPage'
+import { TripTour } from './TripTour'
 
 const VIEWS = [['overview', 'Tổng thể'], ['rear', 'Nhìn từ cửa sau'], ['side', 'Nhìn bên hông'], ['top', 'Nhìn từ trên']] as const // i18n-key
 type PanelName = 'items' | 'vehicles' | 'orders' | 'trips' | 'account'
@@ -123,6 +124,7 @@ export default function TripPage({ id }: { id: string }) {
   const [editing, setEditing] = useState<string | null>(null)
   const [editOrder, setEditOrder] = useState<string | null>(null)
   const [delTrip, setDelTrip] = useState<Trip | null>(null)
+  const [tour, setTour] = useState(false)   // hướng dẫn nhanh: tự mở lần đầu, mở lại ở menu ≡
   const [toast, setToast] = useState<string | null>(null)
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3200); return () => clearTimeout(t) }, [toast])
   // điện thoại gõ số thùng: bàn phím chiếm nửa dưới, khung 3D dính nửa trên ⇒ ô đang gõ bị kẹt giữa, khuất.
@@ -292,7 +294,7 @@ export default function TripPage({ id }: { id: string }) {
     <div className="flex min-h-[100dvh] flex-col lg:h-[100dvh]">
       {/* ── thanh trên navy: nút danh mục (3 vạch) · chuyến mới · CHUYẾN đang mở ▾ · … · Login · logo MAL ── */}
       <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-1 bg-navy-950 pl-1 pr-3 text-white sm:h-14 sm:gap-2 sm:pl-2 sm:pr-4">
-        <MainMenu onPanel={setPanel} onImport={() => setImporting('menu')} />
+        <MainMenu onPanel={setPanel} onImport={() => setImporting('menu')} onTour={() => setTour(true)} />
         <Button variant="primary" onClick={newTrip} aria-label={t('Chuyến mới')} title={t('Tạo chuyến mới')} className="w-10 shrink-0 px-0 sm:w-auto sm:px-3.5"><Plus size={18} /><span className="hidden sm:inline">{t('Chuyến mới')}</span></Button>
         <TripSwitch trip={trip} trips={trips} onRename={name => upsertTrip({ ...trip, name })} onDelete={setDelTrip}
           onAll={() => setPanel('trips')} onNew={newTrip} />
@@ -331,7 +333,7 @@ export default function TripPage({ id }: { id: string }) {
             lightOwn={tripOrders.some(o => o.lines.some(l => l.qty > 0 && l.item.light)) ? !!trip.lightOwnPallet : null}
             onLightOwn={v => upsertTrip({ ...trip, lightOwnPallet: v })} onPallet={() => setPalletOpen(true)} />
           {/* điện thoại: khung 3D cao cố định (nửa màn trừ một hàng thông số) — dải thông số xuống dòng không bóp khung */}
-          <div className={cx('relative min-h-0', full ? 'flex-1' : 'h-[calc(50vh-56px)] min-h-[264px] sm:h-[calc(50vh-48px)] lg:h-auto lg:flex-1')}>
+          <div data-tour="scene" className={cx('relative min-h-0', full ? 'flex-1' : 'h-[calc(50vh-56px)] min-h-[264px] sm:h-[calc(50vh-48px)] lg:h-auto lg:flex-1')}>
             <Scene className="h-full w-full" truck={vehicle ? { l: vehicle.l, w: vehicle.w, h: vehicle.h, container: vehicle.container, plate: vehicle.plate } : null}
               plan={plan} meta={result?.meta} colors={colors} prints={prints} step={step} focus={shown} focusItem={sel?.itemId ?? null} view={view} walls={walls} />
 
@@ -397,7 +399,7 @@ export default function TripPage({ id }: { id: string }) {
             </ul>
           )}
 
-          <Block title={t('Đơn hàng')} open={open.cargo} onToggle={() => setOpen(o => ({ ...o, cargo: !o.cargo }))}
+          <Block tour="orders" title={t('Đơn hàng')} open={open.cargo} onToggle={() => setOpen(o => ({ ...o, cargo: !o.cargo }))}
             summary={hasCargo ? (
               <span className="flex flex-wrap gap-x-3">
                 <SumChip label={t('Đơn')} value={fmtInt(rawOrders.length)} /><SumChip label={t('Thùng')} value={fmtInt(all.cartons)} />
@@ -526,6 +528,7 @@ export default function TripPage({ id }: { id: string }) {
         {panel === 'trips' && <TripsPage />}
         {panel === 'account' && <AccountPage />}
       </Panel>
+      <TripTour open={tour} onOpen={() => setTour(true)} onClose={() => setTour(false)} />
     </div>
   )
 }
@@ -551,7 +554,7 @@ function TripSwitch({ trip, trips, onRename, onDelete, onAll, onNew }: {
       trigger={({ open, toggle }) => (
         <h1 className="min-w-0">
           {/* trông như Ô CHỌN (chủ dự án 30/10: "cho cái gì vào để người ta biết bấm được"): khung viền xanh + nút tròn ▾ */}
-          <button onClick={() => { setRenaming(false); toggle() }} aria-expanded={open} aria-label={t('Chuyến đang mở: {name}. Bấm để xem các chuyến', { name: tx(trip.name) })}
+          <button onClick={() => { setRenaming(false); toggle() }} aria-expanded={open} data-tour="trip" aria-label={t('Chuyến đang mở: {name}. Bấm để xem các chuyến', { name: tx(trip.name) })}
             title={tx(trip.name)}
             className={cx('hit flex h-10 w-full min-w-0 max-w-[320px] items-center gap-1.5 rounded-lg border border-brand-500 pl-2 pr-1 text-left transition-colors hover:bg-white/15 sm:h-11 sm:gap-2 sm:pl-2.5 sm:pr-1.5',
               open ? 'bg-white/15' : 'bg-white/[0.07]')}>
@@ -573,7 +576,7 @@ function TripSwitch({ trip, trips, onRename, onDelete, onAll, onNew }: {
               {!renaming && <Button variant="ghost" aria-label={t('Đổi tên chuyến này')} className="px-2.5 text-[13px] text-brand-700" onClick={() => setRenaming(true)}><Pencil size={14} />{t('Đổi tên')}</Button>}
             </div>
             {renaming
-              ? <RenameInput name={trip.name} onDone={v => { if (v && v !== trip.name) onRename(v); setRenaming(false) }} />
+              ? <RenameInput name={tx(trip.name)} onDone={v => { const n = v && untx(v, trip.name); if (n && n !== trip.name) onRename(n); setRenaming(false) }} />
               : <span className="block break-words pr-2 text-[15px] font-bold leading-snug text-slate-900">{tx(trip.name)}</span>}
           </div>
           <div className="border-b border-slate-200 px-3 py-2 text-[13px] font-semibold text-slate-700">{t('Các chuyến')} · {rows.length}</div>
@@ -632,7 +635,7 @@ function RenameInput({ name, onDone }: { name: string; onDone: (v: string | null
 }
 
 // ── Nút Danh mục 3 vạch (góc trái): mở các danh mục ngay trên bàn xếp xe ─────────────
-function MainMenu({ onPanel, onImport }: { onPanel: (p: PanelName) => void; onImport: () => void }) {
+function MainMenu({ onPanel, onImport, onTour }: { onPanel: (p: PanelName) => void; onImport: () => void; onTour: () => void }) {
   const isAdmin = useAuth(s => s.isAdmin)
   const phone = usePhone()
   // tải app (APK) — CHỈ máy Android (chủ dự án 31/10); đang chạy trong chính app đã cài (cửa sổ riêng) thì thôi
@@ -640,7 +643,7 @@ function MainMenu({ onPanel, onImport }: { onPanel: (p: PanelName) => void; onIm
   return (
     <Popover className="shrink-0" panelClass="w-[270px] max-w-[calc(100vw-16px)] overflow-hidden py-1"
       trigger={({ open, toggle }) => (
-        <button onClick={toggle} aria-expanded={open} aria-label={t('Danh mục')} title={t('Danh mục')}
+        <button onClick={toggle} aria-expanded={open} aria-label={t('Danh mục')} title={t('Danh mục')} data-tour="menu"
           className="grid h-11 w-10 place-items-center rounded-md text-slate-200 transition-colors hover:bg-white/10 hover:text-white sm:w-11"><Menu size={22} /></button>
       )}>
       {close => (
@@ -655,6 +658,7 @@ function MainMenu({ onPanel, onImport }: { onPanel: (p: PanelName) => void; onIm
             </a>
           )}
           {!phone && <MenuItem icon={<FileSpreadsheet size={18} strokeWidth={1.75} />} onClick={() => { close(); onImport() }}>{t('Nhập từ Excel')}</MenuItem>}
+          <MenuItem icon={<HelpCircle size={18} strokeWidth={1.75} />} onClick={() => { close(); onTour() }}>{t('Hướng dẫn nhanh')}</MenuItem>
           <MenuItem icon={<UserRound size={18} strokeWidth={1.75} />} onClick={() => { close(); onPanel('account') }}>{t('Tài khoản & dữ liệu')}</MenuItem>
           {isAdmin && (
             <MenuItem icon={<Users size={18} strokeWidth={1.75} />} onClick={() => { close(); onPanel('vehicles') }}>
@@ -670,19 +674,9 @@ function MainMenu({ onPanel, onImport }: { onPanel: (p: PanelName) => void; onIm
   )
 }
 
-/** Chữ G nhiều màu của Google — đúng cách Google yêu cầu cho nút đăng nhập. */
-const GoogleG = () => (
-  <svg viewBox="0 0 48 48" className="h-[18px] w-[18px] shrink-0" aria-hidden>
-    <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.6 13.2l7.9 6.2C12.4 13.6 17.7 9.5 24 9.5z" />
-    <path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.8c4.3-4 6.9-9.9 6.9-17.2z" />
-    <path fill="#FBBC05" d="M10.5 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.2C.9 16.5 0 20.1 0 24s.9 7.5 2.6 10.8l7.9-6.2z" />
-    <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.8c-2.1 1.4-4.8 2.3-8.5 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.2C6.6 42.6 14.6 48 24 48z" />
-  </svg>
-)
-
 // ── Login (chữ) + hướng dẫn khi rê chuột / chạm · đã đăng nhập: ảnh tài khoản + trạng thái đồng bộ ──
 function AccountButton({ onData }: { onData: () => void }) {
-  const { status, user, isAdmin, sync } = useAuth()
+  const { status, user, isAdmin } = useAuth()
   const [err, setErr] = useState<string | null>(null)
   if (status === 'in' && user) {
     return (
@@ -698,11 +692,7 @@ function AccountButton({ onData }: { onData: () => void }) {
             <div className="border-b border-slate-200 px-4 py-3">
               <div className="flex items-center gap-2"><span className="truncate text-[15px] font-semibold">{user.name}</span>{isAdmin && <Badge tone="blue">Admin</Badge>}</div>
               <div className="truncate text-[13px] text-slate-600">{user.email}</div>
-              <div className={cx('mt-2 flex items-center gap-1.5 text-[12px]', sync === 'error' ? 'text-red-700' : 'text-slate-700')}>
-                {sync === 'error' ? <><CloudOff size={14} />{t('Chưa lưu được lên tài khoản, sẽ thử lại khi có thay đổi')}</>
-                  : sync === 'saving' ? <><Loader2 size={14} className="animate-spin" />{t('Đang lưu lên tài khoản…')}</>
-                  : <><Check size={14} className="text-emerald-700" />{t('Dữ liệu đã lưu trên tài khoản')}</>}
-              </div>
+              <SyncStatus className="mt-2" />
             </div>
             <div className="py-1">
               <MenuItem icon={<UserRound size={17} />} onClick={() => { close(); onData() }}>{t('Tài khoản & dữ liệu')}</MenuItem>
@@ -774,7 +764,7 @@ function SpecStrip({ vehicle, pallet, lightOwn, keep, picker, orders, onSpecs, o
       {!vehicle ? (
         <>
           <Popover panelClass="w-[min(400px,calc(100vw-24px))] overflow-hidden" trigger={({ open, toggle }) => (
-            <button onClick={toggle} aria-expanded={open} className={chip}><Truck size={16} />{t('Chọn xe')}<ChevronDown size={15} className="text-slate-500" /></button>
+            <button onClick={toggle} aria-expanded={open} className={chip} data-tour="truck"><Truck size={16} />{t('Chọn xe')}<ChevronDown size={15} className="text-slate-500" /></button>
           )}>{close => picker(close)}</Popover>
           {orderEdit()}
         </>
@@ -784,7 +774,7 @@ function SpecStrip({ vehicle, pallet, lightOwn, keep, picker, orders, onSpecs, o
               Điện thoại: chiếm phần còn lại của hàng đầu, tên dài thì xuống dòng; máy tính: rộng theo chữ. Lòng thùng + tải
               là dòng phụ trong ô (31/10: bỏ hai chip Lòng / Tải riêng — nhường chỗ nút Sửa đơn, dải máy tính giữ một hàng) */}
           <Popover className="min-w-0 flex-1 sm:flex-none" panelClass="w-[min(400px,calc(100vw-24px))] overflow-hidden" trigger={({ open, toggle }) => (
-            <button onClick={toggle} aria-expanded={open} aria-label={t('Đổi xe')}
+            <button onClick={toggle} aria-expanded={open} aria-label={t('Đổi xe')} data-tour="truck"
               className={cx(chip, 'w-full min-w-0 font-semibold', open && 'border-brand-500 ring-2 ring-brand-100')}>
               <span className="max-sm:hidden"><TruckGlyph pallet={vehicle.kind === 'pallet'} small /></span>
               <span className="min-w-0 text-left leading-tight">
@@ -797,7 +787,7 @@ function SpecStrip({ vehicle, pallet, lightOwn, keep, picker, orders, onSpecs, o
               <ChevronDown size={15} className={cx('ml-auto shrink-0 text-slate-500 transition-transform', open && 'rotate-180')} />
             </button>
           )}>{close => picker(close)}</Popover>
-          <div className="flex h-9 shrink-0 rounded-md border border-slate-300 bg-slate-100 p-0.5" role="group" aria-label={t('Cách chất xếp')}>
+          <div className="flex h-9 shrink-0 rounded-md border border-slate-300 bg-slate-100 p-0.5" role="group" aria-label={t('Cách chất xếp')} data-tour="kind">
             {(['loose', 'pallet'] as const).map(k => (
               <button key={k} onClick={() => k !== vehicle.kind && onKind(k)} aria-pressed={vehicle.kind === k}
                 className={cx('hit rounded-[5px] px-2.5 text-[13px] font-semibold transition-colors',
@@ -1288,9 +1278,9 @@ const OwnerTag = ({ v }: { v: { owner: 'admin' | 'me' } }) => v.owner === 'me'
   : <Badge><Users size={11} />{t('Mẫu chung')}</Badge>
 
 // ── Một khối trên cột khai hàng: tên + tóm tắt; bấm để thu / mở ─────────────
-function Block({ title, summary, open, onToggle, children }: { title: string; summary: ReactNode; open: boolean; onToggle: () => void; children: ReactNode }) {
+function Block({ title, summary, open, onToggle, children, tour }: { title: string; summary: ReactNode; open: boolean; onToggle: () => void; children: ReactNode; tour?: string }) {
   return (
-    <section className="mt-3 border-y border-slate-200 bg-white sm:mx-3 sm:rounded-lg sm:border">
+    <section data-tour={tour} className="mt-3 border-y border-slate-200 bg-white sm:mx-3 sm:rounded-lg sm:border">
       <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 sm:rounded-t-lg">
         <span className="min-w-0 flex-1">
           <span className="block text-[15px] font-semibold text-slate-900">{title}</span>
@@ -1400,14 +1390,14 @@ function OrderSheet({ order, items, colorOf, onClose, onSave }: {
   const [picking, setPicking] = useState(false)
   const [tried, setTried] = useState(false)
   // nạp bản nháp khi MỞ đơn (theo id) — cập nhật kho lúc đang sửa không xoá chữ đang gõ
-  useEffect(() => { setPicking(false); if (order) { setName(order.name); setPlace(order.place); setLines(order.lines); setTried(false) } }, [order?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPicking(false); if (order) { setName(tx(order.name)); setPlace(tx(order.place)); setLines(order.lines); setTried(false) } }, [order?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const byId = new Map(items.map(i => [i.id, i]))
   const qty = (itemId: string, q: number) => setLines(ls => ls.map(l => (l.itemId === itemId ? { ...l, qty: Math.max(0, Math.round(q)) } : l)))
   const drop = (itemId: string) => setLines(ls => ls.filter(l => l.itemId !== itemId))
   const save = () => {
     setTried(true)
     if (!order || !name.trim()) return
-    onSave(order, { name: name.trim(), place: place.trim(), lines }); onClose()
+    onSave(order, { name: untx(name.trim(), order.name), place: untx(place.trim(), order.place), lines }); onClose()
   }
   return (<>
     <Sheet open={!!order && !picking} onClose={onClose} title={t('Sửa đơn')} subtitle={t('Tên, điểm giao và hàng trong đơn')}

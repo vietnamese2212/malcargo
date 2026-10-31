@@ -1,24 +1,42 @@
+// Tài khoản & dữ liệu — GỌN (chủ dự án 31/10: "làm gọn gàng lại phần account, info ngắn gọn"): dòng tài khoản (ai đang
+// đăng nhập · đồng bộ · nút) + số dữ liệu của bạn trên một dòng; mỗi khối sau chỉ một tên + một dòng ngắn, nút nằm bên
+// phải (máy tính) — bỏ dải tiêu đề và đoạn giải thích dài.
 import { useRef, useState, type ReactNode } from 'react'
-import { Download, LogIn, MessageCircle, RotateCcw, Upload } from 'lucide-react'
+import { Check, CloudOff, Download, Loader2, LogOut, MessageCircle, Trash2, Upload, UserRound } from 'lucide-react'
 import { exportBackup, isSample, parseBackup, useData, type BackupData } from '../data/store'
-import { signInGoogle, useAuth } from '../data/cloud'
+import { signInGoogle, signOut, useAuth } from '../data/cloud'
 import { DEFAULT_PALLET_SETTINGS } from '../data/catalog'
-import { Button, Confirm, SectionBand, fmtInt } from '../ui/kit'
+import { Badge, Button, Confirm, cx, fmtInt } from '../ui/kit'
 import { PalletFields } from '../ui/PalletSettings'
-import { ListCard, Page, PageHeader } from '../ui/Shell'
+import { GoogleG, ListCard, Page, PageHeader } from '../ui/Shell'
 import { saveFile } from '../ui/saveFile'
 import { t } from '../i18n'
 
-/** Một nhóm cài đặt: band tiêu đề + câu giải thích nhìn thấy ngay + phần điều khiển. */
-function Group({ title, desc, children, first }: { title: string; desc: ReactNode; children: ReactNode; first?: boolean }) {
+/** Trạng thái lưu lên tài khoản — dùng chung với bảng tài khoản trên thanh trên. */
+export function SyncStatus({ className }: { className?: string }) {
+  const sync = useAuth(s => s.sync)
   return (
-    <>
-      <SectionBand title={title} className={first ? 'border-t-0 sm:rounded-t-[7px]' : undefined} />
-      <div className="px-4 py-4">
-        <p className="max-w-2xl text-sm text-slate-700">{desc}</p>
-        <div className="mt-3">{children}</div>
+    <div className={cx('flex items-center gap-1.5 text-[12px]', sync === 'error' ? 'text-red-700' : 'text-slate-700', className)}>
+      {sync === 'error' ? <><CloudOff size={14} className="shrink-0" />{t('Chưa lưu được lên tài khoản, sẽ thử lại khi có thay đổi')}</>
+        : sync === 'saving' ? <><Loader2 size={14} className="shrink-0 animate-spin" />{t('Đang lưu lên tài khoản…')}</>
+        : <><Check size={14} className="shrink-0 text-emerald-700" />{t('Dữ liệu đã lưu trên tài khoản')}</>}
+    </div>
+  )
+}
+
+/** Một khối: tên + một dòng ngắn; nút gọn nằm bên phải (máy tính) hoặc dưới (điện thoại), ô nhập thì xuống dưới. */
+function Row({ title, desc, side, children }: { title: string; desc: ReactNode; side?: ReactNode; children?: ReactNode }) {
+  return (
+    <section className="border-t border-slate-200 px-4 py-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+        <div className="min-w-0 flex-1">
+          <h2 className="break-words text-[15px] font-semibold leading-snug text-slate-900">{title}</h2>
+          <p className="mt-0.5 break-words text-[13px] leading-snug text-slate-600">{desc}</p>
+        </div>
+        {side && <div className="flex shrink-0 flex-wrap gap-2">{side}</div>}
       </div>
-    </>
+      {children && <div className="mt-3">{children}</div>}
+    </section>
   )
 }
 
@@ -27,10 +45,12 @@ export default function AccountPage() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<BackupData | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+  const [signErr, setSignErr] = useState<string | null>(null)
   const [askReset, setAskReset] = useState(false)
-  const auth = useAuth()
+  const { status, user, isAdmin } = useAuth()
+  const signedIn = status === 'in' && !!user
 
-  const download = () => saveFile(`malcargo-sao-luu-${new Date().toLocaleDateString('en-CA')}.json`,
+  const download = () => saveFile(`${t('malcargo-sao-luu')}-${new Date().toLocaleDateString('en-CA')}.json`,
     () => new Blob([JSON.stringify(exportBackup(), null, 1)], { type: 'application/json' }))
   const onFile = async (f: File | undefined) => {
     if (!f) return
@@ -39,48 +59,62 @@ export default function AccountPage() {
     if (fileRef.current) fileRef.current.value = ''
   }
   // chỉ đếm dữ liệu của người dùng — chuyến mẫu + 2 đơn mẫu có sẵn từ đầu, người mới chưa nhập gì không phải thấy "2 đơn · 1 chuyến"
-  const counts = [[s.items.length, t('mã hàng')], [s.vehicles.length, t('xe')], [s.orders.filter(o => !isSample(o.id)).length, t('đơn')], [s.trips.filter(x => !isSample(x.id)).length, t('chuyến')]] as const
+  const [items, vehicles, orders, trips] = [s.items.length, s.vehicles.length, s.orders.filter(o => !isSample(o.id)).length, s.trips.filter(x => !isSample(x.id)).length]
+  const counts = [
+    [items, t('{n:mã hàng|mã hàng}', { n: items })], [vehicles, t('{n:xe|xe}', { n: vehicles })],
+    [orders, t('{n:đơn|đơn}', { n: orders })], [trips, t('{n:chuyến|chuyến}', { n: trips })],
+  ] as const
 
   return (
     <>
       <PageHeader title={t('Tài khoản & dữ liệu')} />
       <Page flush className="space-y-4">
         <ListCard>
-          {/* cùng nút Login trên thanh trên (trước đây ghi "sắp có" trong khi Login đã chạy — thử 29/10) */}
-          <Group first title={t('Dữ liệu trên máy này')}
-            desc={auth.status === 'in' && auth.user ? t('Đã đăng nhập {email} — dữ liệu trên máy tự đồng bộ lên tài khoản.', { email: auth.user.email })
-              : auth.status === 'off' ? t('Mọi thứ bạn nhập đang lưu trong trình duyệt của máy này.')
-              : t('Mọi thứ bạn nhập đang lưu trong trình duyệt của máy này. Đăng nhập Google để dùng cùng dữ liệu trên máy khác.')}>
-            <div className="grid grid-cols-4 divide-x divide-slate-200 rounded-md border border-slate-200">
-              {counts.map(([n, label]) => (
-                <div key={label} className="px-3 py-2">
-                  <div className="num text-xl font-semibold text-slate-900">{fmtInt(n)}</div>
-                  <div className="text-[12px] text-slate-600">{label}</div>
+          {/* tài khoản: cùng nút Login trên thanh trên (trước đây ghi "sắp có" trong khi Login đã chạy — thử 29/10) */}
+          <section className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:gap-6">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <span className={cx('grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full text-base font-bold',
+                signedIn ? 'bg-brand-500 text-white' : 'bg-slate-100 text-slate-500')}>
+                {!signedIn ? <UserRound size={22} strokeWidth={1.75} />
+                  : user.avatar ? <img src={user.avatar} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+                  : (user.name || user.email).slice(0, 1).toUpperCase()}
+              </span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-2">
+                  <span className="break-words text-[15px] font-semibold leading-snug text-slate-900">{signedIn ? user.name || user.email : t('Chưa đăng nhập')}</span>
+                  {signedIn && isAdmin && <Badge tone="blue">Admin</Badge>}
                 </div>
-              ))}
+                <div className="break-words text-[13px] leading-snug text-slate-600">{signedIn ? user.email : t('Dữ liệu chỉ nằm trên máy này')}</div>
+                {signedIn && <SyncStatus className="mt-1" />}
+              </div>
             </div>
-            {auth.status === 'out' && (
-              <Button className="mt-3 w-full sm:w-auto" onClick={() => signInGoogle().catch(e => setMsg(String(e?.message ?? e)))}><LogIn size={17} />{t('Tiếp tục với Google')}</Button>
-            )}
-          </Group>
+            {signedIn
+              ? <Button className="w-full sm:w-auto" onClick={() => signOut()}><LogOut size={16} />{t('Đăng xuất')}</Button>
+              : status === 'out' && <Button className="w-full sm:w-auto" onClick={() => signInGoogle().catch(e => setSignErr(String(e?.message ?? e)))}><GoogleG />{t('Tiếp tục với Google')}</Button>}
+          </section>
+          {signErr && <p className="-mt-2 px-4 pb-3 text-[13px] text-red-700">{signErr}</p>}
+          <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-slate-200 bg-slate-50 px-4 py-2.5 text-[13px] text-slate-600">
+            <span className="font-medium text-slate-700">{t('Dữ liệu của bạn')}</span>
+            {counts.map(([n, label], i) => (
+              <span key={i} className="whitespace-nowrap"><b className="num text-[15px] font-semibold text-slate-900">{fmtInt(n)}</b> {label}</span>
+            ))}
+          </div>
 
-          <Group title={t('Sao lưu')}
-            desc={t('Xoá dữ liệu trình duyệt hoặc gỡ app là mất dữ liệu trên máy. Tải file sao lưu để giữ, hoặc để chuyển sang máy khác.')}>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="primary" onClick={download}><Download size={17} />{t('Tải file sao lưu')}</Button>
-              <Button onClick={() => fileRef.current?.click()}><Upload size={17} />{t('Nạp từ file')}</Button>
+          <Row title={t('Sao lưu')} desc={t('Giữ một bản phòng khi xoá trình duyệt, hoặc chuyển sang máy khác.')}
+            side={<>
+              <Button variant="primary" className="max-sm:flex-1" onClick={download}><Download size={17} />{t('Tải file sao lưu')}</Button>
+              <Button className="max-sm:flex-1" onClick={() => fileRef.current?.click()}><Upload size={17} />{t('Nạp từ file')}</Button>
               <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={e => onFile(e.target.files?.[0])} />
-            </div>
-            {msg && <p className="mt-2 text-sm text-red-700">{msg}</p>}
-          </Group>
+            </>}>
+            {msg && <p className="text-sm text-red-700">{msg}</p>}
+          </Row>
 
-          <Group title={t('Pallet dùng khi chở xe pallet')} desc={t('Áp cho mọi chuyến xe pallet. Trên bàn xếp xe: nút ⚙ cạnh nút chọn Pallet.')}>
+          <Row title={t('Cỡ pallet')} desc={t('Áp cho mọi chuyến xe pallet.')}>
             <PalletFields cols="grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" />
-          </Group>
+          </Row>
 
-          <Group title={t('Xoá dữ liệu')} desc={t('Xoá mọi mã hàng, xe, đơn, chuyến của bạn trên máy này. Nên tải file sao lưu trước.')}>
-            <Button variant="danger" onClick={() => setAskReset(true)}><RotateCcw size={16} />{t('Xoá toàn bộ dữ liệu trên máy này')}</Button>
-          </Group>
+          <Row title={t('Xoá dữ liệu trên máy này')} desc={t('Mã hàng, xe, đơn, chuyến của bạn.')}
+            side={<Button variant="danger" className="max-sm:flex-1" onClick={() => setAskReset(true)}><Trash2 size={16} />{t('Xoá hết')}</Button>} />
         </ListCard>
 
         <section className="mx-4 flex flex-col gap-3 rounded-lg bg-navy-950 p-5 text-white sm:mx-0 sm:flex-row sm:items-center">

@@ -5,7 +5,7 @@ import { newId, useData } from '../data/store'
 import { removeCatalog, saveCatalog, useAuth } from '../data/cloud'
 import { palletFloorSlots } from '../engine/loadPlan'
 import Scene from '../three/LazyScene'
-import { t, tx } from '../i18n'
+import { t, tx, untx } from '../i18n'
 import { Badge, Button, Confirm, Field, NumInput, Segmented, Sheet, TextInput, fmtDec, fmtInt } from './kit'
 
 const blank = (owner: Vehicle['owner'] = 'me'): Vehicle => ({ id: newId(), owner, name: '', plate: '', kind: 'loose', l: 0, w: 0, h: 0, payloadKg: null, updatedAt: 0 })
@@ -23,7 +23,8 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
   const [askDel, setAskDel] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  useEffect(() => { if (open) { setF(vehicle ?? blank(asSample ? 'admin' : 'me')); setTried(false); setErr(null) } }, [open, vehicle, asSample])
+  useEffect(() => { if (open) { setF(vehicle ? { ...vehicle, name: tx(vehicle.name) } : blank(asSample ? 'admin' : 'me')); setTried(false); setErr(null) } }, [open, vehicle, asSample])
+  const nameOf = () => untx(f.name.trim(), vehicle?.name ?? '') || f.plate.trim().toUpperCase()
 
   // Mẫu chung vẫn sửa được: bấm Lưu ⇒ thành xe CỦA TÔI (id mới), mẫu giữ nguyên. Admin thì lưu thẳng vào mẫu chung.
   const sample = f.owner === 'admin'
@@ -32,7 +33,7 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
     setTried(true)
     if (!valid || badNum()) return
     setBusy(true)
-    const e = await saveCatalog('vehicle', { ...f, name: f.name.trim() || f.plate.trim().toUpperCase(), plate: f.plate.trim().toUpperCase() })
+    const e = await saveCatalog('vehicle', { ...f, name: nameOf(), plate: f.plate.trim().toUpperCase() })
     setBusy(false)
     if (e) setErr(t('Không lưu được mẫu chung: {e}', { e })); else onClose()
   }
@@ -62,7 +63,7 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
   const save = () => {
     setTried(true)
     if (!valid || badNum()) return
-    let name = f.name.trim() || f.plate.trim().toUpperCase()
+    let name = nameOf()
     if (sample && name === vehicle?.name) name = `${name} (của tôi)` // i18n-ok — tên lưu vào dữ liệu, tx() dịch lúc hiện
     const v: Vehicle = { ...f, name, plate: f.plate.trim().toUpperCase(), ...(sample ? { id: newId(), owner: 'me' as const } : {}) }
     upsert(v); onSaved?.(v); onClose()
@@ -98,7 +99,8 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
         )}
       </div>
       <fieldset ref={box} className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+        {/* điện thoại: tên xe trọn hàng — tên tiếng Anh dài hơn ("15-ton pallet truck (mine)") bị cắt trong ô nửa hàng */}
+        <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t('Tên xe')} error={tried ? errs.name : null}><TextInput value={f.name} onChange={e => set('name', e.target.value)} placeholder={t('Xe 5 tấn số 1')} /></Field>
           <Field label={t('Biển số')}><TextInput value={f.plate} onChange={e => set('plate', e.target.value)} placeholder="29C12345" /></Field>
         </div>
@@ -124,7 +126,7 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
         </Field>
       </fieldset>
       <Confirm open={askDel} onClose={() => setAskDel(false)}
-        title={sample ? t('Xoá xe mẫu {name}?', { name: tx(f.name || f.plate) }) : t('Xoá {name}?', { name: tx(f.name || f.plate) })}
+        title={sample ? t('Xoá xe mẫu {name}?', { name: f.name || f.plate }) : t('Xoá {name}?', { name: f.name || f.plate })}
         body={sample ? t('Xe mẫu biến mất khỏi danh sách của MỌI người dùng. Chuyến đang dùng xe này phải chọn xe khác.') : t('Chuyến đang dùng xe này sẽ phải chọn xe khác.')}
         onOk={() => { if (sample) delShared(); else { remove(f.id); onClose() } }} />
     </Sheet>

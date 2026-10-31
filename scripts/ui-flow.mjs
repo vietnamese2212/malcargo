@@ -289,6 +289,46 @@ for (const dev of DEVICES) {
   ok(new Set(sizes).size === 1, `${dev.name}: đổi Pallet → Thùng rời → Pallet, khung 3D giữ cỡ (${sizes.join(' → ')})`)
 }
 
+// Hướng dẫn nhanh cho người mới (chủ dự án 31/10: "mở lên lần đầu, có thể skip"): lần đầu tự mở; Bỏ qua ⇒ tải lại không
+// mở nữa; menu ≡ "Hướng dẫn nhanh" mở lại; mỗi bước vùng sáng nằm trên đúng chỗ, thẻ chữ trọn trong màn; Back đóng
+for (const dev of [DEVICES[0], DEVICES[1], { ...DEVICES[1], name: 'small', viewport: { width: 360, height: 640 } }]) {
+  const q = await (await b.newContext({ ...dev, freshTour: true })).newPage()
+  const e2 = watchErrors(q)
+  await q.goto(srv.base + '#/trip/sample-t1', { waitUntil: 'networkidle' }); await q.waitForTimeout(2000)
+  const card = q.locator('[data-tour-card]')
+  const auto = await card.isVisible()
+  await card.getByRole('button', { name: 'Bỏ qua' }).click(); await q.waitForTimeout(300)
+  const gone = !(await card.count())
+  await q.reload({ waitUntil: 'networkidle' }); await q.waitForTimeout(2000)
+  ok(auto && gone && !(await card.count()), `${dev.name}: lần đầu tự mở hướng dẫn (${auto}), Bỏ qua ⇒ đóng (${gone}), tải lại không mở nữa`)
+  const menu = async () => { await q.getByRole('button', { name: 'Danh mục' }).click(); await q.waitForTimeout(200); await q.locator('[data-popover]').getByRole('button', { name: 'Hướng dẫn nhanh' }).click(); await q.waitForTimeout(500) }
+  await menu()
+  const bad = [], seen = []
+  for (let i = 0; i < 10 && await card.count(); i++) {
+    await q.waitForTimeout(500)
+    const s = await q.evaluate(() => {
+      const c = document.querySelector('[data-tour-card]'), cr = c.getBoundingClientRect(), target = c.dataset.tourStep
+      const ring = document.querySelector('[data-tour-ring]')?.getBoundingClientRect()
+      const tr = target && document.querySelector(`[data-tour="${target}"]`)?.getBoundingClientRect()
+      const inView = cr.left >= 0 && cr.top >= 0 && cr.right <= innerWidth && cr.bottom <= innerHeight
+      const cx = ring && (ring.left + ring.right) / 2, cy = ring && (ring.top + ring.bottom) / 2
+      const onTarget = !target || (!!tr && !!ring && cx >= tr.left && cx <= tr.right && cy >= tr.top && cy <= tr.bottom && cy > 0 && cy < innerHeight)
+      return { target: target || 'chào', title: document.querySelector('#tour-title').textContent, inView, onTarget }
+    })
+    seen.push(s.target)
+    if (!s.inView || !s.onTarget) bad.push(`${s.target} (thẻ trong màn ${s.inView}, vùng sáng đúng chỗ ${s.onTarget})`)
+    if (dev.name !== 'pc') await q.screenshot({ path: `${OUT}/flow-tour-${dev.name}-${i}.jpg`, type: 'jpeg', quality: 70 })
+    const last = await card.getByRole('button', { name: 'Xong' }).count()
+    await card.getByRole('button', { name: last ? 'Xong' : i === 0 ? 'Xem nhanh' : 'Tiếp', exact: true }).click()
+  }
+  ok(!bad.length && seen.length === 7 && !(await card.count()), `${dev.name}: hướng dẫn đủ ${seen.length} bước (${seen.join(' → ')})${bad.length ? ' — lệch: ' + bad.join('; ') : ''}, Xong ⇒ đóng`)
+  await menu()
+  const url = q.url()
+  await q.goBack(); await q.waitForTimeout(500)
+  ok(!(await card.count()) && q.url() === url && !e2.length, `${dev.name}: nút Back đóng hướng dẫn, vẫn ở bàn xếp xe${e2.length ? ' — lỗi: ' + e2[0] : ''}`)
+  await q.close()
+}
+
 await b.close(); await srv.close()
 console.log(fail ? `${fail} phép HỎNG` : 'XANH')
 process.exit(fail ? 1 : 0)

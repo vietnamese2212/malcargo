@@ -4,7 +4,7 @@ import { Copy, Trash2, X } from 'lucide-react'
 import type { Item } from '../data/types'
 import { newId, useData } from '../data/store'
 import { removeCatalog, saveCatalog, useAuth } from '../data/cloud'
-import { t, tx } from '../i18n'
+import { t, tx, untx } from '../i18n'
 import { Badge, Button, Confirm, Field, NumInput, Sheet, Switch, TextInput, fmtDec, fmtDims, fmtInt } from './kit'
 
 const blank = (owner: Item['owner'] = 'me'): Item => ({ id: newId(), owner, code: '', name: '', l: 0, w: 0, h: 0, kg: null, perPallet: null, maxLayers: null, looseLayers: null, light: false, updatedAt: 0 })
@@ -25,7 +25,8 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample, onUnlink }: 
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const box = useRef<HTMLFieldSetElement>(null)
-  useEffect(() => { if (open) { setF(item ?? blank(asSample ? 'admin' : 'me')); setTried(false); setErr(null) } }, [open, item, asSample])
+  useEffect(() => { if (open) { setF(item ? { ...item, name: tx(item.name) } : blank(asSample ? 'admin' : 'me')); setTried(false); setErr(null) } }, [open, item, asSample])
+  const nameOf = () => untx(f.name.trim(), item?.name ?? '')
 
   // Mẫu chung vẫn sửa được: bấm Lưu ⇒ thành mã CỦA TÔI (id mới), mẫu giữ nguyên. Admin thì lưu thẳng vào mẫu chung.
   const sample = f.owner === 'admin'
@@ -34,7 +35,7 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample, onUnlink }: 
     setTried(true)
     if (!valid || badNum()) return
     setBusy(true)
-    const e = await saveCatalog('item', { ...f, code: f.code.trim(), name: f.name.trim() })
+    const e = await saveCatalog('item', { ...f, code: f.code.trim(), name: nameOf() })
     setBusy(false)
     if (e) setErr(t('Không lưu được mẫu chung: {e}', { e })); else onClose()
   }
@@ -72,7 +73,7 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample, onUnlink }: 
   const save = () => {
     setTried(true)
     if (!valid || badNum()) return
-    const it: Item = { ...f, code: f.code.trim(), name: f.name.trim(), ...(sample ? { id: newId(), owner: 'me' as const, code: f.code.trim().replace(/^MAU-/, '') } : {}) }
+    const it: Item = { ...f, code: f.code.trim(), name: nameOf(), ...(sample ? { id: newId(), owner: 'me' as const, code: f.code.trim().replace(/^MAU-/, '') } : {}) }
     upsert(it); onSaved?.(it); onClose()
   }
 

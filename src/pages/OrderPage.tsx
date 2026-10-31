@@ -9,7 +9,7 @@ import { BoxGlyph, Button, Confirm, Empty, Field, IconButton, SectionBand, TextI
 import { ListCard, Page, PageHeader } from '../ui/Shell'
 import { ItemPicker } from '../ui/ItemPicker'
 import { go, replaceRoute } from '../ui/route'
-import { t, tx } from '../i18n'
+import { t, tx, untx } from '../i18n'
 
 export default function OrderPage({ id, back }: { id: string; back?: string }) {
   // vừa tách chuyến mẫu: đọc NGAY bản sao của đơn (đường dẫn đổi sau một nhịp — phím gõ nhanh không sửa lại đơn mẫu)
@@ -70,8 +70,8 @@ export default function OrderPage({ id, back }: { id: string; back?: string }) {
         <ListCard>
           <SectionBand title={t('Thông tin đơn')} className="border-t-0 sm:rounded-t-[7px]" />
           <div className="grid grid-cols-2 gap-3 p-4">
-            <Field label={t('Tên đơn')}><TextInput value={order.name} onChange={e => save({ name: e.target.value })} /></Field>
-            <Field label={t('Điểm giao')}><TextInput value={order.place} onChange={e => save({ place: e.target.value })} placeholder={t('Cửa hàng / khách')} /></Field>
+            <Field label={t('Tên đơn')}><TextInput value={tx(order.name)} onChange={e => save({ name: untx(e.target.value, order.name) })} /></Field>
+            <Field label={t('Điểm giao')}><TextInput value={tx(order.place)} onChange={e => save({ place: untx(e.target.value, order.place) })} placeholder={t('Cửa hàng / khách')} /></Field>
           </div>
 
           <SectionBand title={t('Hàng trong đơn')} meta={t('· {n} mã', { n: order.lines.length })}

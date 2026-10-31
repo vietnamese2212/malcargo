@@ -2,8 +2,8 @@
 // link, ô nhập đang hiện, cuộn tới rồi hỏi trình duyệt điểm giữa nút đang trúng cái gì — trúng vật khác (khung dính,
 // vùng chạm vô hình 44px của nút bên cạnh, lớp phủ, khung pointer-events-none…) là lỗi. Máy cảm ứng còn đo cỡ vùng
 // chạm (< 40px là nhỏ). 1440 chuột · 390 / 360 cảm ứng. Chạy sau `npm run build`: node scripts/ui-tap.mjs
-import { DEVICES, T, TP, TX, UI_LANG, launch, startPreview, watchErrors } from './ui-lib.mjs'
-const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+import { DEVICES, UI_LANG, launch, startPreview, watchErrors } from './ui-lib.mjs'
+import { STATES, T2_STATES } from './ui-states.mjs'
 const DEVS = [DEVICES[0], DEVICES[1], { ...DEVICES[1], name: 'small', viewport: { width: 360, height: 760 } }]
 const OVER = '[role=dialog],[role=alertdialog],[data-popover]'
 
@@ -53,40 +53,6 @@ async function probe(scope, OVER) {
   return { bad, small }
 }
 
-const btn = (p, name, exact = true) => p.getByRole('button', typeof name === 'string' ? { name, exact } : { name })
-const starts = vi => new RegExp('^' + esc(TP(vi)))
-const menu = label => async p => {
-  await btn(p, T('Danh mục')).click(); await p.waitForTimeout(200)
-  await p.locator('[data-popover]').getByRole('button', { name: T(label), exact: true }).click(); await p.waitForTimeout(500)
-}
-// [tên, mở, phạm vi soi, đóng]
-const STATES = [
-  ['Bàn xếp xe', null, null],
-  ['Kết quả mở', p => btn(p, starts('Kết quả: {head}. Bấm để xem chi tiết')).click(), null, p => btn(p, starts('Kết quả: {head}. Bấm để xem chi tiết')).click()],
-  ['Bảng đếm chân', p => btn(p, new RegExp(esc(T('Bảng đếm chân')))).click(), null, p => btn(p, new RegExp(esc(T('Bảng đếm chân')))).click()],
-  ['Danh sách chuyến', p => btn(p, starts('Chuyến đang mở: {name}. Bấm để xem các chuyến')).click(), '[data-popover]'],
-  ['Danh sách xe', p => btn(p, T('Đổi xe')).click(), '[data-popover]'],
-  ['Góc nhìn', p => btn(p, starts('Góc nhìn: {view}')).click(), '[data-popover]'],
-  ['Danh mục', p => btn(p, T('Danh mục')).click(), '[data-popover]'],
-  ['Tuỳ chọn đơn', p => btn(p, starts('Tuỳ chọn {name}')).first().click(), '[data-popover]'],
-  ['Đổi tên chuyến', async p => { await btn(p, starts('Chuyến đang mở: {name}. Bấm để xem các chuyến')).click(); await p.waitForTimeout(200); await btn(p, T('Đổi tên chuyến này')).click() }, '[data-popover]'],
-  ['Sửa đơn (dải xe)', p => btn(p, T('Sửa đơn')).click(), '[role=dialog]'],
-  ['Toàn màn hình', p => btn(p, T('Toàn màn hình')).click(), '[data-scene]', p => btn(p, T('Thoát toàn màn hình')).click()],
-  ['Sửa đơn', p => btn(p, starts('Sửa đơn {name}')).first().click(), '[role=dialog]'],
-  ['Sửa mã', p => btn(p, T('Sửa {name}', { name: TX('Sữa 180ml x48') })).first().click(), '[role=dialog]'],
-  ['Thùng xe', async p => { await btn(p, T('Đổi xe')).click(); await p.waitForTimeout(400); await p.locator('[data-popover]').getByRole('button', { name: T('Chỉnh thông số thùng xe') }).click() }, '[role=dialog]'],
-  ['Sửa xe', async p => { await btn(p, T('Đổi xe')).click(); await p.waitForTimeout(400); await p.locator('[data-popover]').getByRole('button', { name: T('Sửa {name}', { name: TX('Xe pallet 15 tấn') }) }).click() }, '[role=dialog]'],
-  ['Cài đặt pallet', p => btn(p, T('Cài đặt pallet')).click(), '[role=dialog]'],
-  ['Diễn giải', p => btn(p, T('Diễn giải')).click(), '[role=dialog]'],
-  ['Thêm hàng (chọn mã)', p => btn(p, T('Thêm hàng')).first().click(), '[role=dialog]'],
-  ['Thêm đơn', p => btn(p, T('Thêm đơn / điểm giao khác')).click(), '[role=dialog]'],
-  ['Mã hàng', menu('Mã hàng'), '[role=dialog]'],
-  ['Xe', menu('Xe'), '[role=dialog]'],
-  ['Đơn hàng', menu('Đơn hàng'), '[role=dialog]'],
-  ['Các chuyến', menu('Các chuyến'), '[role=dialog]'],
-  ['Tài khoản', menu('Tài khoản & dữ liệu'), '[role=dialog]'],
-  ['Nhập từ Excel', menu('Nhập từ Excel'), '[role=dialog]', null, 'pc'],
-]
 const srv = await startPreview(4188)
 const b = await launch()
 const bad = new Map(), small = new Map()
@@ -98,7 +64,7 @@ for (const dev of DEVS) {
   for (const trip of ['sample-t1', 'sample-t2']) {
     for (const [what, open, scope, close, only] of STATES) {
       if (only && only !== dev.name) continue
-      if (trip === 'sample-t2' && !['Bàn xếp xe', 'Kết quả mở', 'Diễn giải', 'Danh sách xe'].includes(what)) continue
+      if (trip === 'sample-t2' && !T2_STATES.includes(what)) continue
       // nạp lại trang mỗi lần (thêm ?n= — cùng địa chỉ thì trình duyệt không nạp lại, tấm còn mở từ lần trước)
       await p.goto(srv.base + `?n=${++n}#/trip/${trip}`, { waitUntil: 'networkidle' }); await p.waitForTimeout(1500)
       p.setDefaultTimeout(8000)

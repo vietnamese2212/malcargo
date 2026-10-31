@@ -46,10 +46,16 @@ export const TP = vi => T(vi).split('{')[0]
 export async function launch() {
   // camera giả: phòng khi màn nào đó xin camera, không bao giờ mở webcam thật của máy
   const b = await chromium.launch({ executablePath: chromePath(), args: ['--enable-unsafe-swiftshader', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] })
+  // hướng dẫn nhanh tự mở lần đầu (phủ kín màn) ⇒ coi như đã xem; `{ freshTour: true }` = người mới thật (kiểm hướng dẫn)
   const open = b.newContext.bind(b)
-  b.newContext = async (...a) => {
-    const ctx = await open(...a)
-    await ctx.addInitScript(l => { try { localStorage.setItem('malcargo-lang-v1', JSON.stringify({ state: { lang: l }, version: 0 })) } catch {} }, UI_LANG)
+  b.newContext = async ({ freshTour, ...opts } = {}) => {
+    const ctx = await open(opts)
+    await ctx.addInitScript(([l, tour]) => {
+      try {
+        localStorage.setItem('malcargo-lang-v1', JSON.stringify({ state: { lang: l }, version: 0 }))
+        if (!tour) localStorage.setItem('malcargo-tour-v1', '1')
+      } catch {}
+    }, [UI_LANG, !!freshTour])
     return ctx
   }
   return b

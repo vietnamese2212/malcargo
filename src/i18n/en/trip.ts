@@ -48,6 +48,29 @@ export const TRIP: Record<string, string> = {
   'Đổi tên': 'Rename',
   'Đổi tên chuyến này': 'Rename this trip',
   'Sửa đơn nào?': 'Which order?',
+
+  // hướng dẫn nhanh (TripTour)
+  'Hướng dẫn nhanh': 'Quick tour',
+  'Bỏ qua': 'Skip',
+  'Quay lại': 'Back',
+  'Tiếp': 'Next',
+  'Xem nhanh': 'Show me',
+  'Chào mừng đến MalCargo': 'Welcome to MalCargo',
+  'Khai mã hàng, xe và đơn — app tính số pallet, gợi ý xe vừa nhất, bảng đếm chân và sơ đồ xếp 3D. Chuyến mẫu cứ sửa thoải mái — mẫu gốc luôn giữ nguyên.':
+    'Enter your items, trucks and orders — the app works out the pallets, suggests the best-fitting truck, and gives you a floor count sheet and a 3D loading plan. Feel free to edit the sample trips — the originals always stay.',
+  'Mỗi chuyến là một xe cùng các đơn của nó. Bấm để đổi chuyến hoặc đổi tên; nút + tạo chuyến mới.':
+    'Each trip is one truck with its orders. Tap to switch or rename trips; the + button starts a new one.',
+  'Bấm để đổi xe — dấu ✓ là xe chở hết hàng. Lòng thùng, tải sửa ở cuối danh sách.':
+    'Tap to change the truck — ✓ means it carries everything. Edit the cargo box and payload at the end of the list.',
+  'Thùng rời hay Pallet': 'Loose cartons or pallets',
+  'Xếp xá từng thùng, hoặc xếp hàng lên pallet rồi đưa pallet lên xe.': 'Load carton by carton, or stack goods on pallets and load the pallets.',
+  'Sơ đồ 3D': '3D plan',
+  'Kéo để xoay, chụm hoặc lăn chuột để phóng to. Dải trên cùng: số pallet, % tải, % thể tích; "Diễn giải": mỗi mã mấy lớp, pallet nào gộp chung.':
+    'Drag to rotate, pinch or scroll to zoom. The top strip shows pallets, payload % and volume %; "Breakdown" shows each item\'s layers and which pallets are mixed.',
+  'Thêm mã, gõ số thùng — sơ đồ tính lại ngay. Nhiều điểm giao thì thêm đơn; đơn giao trước được xếp sát cửa.':
+    'Add items and type the carton counts — the plan updates right away. Several drop-offs? Add orders; the first drop-off is loaded by the door.',
+  'Mã hàng, xe, đơn, các chuyến và sao lưu dữ liệu. Mở lại hướng dẫn này cũng ở đây.':
+    'Items, trucks, orders, all trips and data backup. You can reopen this tour here too.',
   'đang mở': 'open',
   'Chưa chọn xe': 'No truck chosen',
   'Chuyến mặc định của app, không xoá được': 'The app’s default trip, cannot be deleted',

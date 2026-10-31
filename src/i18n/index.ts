@@ -46,6 +46,11 @@ export function tx(s: string): string {
   return getLang() === 'vi' ? s : txEn(s)
 }
 
+/** Ô SỬA tên (chuyến, đơn, điểm giao, mã, xe) hiện `tx(gốc)` như mọi chỗ khác; lưu mà chữ vẫn y bản hiện ⇒ giữ tên
+ *  GỐC — tên mẫu / tên mặc định không bị lưu thành bản dịch (chủ dự án 31/10: ô đổi tên hiện "Mẫu pallet" giữa giao
+ *  diện tiếng Anh). */
+export const untx = (shown: string, orig: string) => (shown === tx(orig) ? orig : shown)
+
 /** Bản tiếng Anh của chữ mẫu, KHÔNG theo ngôn ngữ đang chọn — đọc file Excel ghi tên mẫu tiếng Anh lúc app đang tiếng Việt. */
 export function txEn(s: string): string {
   if (!s) return s
