@@ -89,6 +89,30 @@ ok(!errs.length, `không lỗi trình duyệt${errs.length ? ': ' + errs.join(' 
   await q.close()
 }
 
+// Menu ≡ có "Tải app Android (APK)" — CHỈ máy Android (chủ dự án 31/10); iPhone / máy tính không thấy; tải về đúng file
+{
+  const UA = {
+    android: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36',
+    iphone: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+  }
+  const seen = {}
+  for (const [k, dev] of [['android', { ...DEVICES[1], userAgent: UA.android }], ['iphone', { ...DEVICES[1], userAgent: UA.iphone }], ['pc', DEVICES[0]]]) {
+    const q = await (await b.newContext({ ...dev, acceptDownloads: true })).newPage()
+    await q.goto(srv.base + '#/trip/sample-t1', { waitUntil: 'networkidle' }); await q.waitForTimeout(800)
+    await q.getByRole('button', { name: 'Danh mục' }).click(); await q.waitForTimeout(300)
+    const link = q.locator('[data-popover]').getByRole('link', { name: 'Tải app Android (APK)' })
+    seen[k] = await link.count()
+    if (k === 'android' && seen[k]) {
+      const [dl] = await Promise.all([q.waitForEvent('download'), link.click()])
+      const size = (await import('node:fs')).statSync(await dl.path()).size
+      seen.file = `${dl.suggestedFilename()} ${Math.round(size / 1024)} KB`
+    }
+    await q.close()
+  }
+  ok(seen.android === 1 && !seen.iphone && !seen.pc && /^MAL-Cargo\.apk \d{3,} KB$/.test(seen.file ?? ''),
+    `menu tải APK: Android ${seen.android} · iPhone ${seen.iphone} · máy tính ${seen.pc}; tải về: ${seen.file}`)
+}
+
 // Hai tab cùng máy: tab kia lưu ⇒ tab này nạp lại, không ghi đè mất (thử 31/10: thêm mã ở tab A, sửa số ở tab B ⇒ mã của A mất)
 {
   const c = await b.newContext(DEVICES[0])

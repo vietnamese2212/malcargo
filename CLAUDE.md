@@ -60,6 +60,7 @@ Ghi chú nội bộ của chủ dự án (không nằm trong repo công khai): @
 ## Cài như app (PWA + APK)
 - `public/manifest.webmanifest` + `public/icons/` (logo MAL / CARGO trên nền navy — vẽ lại: `node scripts/make-icons.mjs`).
 - **APK = Trusted Web Activity** (gói `vn.com.mal.cargo`, dựng bằng Bubblewrap): vỏ Android mở cargo.mal.com.vn toàn màn hình qua Chrome của máy ⇒ **cập nhật web là app tự có bản mới**, không build / cài lại APK (chủ dự án 31/10: "sau này nó có thể tự update khi tôi update"). Chỉ build lại khi đổi vỏ (tên, biểu tượng, màu, tên miền) — tăng `appVersionCode`.
+- File cài `public/MAL-Cargo.apk` (= cargo.mal.com.vn/MAL-Cargo.apk); menu ≡ có "Tải app Android (APK)" CHỈ trên máy Android, không hiện trong chính app đã cài (chủ dự án 31/10: "dành cho android"). Build lại APK ⇒ chép đè file này.
 - `public/.well-known/assetlinks.json` chứa SHA-256 khoá ký APK — thiếu / sai ⇒ app hiện thanh địa chỉ trình duyệt. Khoá ký + dự án Android KHÔNG nằm trong repo (repo công khai).
 
 ## Dữ liệu

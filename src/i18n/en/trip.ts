@@ -55,6 +55,7 @@ export const TRIP: Record<string, string> = {
   'Dạng bảng': 'Table view',
   'Danh mục': 'Menu',
   'Nhập từ Excel': 'Import from Excel',
+  'Tải app Android (APK)': 'Get the Android app (APK)',
   'Tài khoản & dữ liệu': 'Account & data',
   'Mẫu chung': 'Shared',
   'Một sản phẩm của': 'A product of',

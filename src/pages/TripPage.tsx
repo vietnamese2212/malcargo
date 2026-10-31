@@ -6,7 +6,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from '
 import {
   AlertTriangle, ArrowDown, ArrowUp, Camera, Check, ChevronDown, ClipboardCopy, ClipboardList, CloudOff, Crosshair, ExternalLink, Eye, EyeOff,
   FileSpreadsheet, Layers, Loader2, LogOut, MapPin, Maximize2, Menu, Minimize2, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Rotate3d, Ruler,
-  Settings, SlidersHorizontal, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, X,
+  Settings, SlidersHorizontal, Smartphone, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, X,
 } from 'lucide-react'
 import { findVehicle, isBlankOrder, isSample, newId, newTripLabel, nextName, useAllItems, useAllVehicles, useData } from '../data/store'
 import { signInGoogle, signOut, useAuth } from '../data/cloud'
@@ -648,6 +648,8 @@ function TripHead({ trip, trips, onRename, onDelete, onAll, onNew }: {
 function MainMenu({ onPanel, onImport }: { onPanel: (p: PanelName) => void; onImport: () => void }) {
   const isAdmin = useAuth(s => s.isAdmin)
   const phone = usePhone()
+  // tải app (APK) — CHỈ máy Android (chủ dự án 31/10); đang chạy trong chính app đã cài (cửa sổ riêng) thì thôi
+  const android = /Android/i.test(navigator.userAgent) && !matchMedia('(display-mode: standalone)').matches && !document.referrer.startsWith('android-app://')
   return (
     <Popover className="shrink-0" panelClass="w-[270px] max-w-[calc(100vw-16px)] overflow-hidden py-1"
       trigger={({ open, toggle }) => (
@@ -660,6 +662,11 @@ function MainMenu({ onPanel, onImport }: { onPanel: (p: PanelName) => void; onIm
             <MenuItem key={mn.p} icon={<mn.icon size={18} strokeWidth={1.75} />} onClick={() => { close(); onPanel(mn.p) }}>{t(mn.label)}</MenuItem>
           ))}
           <div className="my-1 border-t border-slate-200" />
+          {android && (
+            <a href="/MAL-Cargo.apk" download onClick={close} className="tap flex w-full items-center gap-2.5 px-3 text-left text-sm text-slate-800 transition-colors hover:bg-slate-100">
+              <span className="shrink-0 text-slate-500"><Smartphone size={18} strokeWidth={1.75} /></span>{t('Tải app Android (APK)')}
+            </a>
+          )}
           {!phone && <MenuItem icon={<FileSpreadsheet size={18} strokeWidth={1.75} />} onClick={() => { close(); onImport() }}>{t('Nhập từ Excel')}</MenuItem>}
           <MenuItem icon={<UserRound size={18} strokeWidth={1.75} />} onClick={() => { close(); onPanel('account') }}>{t('Tài khoản & dữ liệu')}</MenuItem>
           {isAdmin && (
