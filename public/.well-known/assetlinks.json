@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "vn.com.mal.cargo",
+    "sha256_cert_fingerprints": ["64:26:BF:B6:35:95:00:50:85:12:94:19:DC:B6:6E:FC:21:99:2C:8A:F0:3D:27:00:1C:D6:57:58:07:3A:2C:6D"]
+  }
+}]
