@@ -114,6 +114,15 @@ export default function TripPage({ id }: { id: string }) {
   // Bàn phím mở thì khung 3D thôi dính, trôi theo trang — ô đang gõ luôn thấy được.
   const { kb } = useVisualView()
   const [full, setFull] = useToggleFull()
+  // chiều cao tên chuyến đang dính (tên dài xuống dòng ⇒ cao thêm) — khung 3D dính ngay dưới nó; không dính ⇒ 0
+  const [head, setHead] = useState<HTMLDivElement | null>(null)
+  const [headH, setHeadH] = useState(0)
+  useEffect(() => {
+    if (!head) return
+    const ro = new ResizeObserver(() => setHeadH(getComputedStyle(head).position === 'sticky' ? head.offsetHeight : 0))
+    ro.observe(head)
+    return () => ro.disconnect()
+  }, [head, kb])
 
   // Sửa chuyến mẫu ⇒ kho đã tách thành chuyến mới: chuyển sang chuyến đó tại chỗ (màn giữ nguyên, ô đang mở
   // trỏ sang đơn bản sao), rồi báo mã chuyến mới. Chuyến mẫu không đổi.
@@ -294,14 +303,19 @@ export default function TripPage({ id }: { id: string }) {
           tên chuyến là tiêu đề màn, dưới là hai phần của nó — Xe (ô chọn xe + 3D) và Đơn hàng; vạch xanh bên trái
           gom tiêu đề với hai phần ── */}
       <div className="flex flex-col border-l-[3px] border-brand-500 lg:min-h-0 lg:flex-1">
-      <TripHead trip={trip} trips={trips} onRename={name => upsertTrip({ ...trip, name })} onDelete={setDelTrip}
-        onAll={() => setPanel('trips')} onNew={newTrip} />
+      {/* cuộn trang (điện thoại / máy tính bảng): tên chuyến dính dưới thanh trên, khung 3D dính ngay dưới nó
+          (chủ dự án 31/10: "chuyến xe không freeze ở trên khi cuộn"). Bàn phím mở / máy nằm ngang thấp thì thôi dính —
+          màn còn quá ít chỗ cho ô đang gõ */}
+      <div ref={setHead} className={cx('sticky top-12 z-20 shrink-0 sm:top-14 [@media(max-height:499px)]:static', kb && 'max-lg:static')}>
+        <TripHead trip={trip} trips={trips} onRename={name => upsertTrip({ ...trip, name })} onDelete={setDelTrip}
+          onAll={() => setPanel('trips')} onNew={newTrip} />
+      </div>
       <div className="lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(380px,440px)_1fr]">
         {/* ── BẢN VẼ: dải thông số xe + 3D + khung tên ── */}
         {/* toàn màn hình: khung 3D phủ kín màn (máy có Fullscreen API thì ẩn luôn thanh trình duyệt) */}
-        <section data-scene className={full
+        <section data-scene style={{ ['--trip-h' as string]: `${headH}px` }} className={full
           ? 'fixed inset-0 z-40 flex flex-col bg-[#e7ecf2] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)]'
-          : cx('sticky top-12 z-10 flex flex-col bg-[#e7ecf2] sm:top-14 lg:relative lg:top-0 lg:order-2 lg:h-full', kb && 'max-lg:relative max-lg:top-0')}>
+          : cx('sticky top-[calc(3rem+var(--trip-h))] z-10 flex flex-col bg-[#e7ecf2] sm:top-[calc(3.5rem+var(--trip-h))] lg:relative lg:top-0 lg:order-2 lg:h-full', kb && 'max-lg:relative max-lg:top-0')}>
           <SpecStrip vehicle={vehicle} pallet={pallet} keep={full} onSpecs={() => setSpec(true)} onKind={k => patchVehicle({ kind: k })}
             picker={close => (
               <VehicleList vehicle={vehicle} vehicles={vehicles} suggestion={suggestion} fits={hasCargo ? fits : {}} onShown={setPicking}

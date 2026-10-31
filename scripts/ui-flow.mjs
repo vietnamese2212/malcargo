@@ -56,6 +56,29 @@ for (const [hash, label, typed] of [['#/trip/sample-t1', 'chuyến mẫu', '200'
   const forks = st.trips.filter(t => !t.id.startsWith('sample-')).length
   ok(String(qty) === typed && still && forks === 1, `${label}: gõ "${typed}" ⇒ tách ${forks} chuyến mới, lưu ${qty}, ô vẫn đang gõ: ${still}`)
 }
+// Lỗi trên chỉ hiện khi phím rơi đúng một nhịp (bản thật 30/10: 1/3 lượt "tách 2 chuyến, lưu 7175") — soi thẳng nhịp đó:
+// sau phím đầu, ô số thùng KHÔNG được nháy lại số của đơn mẫu (740 → 74 → 740 → 74 là màn vừa đọc lại đơn mẫu)
+for (const [hash, label] of [['#/trip/sample-t1', 'chuyến mẫu'], ['#/order/sample-o1?back=trip:sample-t1', 'trang đơn mẫu']]) {
+  const c = await b.newContext(DEVICES[1])
+  await c.addInitScript(() => {
+    const d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
+    window.__vals = []
+    Object.defineProperty(HTMLInputElement.prototype, 'value', {
+      get() { return d.get.call(this) },
+      set(v) { if (this === document.querySelector('input[inputmode=numeric]')) window.__vals.push(String(v)); d.set.call(this, v) },
+    })
+  })
+  const q = await c.newPage()
+  await q.goto(srv.base + hash, { waitUntil: 'networkidle' }); await q.waitForTimeout(1200)
+  const box = q.locator('input[inputmode=numeric]').first()
+  const was = await box.inputValue()
+  await box.click(); await box.press('End')
+  await q.evaluate(() => { window.__vals = [] })
+  await box.press('Backspace'); await q.waitForTimeout(500)
+  const vals = await q.evaluate(() => window.__vals)
+  ok(!vals.includes(was), `${label}: phím đầu tách chuyến, ô không nháy lại số mẫu ${was} (${vals.join(' → ') || 'không gán lại'})`)
+  await c.close()
+}
 
 // Sửa đơn (popup) sửa được cả HÀNG trong đơn: đổi số thùng, bỏ một mã, Lưu (chủ dự án 29/10) — trên máy tính
 {

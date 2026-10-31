@@ -27,13 +27,15 @@ export default function OrderPage({ id, back }: { id: string; back?: string }) {
   const backHref = back?.startsWith('trip:') ? `#/trip/${back.slice(5)}` : '#/orders'
   const backLabel = backTrip ? tx(backTrip.name) : t('Đơn hàng')
 
-  // sửa đơn MẪU ⇒ chuyến mẫu đã tách thành chuyến mới: chuyển sang bản sao của đơn này (lối về trỏ chuyến mới)
+  // sửa đơn MẪU ⇒ chuyến mẫu đã tách thành chuyến mới: chuyển sang bản sao của đơn này (lối về trỏ chuyến mới).
+  // Chỉ đánh dấu `seen` khi màn ĐÃ cầm bản sao: đánh dấu trước lúc đường dẫn đổi thì có một nhịp màn đọc lại đơn mẫu —
+  // phím gõ nhanh rơi vào nhịp đó tách thêm chuyến thứ hai (ui-flow 30/10: gõ "175" ⇒ 2 chuyến, lưu 7175)
   const fork = useData(s => s.fork)
   const markForkSeen = useData(s => s.markForkSeen)
   useEffect(() => {
-    if (!fork || fork.seen || !fork.orders[id]) return
-    markForkSeen()
-    replaceRoute({ page: 'order', id: fork.orders[id], back: back === `trip:${fork.from}` ? `trip:${fork.to}` : back })
+    if (!fork || fork.seen) return
+    if (fork.orders[id]) replaceRoute({ page: 'order', id: fork.orders[id], back: back === `trip:${fork.from}` ? `trip:${fork.to}` : back })
+    else if (Object.values(fork.orders).includes(id)) markForkSeen()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fork, id])
 
