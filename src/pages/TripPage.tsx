@@ -6,10 +6,11 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from '
 import {
   AlertTriangle, ArrowDown, ArrowUp, Camera, Check, ChevronDown, ClipboardCopy, ClipboardList, ClipboardPen, Crosshair, ExternalLink, Eye, EyeOff,
   FileSpreadsheet, HelpCircle, Layers, Loader2, LogOut, MapPin, Maximize2, Menu, Minimize2, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Rotate3d, Ruler,
-  Settings, SlidersHorizontal, Smartphone, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, UsersRound, X,
+  Settings, Share2, SlidersHorizontal, Smartphone, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, UsersRound, X,
 } from 'lucide-react'
 import { LOCKED, catalogLocked, findVehicle, isBlankOrder, isSample, newId, newTripLabel, nextName, useAllItems, useAllVehicles, useData, useSpace } from '../data/store'
-import { signInGoogle, signOut, switchSpace, useAuth, useFamily } from '../data/cloud'
+import { cloudEnabled, signInGoogle, signOut, switchSpace, useAuth, useFamily } from '../data/cloud'
+import { ShareSheet } from '../ui/Share'
 import { pickPool, resolveOrder, truckOf } from '../data/resolve'
 import { orderTotals, type TripInput, type TripResult } from '../engine/plan'
 import { useTripPlan } from '../engine/useTripPlan'
@@ -126,6 +127,7 @@ export default function TripPage({ id }: { id: string }) {
   const [editOrder, setEditOrder] = useState<string | null>(null)
   const [delTrip, setDelTrip] = useState<Trip | null>(null)
   const [tour, setTour] = useState(false)   // hướng dẫn nhanh: tự mở lần đầu, mở lại ở menu ≡
+  const [sharing, setSharing] = useState(false)   // tấm "Chia sẻ chuyến" (nút trong bảng ▾ của ô chuyến)
   const [toast, setToast] = useState<string | null>(null)
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3200); return () => clearTimeout(t) }, [toast])
   // điện thoại gõ số thùng: bàn phím chiếm nửa dưới, khung 3D dính nửa trên ⇒ ô đang gõ bị kẹt giữa, khuất.
@@ -299,7 +301,7 @@ export default function TripPage({ id }: { id: string }) {
         <MainMenu onPanel={setPanel} onImport={() => setImporting('menu')} onTour={() => setTour(true)} />
         <Button variant="primary" onClick={newTrip} aria-label={t('Chuyến mới')} title={t('Tạo chuyến mới')} className="w-10 shrink-0 px-0 sm:w-auto sm:px-3.5"><Plus size={18} /><span className="hidden sm:inline">{t('Chuyến mới')}</span></Button>
         <TripSwitch trip={trip} trips={trips} onRename={name => upsertTrip({ ...trip, name })} onDelete={setDelTrip}
-          onAll={() => setPanel('trips')} onNew={newTrip} />
+          onAll={() => setPanel('trips')} onNew={newTrip} onShare={() => setSharing(true)} />
         <nav className="ml-3 hidden items-center gap-0.5 xl:flex">
           {MENU.map(mn => (
             <button key={mn.p} onClick={() => setPanel(mn.p)} className="flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 hover:text-white">
@@ -532,6 +534,7 @@ export default function TripPage({ id }: { id: string }) {
         {panel === 'family' && <FamilyPage />}
       </Panel>
       <TripTour open={tour} onOpen={() => setTour(true)} onClose={() => setTour(false)} />
+      <ShareSheet open={sharing} onClose={() => setSharing(false)} tripId={trip.id} tripName={trip.name} />
       <InvitePrompt />
     </div>
   )
@@ -540,8 +543,8 @@ export default function TripPage({ id }: { id: string }) {
 // ── CHUYẾN đang mở ▾ trên thanh navy, ngay sau nút "+" (chủ dự án 31/10: "đưa chuyến xe lên trên — để ở dưới chiếm
 // không gian quá"; trước đó là dải xanh riêng dưới thanh). Bấm ⇒ đầu bảng: tên ĐẦY ĐỦ + Đổi tên; dưới: các chuyến
 // (mở / xoá), chuyến mới. Ở thanh trên tên chỉ một dòng, dài thì "…" (data-cut-ok) — đọc đủ ở đầu bảng ─────────────
-function TripSwitch({ trip, trips, onRename, onDelete, onAll, onNew }: {
-  trip: Trip; trips: Trip[]; onRename: (name: string) => void; onDelete: (t: Trip) => void; onAll: () => void; onNew: () => void
+function TripSwitch({ trip, trips, onRename, onDelete, onAll, onNew, onShare }: {
+  trip: Trip; trips: Trip[]; onRename: (name: string) => void; onDelete: (t: Trip) => void; onAll: () => void; onNew: () => void; onShare: () => void
 }) {
   const orders = useData(s => s.orders)
   const pallet = useData(s => s.pallet)
@@ -580,6 +583,8 @@ function TripSwitch({ trip, trips, onRename, onDelete, onAll, onNew }: {
           <div className="border-b border-slate-200 bg-brand-50 pb-2 pl-3 pr-1">
             <div className="flex items-center gap-2">
               <span className="min-w-0 flex-1 text-[11px] font-semibold uppercase tracking-wide text-brand-700">{t('Chuyến đang mở')}</span>
+              {/* chia sẻ = link cho người khác lưu bản sao chuyến (cần máy chủ) */}
+              {!renaming && cloudEnabled && <Button variant="ghost" aria-label={t('Chia sẻ chuyến này')} className="px-2.5 text-[13px] text-brand-700" onClick={() => { close(); onShare() }}><Share2 size={14} />{t('Chia sẻ')}</Button>}
               {!renaming && <Button variant="ghost" aria-label={t('Đổi tên chuyến này')} className="px-2.5 text-[13px] text-brand-700" onClick={() => setRenaming(true)}><Pencil size={14} />{t('Đổi tên')}</Button>}
             </div>
             {renaming

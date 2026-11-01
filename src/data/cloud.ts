@@ -9,6 +9,7 @@ import type { Item, Vehicle } from './types'
 import {
   catalogLocked, dropSpace, exportBackup, mergeBackup, myCatalog, openSpace, parseBackup, useCatalog, useData, useSpace, type BackupData,
 } from './store'
+import { cleanPack, type SharePack } from './share'
 import { t } from '../i18n'
 import { replaceRoute } from '../ui/route'
 
@@ -319,6 +320,33 @@ export async function adminDeleteCode(code: string): Promise<string | null> {
   const { error } = await c.from('discount_codes').delete().eq('code', code)
   await loadPricing(); await loadFamilies()
   return error?.message ?? null
+}
+
+// ── CHIA SẺ CHUYẾN (share.ts): người đăng nhập đưa bản chụp lên ⇒ mã link; ai có mã cũng đọc được (không cần đăng nhập) ─
+const SHARE_ERR: Record<string, string> = {
+  not_signed_in: 'Cần đăng nhập để chia sẻ.', // i18n-key
+  too_big: 'Chuyến quá lớn để chia sẻ.', // i18n-key
+  too_many: 'Hôm nay đã tạo quá nhiều link, mai thử lại.', // i18n-key
+}
+const SHARE_NET = 'Không tạo được link — kiểm tra mạng rồi thử lại.' // i18n-key
+export async function createShare(p: SharePack): Promise<{ code: string } | { error: string }> {
+  try {
+    const c = await sb()
+    const { data, error } = await c.rpc('share_create', { p_data: p })
+    if (error || typeof data !== 'string') return { error: t(SHARE_ERR[error?.message ?? ''] ?? SHARE_NET) }
+    return { code: data }
+  } catch { return { error: t(SHARE_NET) } }
+}
+/** Bản chụp theo mã link: `missing` = mã sai / đã xoá; `error` = mất mạng. */
+export async function fetchShare(code: string): Promise<{ pack: SharePack } | { missing: true } | { error: true }> {
+  if (!cloudEnabled) return { error: true }
+  try {
+    const c = await sb()
+    const { data, error } = await c.rpc('share_get', { p_code: code })
+    if (error) return { error: true }
+    const pack = cleanPack(data)
+    return pack ? { pack } : { missing: true }
+  } catch { return { error: true } }
 }
 
 // ── Đăng nhập / đăng xuất ─────────────────────────────────────────────────────────────────────────────────────────

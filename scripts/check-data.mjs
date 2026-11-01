@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url'
 
 const dir = mkdtempSync(join(tmpdir(), 'malcargo-'))
 const out = join(dir, 'store.mjs')
-buildSync({ stdin: { contents: "export * from './src/data/store'; export { SAMPLE_TRIPS, SAMPLE_ORDERS, PREV_SAMPLES } from './src/data/catalog'", resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', outfile: out, logLevel: 'error' })
+buildSync({ stdin: { contents: "export * from './src/data/store'; export * from './src/data/share'; export { SAMPLE_TRIPS, SAMPLE_ORDERS, PREV_SAMPLES } from './src/data/catalog'", resolveDir: process.cwd(), loader: 'ts' }, bundle: true, format: 'esm', platform: 'node', outfile: out, logLevel: 'error' })
 const S = await import(pathToFileURL(out).href)
 rmSync(dir, { recursive: true, force: true })
 
@@ -159,6 +159,52 @@ console.log('• Bộ dữ liệu: Của tôi / Family')
   await S.openSpace({ id: 'fam1', name: 'Cty', role: 'member' })
   ok(!D().items.length && !D().orders.some(o => o.id === 'o-other'), 'bỏ bản lưu Family (đăng xuất / rời) ⇒ mở lại là bộ trống')
   await S.openSpace({ id: 'me', name: null, role: null })
+}
+
+console.log('• Chia sẻ chuyến: bản chụp ⇒ người nhận lưu bản sao')
+{
+  const it = (id, code, extra = {}) => ({ id, owner: 'me', code, name: `Hàng ${code}`, l: 400, w: 300, h: 200, kg: 5, perPallet: 80, maxLayers: 8, light: false, updatedAt: now, ...extra })
+  const veh = { id: 'v-me', owner: 'me', name: 'Xe của A', plate: '51C-12345', kind: 'pallet', l: 9500, w: 2400, h: 2500, payloadKg: 15000, updatedAt: now }
+  // người gửi: một mã của mình + một mã mẫu chung, xe của mình, 2 đơn (một đơn tên mặc định), bật "hàng nhẹ pallet riêng"
+  D().replaceAll({ ...base, items: [it('i-a', 'A1')], vehicles: [veh], deleted: {},
+    orders: [order('o-s1', 'Khách Hưng', [{ itemId: 'i-a', qty: 30 }, { itemId: 'adm-i-st180', qty: 50 }], { place: 'Q7' }), order('o-s2', 'Đơn 4', [{ itemId: 'i-a', qty: 5 }])],
+    trips: [trip('t-s', 'Xe đi Bình Dương', ['o-s2', 'o-s1'], { vehicleId: 'v-me', lightOwnPallet: true })] })
+  const pack = S.packTrip('t-s')
+  ok(pack && pack.orders.map(o => o.id).join() === 'o-s2,o-s1' && ids(pack.items) === 'adm-i-st180,i-a' && pack.vehicles[0]?.id === 'v-me',
+    'bản chụp: đơn theo thứ tự giao, đủ mã hàng (cả mẫu chung) + xe')
+  const wire = S.cleanPack(JSON.parse(JSON.stringify(pack)))   // qua máy chủ (JSON)
+  ok(!!wire && wire.items.length === 2 && wire.trip.lightOwnPallet === true && wire.orders[1].place === 'Q7', 'đọc lại bản chụp sau khi qua máy chủ')
+  ok(S.cleanPack({ app: 'x' }) === null && S.cleanPack(null) === null && S.cleanPack({ ...pack, items: [{ id: 'bad', l: 'abc' }] }).items.length === 0,
+    'bản chụp hỏng / trường sai kiểu ⇒ bỏ')
+  // người nhận: đã có một mã KHÁC cũng tên mã "A1", đã có "Đơn 4"
+  D().replaceAll({ ...base, items: [it('i-r', 'A1', { l: 999 })], vehicles: [], orders: [order('o-r', 'Đơn 4')], trips: [], deleted: {} })
+  const tid = S.adoptShare(wire)
+  const nt = D().trips.find(t => t.id === tid), nos = nt?.orderIds.map(id => D().orders.find(o => o.id === id)) ?? []
+  const added = D().items.find(i => i.id !== 'i-r')
+  ok(nt?.name === 'Xe đi Bình Dương' && nt.code !== nt.name && nt.lightOwnPallet === true && nos.map(o => o?.name).join() === 'Đơn 5,Khách Hưng' && nos[1]?.place === 'Q7',
+    `lưu bản sao ⇒ chuyến mới (giữ tên, mã chuyến mới, giữ công tắc); đơn tên mặc định ⇒ "Đơn N" kế tiếp (${nos.map(o => o?.name)})`)
+  ok(D().items.length === 2 && added?.code === 'A1-2' && added.owner === 'me' && nos[1]?.lines.some(l => l.itemId === 'adm-i-st180') && nos[1].lines.some(l => l.itemId === added.id),
+    `mã chưa có ⇒ thêm thành mã của tôi (trùng mã khác ⇒ "${added?.code}"); mã mẫu chung dùng lại`)
+  const nv = D().vehicles[0]
+  ok(D().vehicles.length === 1 && nv.id !== 'v-me' && nt?.vehicleId === nv.id && nv.owner === 'me', 'xe chưa có ⇒ thêm thành xe của tôi, id mới')
+  const tid2 = S.adoptShare(wire)
+  ok(tid2 !== tid && D().items.length === 2 && D().vehicles.length === 1, 'lưu cùng link lần hai ⇒ chuyến thứ hai, mã hàng / xe dùng lại (không đẻ trùng)')
+  // chuyến mẫu: mọi mã + xe là mẫu chung ⇒ không thêm gì vào danh mục
+  D().replaceAll({ ...base, orders: [], trips: [], deleted: {} })
+  const sp = S.cleanPack(JSON.parse(JSON.stringify(S.packTrip('sample-t1'))))
+  ok(!S.shareNeedsCatalog(sp), 'chuyến mẫu: mã + xe đều là mẫu chung ⇒ không cần thêm danh mục')
+  ok(S.adoptShare(sp) === 'sample-t1' && !mine(D().trips).length && !mine(D().orders).length,
+    'chuyến mẫu CHƯA SỬA ⇒ mở luôn chuyến mẫu bên người nhận (không đẻ bản sao y hệt mẫu)')
+  sp.orders[0].lines[0].qty += 3   // người gửi đã sửa chuyến mẫu
+  const ts = S.adoptShare(sp), st = D().trips.find(t => t.id === ts)
+  ok(st && !S.isSample(ts) && st.name === st.code && st.vehicleId === S.SAMPLE_TRIPS[0].vehicleId && !D().items.length && st.orderIds.length === 1
+    && D().orders.find(o => o.id === st.orderIds[0])?.lines[0].qty === sp.orders[0].lines[0].qty,
+    'chuyến mẫu ĐÃ SỬA ⇒ bản sao là chuyến thường (tên = mã mới, mang số đã sửa), xe mẫu chung, mẫu không đụng')
+  // thành viên Family: bản sao cần thêm mã ⇒ tấm lưu sẽ đưa vào "Của tôi" (ở đây kiểm cờ)
+  await S.openSpace({ id: 'fam2', name: 'Cty', role: 'member' })
+  ok(S.shareNeedsCatalog(wire) && S.catalogLocked(), 'thành viên Family + bản sao cần thêm mã ⇒ phải lưu sang "Của tôi"')
+  await S.openSpace({ id: 'me', name: null, role: null })
+  S.dropSpace('fam2')
 }
 
 console.log(fail ? `\nĐỎ — ${fail} lỗi` : '\nXANH')

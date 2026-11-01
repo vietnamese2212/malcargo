@@ -8,6 +8,7 @@ import OrderPage from './pages/OrderPage'
 import ItemsPage from './pages/ItemsPage'
 import VehiclesPage from './pages/VehiclesPage'
 import AccountPage from './pages/AccountPage'
+import { ShareInbox } from './ui/Share'
 import { useLang } from './i18n'
 
 /** Mở app = vào thẳng bàn xếp xe của chuyến sửa gần nhất; chưa có chuyến nào thì tạo sẵn một chuyến trống. */
@@ -68,6 +69,7 @@ export default function App() {
       {route.page === 'items' && <ItemsPage />}
       {route.page === 'vehicles' && <VehiclesPage />}
       {route.page === 'account' && <AccountPage />}
+      <ShareInbox />
     </Shell>
   )
 }

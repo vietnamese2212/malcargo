@@ -109,6 +109,11 @@ const SAMPLE_NAMES = new Set([...SAMPLE_TRIPS, ...PREV_TRIPS].map(t => t.name))
 const SAMPLE_ORDER_NAMES = new Set([...SAMPLE_ORDERS, ...PREV_ORDERS].map(o => o.name))
 const copyName = (name: string, taken: Order[]) =>
   (SAMPLE_ORDER_NAMES.has(name) ? nextName('Đơn', taken.map(o => o.name)) : name) // i18n-ok — tên mặc định lưu vào dữ liệu
+/** Đơn chép từ chuyến người khác chia sẻ: tên mẫu / tên mặc định "Đơn N" ⇒ "Đơn N" kế tiếp bên mình; tên riêng giữ. */
+export const copyOrderName = (name: string, taken: string[]) =>
+  (SAMPLE_ORDER_NAMES.has(name) || DEFAULT_ORDER.test(name) ? nextName('Đơn', taken) : name) // i18n-ok — tên mặc định lưu vào dữ liệu
+/** Tên mặc định của chuyến (tên chuyến mẫu, "Chuyến N") — chép sang thì lấy mã chuyến mới làm tên. */
+export const isDefaultTripName = (name: string) => SAMPLE_NAMES.has(name) || DEFAULT_TRIP.test(name)
 /** Chuyến mẫu đang giữ đơn mẫu `oid` — sửa đơn đó thì tách chuyến này. */
 const sampleTripOf = (s: TO, oid: string) =>
   s.trips.find(t => isSample(t.id) && t.orderIds.includes(oid)) ?? SAMPLE_TRIPS.find(t => t.orderIds.includes(oid)) ?? SAMPLE_TRIPS[0]

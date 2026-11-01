@@ -329,6 +329,40 @@ for (const dev of [DEVICES[0], DEVICES[1], { ...DEVICES[1], name: 'small', viewp
   await q.close()
 }
 
+// ── Chia sẻ chuyến (máy chủ giả lập): người MỚI mở link ⇒ tấm "Chuyến được chia sẻ" (hướng dẫn không tự mở đè) ⇒ Lưu bản sao
+//    ⇒ mở chuyến mới, mã riêng của người gửi vào "Của tôi", mã mẫu chung dùng lại; link sai ⇒ báo; người gửi chưa đăng nhập ⇒ mời
+{
+  const { SHARE_PACK, openShare } = await import('./ui-states.mjs')
+  const q = await (await b.newContext({ ...DEVICES[1], freshTour: true })).newPage()
+  const e3 = watchErrors(q)
+  await q.goto(srv.base, { waitUntil: 'networkidle' })
+  await openShare(q); await q.waitForTimeout(1500)
+  const sheet = q.getByRole('dialog')
+  ok(await sheet.getByText('Chuyến được chia sẻ').isVisible() && await sheet.getByText('Test share').isVisible() && !(await q.locator('[data-tour-card]').count()) && !q.url().includes('/s/'),
+    'mở link chia sẻ ⇒ tấm "Chuyến được chia sẻ", hướng dẫn không tự mở đè, địa chỉ về trang gốc')
+  await q.screenshot({ path: `${OUT}/flow-share-open.jpg`, type: 'jpeg', quality: 75 })
+  await sheet.getByRole('button', { name: 'Lưu bản sao' }).click(); await q.waitForTimeout(2500)
+  const st = await q.evaluate(() => {
+    const d = JSON.parse(localStorage.getItem('malcargo-data-v1')).state
+    const tr = d.trips.find(t => t.name === 'Test share')
+    return { n: d.trips.filter(t => t.name === 'Test share').length, items: d.items.map(i => i.code).join(), veh: tr?.vehicleId, orders: tr?.orderIds.map(id => d.orders.find(o => o.id === id)?.name).join() }
+  })
+  ok(st.n === 1 && st.items === 'TEST-1' && st.veh === 'adm-v-p15t' && st.orders === 'Order A,Order B' && /#\/trip\//.test(q.url())
+    && await q.getByRole('button', { name: /^Chuyến đang mở: Test share/ }).isVisible(),
+    `Lưu bản sao ⇒ mở chuyến "Test share" (${st.orders}), mã riêng vào Của tôi (${st.items}), xe + mã mẫu chung dùng lại (${st.veh})`)
+  await q.waitForTimeout(3000)
+  await q.screenshot({ path: `${OUT}/flow-share-saved.jpg`, type: 'jpeg', quality: 75 })
+  await openShare(q, null, 'KHONGCOMA1')
+  ok(await q.getByText('Link không đúng hoặc chuyến đã bị xoá.').isVisible(), 'link sai / đã xoá ⇒ báo, không lưu gì')
+  await q.getByRole('dialog').getByRole('button', { name: 'Đóng' }).last().click(); await q.waitForTimeout(400)
+  await q.getByRole('button', { name: /^Chuyến đang mở/ }).click(); await q.waitForTimeout(300)
+  await q.getByRole('button', { name: 'Chia sẻ chuyến này' }).click(); await q.waitForTimeout(800)
+  ok(await q.getByRole('dialog').getByRole('button', { name: 'Tiếp tục với Google' }).isVisible(), 'người gửi chưa đăng nhập: Chia sẻ ⇒ mời đăng nhập (người nhận thì không cần)')
+  await q.screenshot({ path: `${OUT}/flow-share-signin.jpg`, type: 'jpeg', quality: 75 })
+  ok(!e3.length, `chia sẻ: không lỗi trình duyệt${e3.length ? ' — ' + e3[0] : ''}`)
+  await q.close()
+}
+
 await b.close(); await srv.close()
 console.log(fail ? `${fail} phép HỎNG` : 'XANH')
 process.exit(fail ? 1 : 0)

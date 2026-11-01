@@ -271,6 +271,46 @@ grant execute on function public.user_save(jsonb, bigint), public.family_fee(uui
   public.family_decline(uuid), public.family_leave(uuid), public.family_delete(uuid), public.family_apply_code(uuid, text),
   public.family_save(uuid, jsonb, bigint), public.family_role(uuid), public.family_invited(uuid), public.my_email() to authenticated;
 
+-- ── CHIA SẺ CHUYẾN: người đăng nhập đưa BẢN CHỤP chuyến (chuyến + đơn + mã hàng + xe) lên ⇒ mã link ngắn; ai có mã cũng
+--    đọc được qua share_get (không cần đăng nhập) rồi lưu bản sao về máy mình. Không ai liệt kê / đọc thẳng bảng được.
+create table if not exists public.shares (
+  code text primary key,
+  owner_id uuid not null references auth.users (id) on delete cascade,
+  data jsonb not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists shares_owner_idx on public.shares (owner_id, created_at);
+alter table public.shares enable row level security;   -- không policy nào: chỉ hai hàm dưới chạm vào bảng
+revoke all on public.shares from anon, authenticated;
+
+create or replace function public.share_create(p_data jsonb) returns text
+language plpgsql security definer set search_path = public as $$
+declare c text;
+begin
+  if auth.uid() is null then raise exception 'not_signed_in'; end if;
+  if jsonb_typeof(p_data) <> 'object' or p_data ->> 'app' <> 'malcargo' or p_data ->> 'kind' <> 'trip' then raise exception 'bad_data'; end if;
+  if octet_length(p_data::text) > 1000000 then raise exception 'too_big'; end if;
+  if (select count(*) from shares where owner_id = auth.uid() and created_at > now() - interval '1 day') >= 200 then raise exception 'too_many'; end if;
+  loop
+    -- 10 ký tự base64url từ uuid ngẫu nhiên (~56 bit) — không đoán / dò được
+    c := translate(left(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), 10), '+/', '-_');
+    begin
+      insert into shares (code, owner_id, data) values (c, auth.uid(), p_data);
+      return c;
+    exception when unique_violation then null;   -- trùng mã (rất hiếm) ⇒ lấy mã khác
+    end;
+  end loop;
+end $$;
+
+create or replace function public.share_get(p_code text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select data from shares where code = p_code
+$$;
+
+revoke execute on function public.share_create(jsonb) from public, anon;
+grant execute on function public.share_create(jsonb) to authenticated;
+grant execute on function public.share_get(text) to anon, authenticated;
+
 -- ── Admin đầu tiên (email dùng để ĐĂNG NHẬP MalCargo bằng Google) ──
 insert into public.admins (email) values ('lam.tranhoang@mal.com.vn') on conflict do nothing;
 

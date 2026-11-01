@@ -6,12 +6,13 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from '../ui/kit'
 import { useBackClose } from '../ui/route'
+import { useShareInbox } from '../data/share'
 import { t } from '../i18n'
 
 const SEEN = 'malcargo-tour-v1'
 const STEPS: { target?: string; title: string; body: string }[] = [
   { title: 'Chào mừng đến MalCargo', body: 'Khai mã hàng, xe và đơn — app tính số pallet, gợi ý xe vừa nhất, bảng đếm chân và sơ đồ xếp 3D. Chuyến mẫu cứ sửa thoải mái — mẫu gốc luôn giữ nguyên.' }, // i18n-key
-  { target: 'trip', title: 'Chuyến xe', body: 'Mỗi chuyến là một xe cùng các đơn của nó. Bấm để đổi chuyến hoặc đổi tên; nút + tạo chuyến mới.' }, // i18n-key
+  { target: 'trip', title: 'Chuyến xe', body: 'Mỗi chuyến là một xe cùng các đơn của nó. Bấm để đổi chuyến, đổi tên hoặc chia sẻ; nút + tạo chuyến mới.' }, // i18n-key
   { target: 'truck', title: 'Chọn xe', body: 'Bấm để đổi xe — dấu ✓ là xe chở hết hàng. Lòng thùng, tải sửa ở cuối danh sách.' }, // i18n-key
   { target: 'kind', title: 'Thùng rời hay Pallet', body: 'Xếp xá từng thùng, hoặc xếp hàng lên pallet rồi đưa pallet lên xe.' }, // i18n-key
   { target: 'scene', title: 'Sơ đồ 3D', body: 'Kéo để xoay, chụm hoặc lăn chuột để phóng to. Dải trên cùng: số pallet, % tải, % thể tích; "Diễn giải": mỗi mã mấy lớp, pallet nào gộp chung.' }, // i18n-key
@@ -39,7 +40,8 @@ function reveal(e: HTMLElement) {
 export function TripTour({ open, onOpen, onClose }: { open: boolean; onOpen: () => void; onClose: () => void }) {
   // lần đầu vào bàn xếp xe ⇒ tự mở (chờ màn dựng xong); người dùng đã kịp mở tấm / bảng nào thì để lần sau
   useEffect(() => {
-    if (seen()) return
+    // mở app bằng link chia sẻ ⇒ việc đầu tiên là tấm lưu chuyến được gửi; hướng dẫn mở khi vào chuyến vừa lưu
+    if (seen() || useShareInbox.getState().code) return
     const id = setTimeout(() => { if (!document.querySelector('[role=dialog],[role=alertdialog],[data-popover]')) onOpen() }, 900)
     return () => clearTimeout(id)
   // eslint-disable-next-line react-hooks/exhaustive-deps

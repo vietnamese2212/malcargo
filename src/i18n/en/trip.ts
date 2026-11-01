@@ -58,8 +58,8 @@ export const TRIP: Record<string, string> = {
   'Chào mừng đến MalCargo': 'Welcome to MalCargo',
   'Khai mã hàng, xe và đơn — app tính số pallet, gợi ý xe vừa nhất, bảng đếm chân và sơ đồ xếp 3D. Chuyến mẫu cứ sửa thoải mái — mẫu gốc luôn giữ nguyên.':
     'Enter your items, trucks and orders — the app works out the pallets, suggests the best-fitting truck, and gives you a floor count sheet and a 3D loading plan. Feel free to edit the sample trips — the originals always stay.',
-  'Mỗi chuyến là một xe cùng các đơn của nó. Bấm để đổi chuyến hoặc đổi tên; nút + tạo chuyến mới.':
-    'Each trip is one truck with its orders. Tap to switch or rename trips; the + button starts a new one.',
+  'Mỗi chuyến là một xe cùng các đơn của nó. Bấm để đổi chuyến, đổi tên hoặc chia sẻ; nút + tạo chuyến mới.':
+    'Each trip is one truck with its orders. Tap to switch, rename or share trips; the + button starts a new one.',
   'Bấm để đổi xe — dấu ✓ là xe chở hết hàng. Lòng thùng, tải sửa ở cuối danh sách.':
     'Tap to change the truck — ✓ means it carries everything. Edit the cargo box and payload at the end of the list.',
   'Thùng rời hay Pallet': 'Loose cartons or pallets',
@@ -300,4 +300,33 @@ export const TRIP: Record<string, string> = {
   'Toàn màn hình': 'Full screen',
   'Thoát toàn màn hình': 'Exit full screen',
   'Nhập đơn từ Excel': 'Import orders from Excel',
+  // chia sẻ chuyến
+  'Chia sẻ': 'Share',
+  'Chia sẻ chuyến này': 'Share this trip',
+  'Chia sẻ chuyến': 'Share trip',
+  'Đăng nhập để tạo link. Người nhận không cần đăng nhập.': 'Sign in to create a link. Whoever receives it does not need to sign in.',
+  'Chuyến chưa có hàng để chia sẻ.': 'This trip has no cargo to share yet.',
+  'Đang tạo link…': 'Creating link…',
+  'Đang tải…': 'Loading…',
+  'Link chuyến này': 'Link to this trip',
+  'Chép link': 'Copy link',
+  'Đã chép': 'Copied',
+  'Gửi…': 'Send…',
+  'Thử lại': 'Try again',
+  'Ai có link đều xem và lưu được bản sao chuyến này (đơn, mã hàng, xe). Họ sửa bản sao không đổi chuyến của bạn.':
+    'Anyone with the link can view and save a copy of this trip (orders, items, truck). Their edits to the copy do not change your trip.',
+  'Sửa chuyến xong muốn gửi bản mới thì chia sẻ lại.': 'Changed the trip? Share it again to send the new version.',
+  'Cần đăng nhập để chia sẻ.': 'Sign in to share.',
+  'Chuyến quá lớn để chia sẻ.': 'This trip is too large to share.',
+  'Hôm nay đã tạo quá nhiều link, mai thử lại.': 'Too many links created today — try again tomorrow.',
+  'Không tạo được link — kiểm tra mạng rồi thử lại.': 'Could not create the link — check your connection and try again.',
+  'Chuyến được chia sẻ': 'Shared trip',
+  'Đang tải chuyến…': 'Loading trip…',
+  'Link không đúng hoặc chuyến đã bị xoá.': 'This link is wrong or the trip has been removed.',
+  'Không tải được chuyến — kiểm tra mạng rồi thử lại.': 'Could not load the trip — check your connection and try again.',
+  'Lưu bản sao': 'Save a copy',
+  '+{n} đơn nữa': '+{n} more {n:order|orders}',
+  'Sẽ lưu vào dữ liệu "Của tôi" — trong Family, mã hàng và xe do chủ quản lý.': 'It will be saved to "Mine" — in the Family, items and trucks are managed by the owner.',
+  'Lưu bản sao vào dữ liệu của bạn rồi mở ra xem sơ đồ xếp — sửa thoải mái, bản của người gửi không đổi.':
+    'Save a copy to your data and open its loading plan — edit freely, the sender\'s trip stays the same.',
 }
