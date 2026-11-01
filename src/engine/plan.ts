@@ -4,7 +4,7 @@
 // cảnh báo) là tiếng Việt gốc — Worker không biết ngôn ngữ; màn hình dịch bằng `tx()` (luật trong src/i18n/en.ts).
 import {
   cartonsPerPalletEstimate, computeLoadPlan, packPallet as packPalletBy, palletizeGroups, palletFitError, palletsTooTall,
-  palletFloorSlots, spacePallets, spreadToDoor, type LoadGroup, type LoadPlan, type PalletSpec, type PalletizeInput,
+  palletFloorSlots, placePallets, spreadToDoor, type LoadGroup, type LoadPlan, type PalletSpec, type PalletizeInput,
 } from './loadPlan'
 export { spreadTarget } from './loadPlan'
 import type { Item, PalletSettings, VehicleKind } from '../data/types'
@@ -251,8 +251,8 @@ export function computeTrip(input: TripInput): TripResult {
     plan = { truck: T, groups, placed: [], leftover: groups.map((g, i) => ({ group: i, count: g.count })).filter(x => x.count > 0),
       stepCount: 0, volumePct: 0, placedCount: 0, totalCount: groups.reduce((s, g) => s + g.count, 0), weightKg: 0, lengthUsedPct: 0 }
   } else {
-    plan = computeLoadPlan(T, groups)
-    if (truck.kind === 'pallet') plan = spacePallets(plan)
+    // xe pallet: khe 5 cm giữa các pallet (luật 14 lõi)
+    plan = truck.kind === 'pallet' ? placePallets(T, groups) : computeLoadPlan(T, groups)
     // Dự phòng (đo 26/10): hàng nhẹ thùng TO hơn thùng nền nằm ở đơn xếp SAU bị thuật toán bỏ lại
     // toàn bộ dù xe còn chỗ — ca hiếm vì hàng nhẹ thường là túi / hộp nhỏ hơn thùng nền.
     // Không vá lõi (giữ bản chép khớp SUPPLYC): xếp lại các mã đó như hàng thường và NÓI RA.

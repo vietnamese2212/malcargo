@@ -211,10 +211,12 @@ for (const [name, truck, orders] of cases) {
       if (m.mix) ok(r.plan.groups[gi].h <= P.maxH + 0.5, `${name}: ${m.label} cao ${r.plan.groups[gi].h} > ${P.maxH}`)
     }
     for (const [k, n] of remOn) ok(n === 1, `${name}: phần lẻ ${k} vắt qua ${n} pallet`)
-    const ps = r.plan.placed
-    // làn nào có từ 2 pallet thì giữa chúng phải có khe
-    const sameLane = ps.some(a => ps.some(b => b !== a && b.x > a.x && Math.abs(b.y - a.y) < 1))
-    if (sameLane) ok(ps.some(a => ps.some(b => b !== a && b.x >= a.x + a.l + 1 && Math.abs(b.y - a.y) < 1)), `${name}: các pallet trong làn phải có khe`)
+    // KHE 5 CM (chủ dự án 01/11: "giữa các pallet là 5cm, 4 phía"): hai pallet bất kỳ cách nhau ≥ 50mm theo ít nhất
+    // một chiều sàn (sát vách thì được); không ra ngoài lòng xe
+    const ps = r.plan.placed, T = r.plan.truck
+    const close = ps.filter((a, i) => ps.some((b, j) => j > i && Math.max(b.x - a.x - a.l, a.x - b.x - b.l, b.y - a.y - a.w, a.y - b.y - b.w) < 49.5))
+    ok(!close.length && ps.every(b => b.x >= 0 && b.y >= 0 && b.x + b.l <= T.length + 0.5 && b.y + b.w <= T.width + 0.5),
+      `${name}: ${close.length} pallet cách pallet bên dưới 5 cm / ra ngoài lòng xe`)
   }
   const show = r => r.count.map(c => `${c.label}${c.mix ? ' [' + c.mix.map(x => x.n + ' ' + x.label).join(' + ') + ']' : ''}`).join(' · ')
   // Ca ảnh chủ dự án 28/10: chuyến mẫu, xe 5 tấn đổi sang chở pallet
@@ -250,7 +252,8 @@ for (const [name, truck, orders] of cases) {
   for (const [nm, q] of [['Sữa 110 lẻ 5 + 190 túi', { 'adm-i-st110': 145, 'adm-i-tui110': 190 }], ['Sữa 110 lẻ 8 + 160 túi', { 'adm-i-st110': 148, 'adm-i-tui110': 160 }],
     ['Sữa 180 lẻ 2 + Sữa 110 lẻ 8 + 180 túi', { 'adm-i-st180': 112, 'adm-i-st110': 148, 'adm-i-tui110': 180 }], ['vừa trần 1,65m', { 'adm-i-st180': 150, 'adm-i-st110': 158, 'adm-i-tui110': 160 }]]) {
     const o = sample.map(x => ({ ...x, lines: x.lines.map(l => ({ ...l, qty: q[l.item.id] ?? (l.item.id === 'adm-i-c100' ? 144 : l.item.id === 'adm-i-scu180' ? 110 : l.qty) })) }))
-    palletChecks(`pallet · thạch không thành tháp · ${nm}`, E.computeTrip({ truck: { ...trucks['adm-v-5t'], kind: 'pallet', payloadKg: 9000 }, orders: o, pallet: P }))
+    // xe pallet 8 tấn (trước: xe 5 tấn lòng 2,0 m — từ khe 5 cm, hai làn pallet 1,0 m cần 2,05 m, chỉ còn 5 chỗ)
+    palletChecks(`pallet · thạch không thành tháp · ${nm}`, E.computeTrip({ truck: { ...trucks['adm-v-p8t'], payloadKg: 9000 }, orders: o, pallet: P }))
   }
   const a = E.computeTrip({ truck: trucks['adm-v-p8t'], orders: os, pallet: P })
   palletChecks('pallet · phần lẻ dồn', a)
