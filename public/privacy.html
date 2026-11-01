@@ -1,31 +1,71 @@
 <!doctype html>
-<html lang="vi">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Chính sách bảo mật · MAL Cargo</title>
+<title>Privacy policy · MAL Cargo</title>
 <link rel="icon" href="/favicon.svg">
 <style>
   :root { --navy: #0b1424; --blue: #1a66ff; --ink: #1e293b; --muted: #475569; --line: #e2e8f0; }
   * { box-sizing: border-box; }
   body { margin: 0; background: #eef2f7; color: var(--ink); font: 16px/1.65 "Be Vietnam Pro", "Segoe UI", Arial, sans-serif; }
-  header { background: var(--navy); color: #fff; padding: 14px 16px; }
-  header a { color: #fff; text-decoration: none; font-weight: 800; font-style: italic; font-size: 22px; letter-spacing: -.04em; }
+  header { background: var(--navy); color: #fff; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  header > a { color: #fff; text-decoration: none; font-weight: 800; font-style: italic; font-size: 22px; letter-spacing: -.04em; }
   header small { font-style: normal; font-size: 10px; font-weight: 700; letter-spacing: .1em; background: var(--blue); border-radius: 4px; padding: 3px 6px; margin-left: 6px; vertical-align: 3px; }
+  header > a.lang { font-style: normal; letter-spacing: 0; font-size: 14px; font-weight: 600; }
+  .lang { color: #fff; border: 1px solid rgba(255,255,255,.3); border-radius: 6px; padding: 8px 12px; text-decoration: none; }
   main { max-width: 760px; margin: 24px auto; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 24px 20px 32px; }
   h1 { font-size: 26px; line-height: 1.25; margin: 0 0 4px; color: var(--navy); }
   h2 { font-size: 18px; margin: 28px 0 6px; color: var(--navy); }
   p, li { color: var(--ink); }
   .meta { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
   a { color: var(--blue); }
+  [hidden] { display: none !important; }
   @media (max-width: 640px) { main { margin: 0; border: 0; border-radius: 0; } }
 </style>
 </head>
 <body>
-<header><a href="/">MAL<small>CARGO</small></a></header>
-<main>
+<header>
+  <a href="/">MAL<small>CARGO</small></a>
+  <a class="lang" data-en href="?lang=vi">Tiếng Việt</a>
+  <a class="lang" data-vi href="?lang=en" hidden>English</a>
+</header>
+
+<!-- Tiếng Anh hiện sẵn (app mặc định tiếng Anh; người duyệt của Google đọc không cần JavaScript); app đang tiếng Việt
+     (localStorage `malcargo-lang-v1`) hoặc ?lang=vi ⇒ bản tiếng Việt -->
+<main data-en>
+  <h1>Privacy policy</h1>
+  <p class="meta">MAL Cargo (cargo.mal.com.vn) · updated 1 November 2026</p>
+
+  <p>MAL Cargo is a truck-loading simulator: you enter your items, trucks and orders; the app works out the weight, volume and number of pallets, suggests a truck and draws a 3D loading plan. This page explains what the app collects, what it is used for and what your rights are.</p>
+
+  <h2>1. Without signing in</h2>
+  <p>You can use the whole app without an account. Everything you enter stays in the browser on your device and is not sent to any server.</p>
+
+  <h2>2. When you sign in with Google</h2>
+  <p>The app only receives from Google your <b>email address, display name and profile picture</b>. It does not read your Gmail, contacts, Drive or any other Google data.</p>
+  <p>Once you are signed in, the data you enter in the app (items, trucks, orders, trips, pallet size) is saved to your account so you can use it on several devices.</p>
+
+  <h2>3. Where your data is stored</h2>
+  <p>Account data is stored on Supabase, in a data centre in Singapore. Each person can only read and change their own data; this is enforced by the server, not by the app.</p>
+
+  <h2>4. What we use your data for</h2>
+  <ul>
+    <li>Signing you in and syncing your data between your devices.</li>
+    <li>Contacting you for support when you ask us to.</li>
+  </ul>
+  <p>We <b>do not sell or share</b> your data with third parties and do not use it for advertising.</p>
+
+  <h2>5. Deleting your data</h2>
+  <p>You can delete the data on your device under <i>Account &amp; data</i> in the app. To delete your account and its data on the server, email <a href="mailto:lam.tranhoang@mal.com.vn">lam.tranhoang@mal.com.vn</a>; we delete it within 7 working days.</p>
+
+  <h2>6. Contact</h2>
+  <p>MAL · <a href="https://mal.com.vn">mal.com.vn</a> · Email <a href="mailto:lam.tranhoang@mal.com.vn">lam.tranhoang@mal.com.vn</a> · Phone / Zalo +84 972 702 149.</p>
+</main>
+
+<main data-vi lang="vi" hidden>
   <h1>Chính sách bảo mật</h1>
-  <p class="meta">MAL Cargo (cargo.mal.com.vn) · cập nhật ngày 27/10/2026</p>
+  <p class="meta">MAL Cargo (cargo.mal.com.vn) · cập nhật ngày 01/11/2026</p>
 
   <p>MAL Cargo là công cụ mô phỏng xếp hàng lên xe tải: bạn khai mã hàng, xe, đơn hàng; app tính khối lượng, thể tích, số pallet, gợi ý xe và vẽ sơ đồ 3D. Trang này nói rõ app thu thập gì, dùng để làm gì và bạn có quyền gì.</p>
 
@@ -52,5 +92,17 @@
   <h2>6. Liên hệ</h2>
   <p>MAL · <a href="https://mal.com.vn">mal.com.vn</a> · Email <a href="mailto:lam.tranhoang@mal.com.vn">lam.tranhoang@mal.com.vn</a> · Điện thoại / Zalo 0972 702 149.</p>
 </main>
+
+<script>
+  (function () {
+    var lang = new URLSearchParams(location.search).get('lang')
+    if (!lang) try { lang = JSON.parse(localStorage.getItem('malcargo-lang-v1') || '{}').state.lang } catch (e) {}
+    if (lang !== 'vi') return
+    document.documentElement.lang = 'vi'
+    document.title = 'Chính sách bảo mật · MAL Cargo'
+    document.querySelectorAll('[data-en]').forEach(function (el) { el.hidden = true })
+    document.querySelectorAll('[data-vi]').forEach(function (el) { el.hidden = false })
+  })()
+</script>
 </body>
 </html>
