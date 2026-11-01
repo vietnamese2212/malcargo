@@ -1,7 +1,7 @@
 // Bộ thành phần dùng chung — một kiểu nút, một kiểu ô nhập, một kiểu tấm trượt cho cả app.
 // Khuôn Manhattan (thẻ trắng trên canvas xám, dải tổng hợp navy, section band) + luật dễ đọc:
 // chữ phụ tối thiểu slate-500 trên nền trắng, không bóng trên thứ nằm yên, góc bo 6–8 px.
-import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type ButtonHTMLAttributes, type InputHTMLAttributes } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject, type ButtonHTMLAttributes, type InputHTMLAttributes } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, Trash2, X } from 'lucide-react'
 import { numLocale, t } from '../i18n'
@@ -407,7 +407,8 @@ const typingIn = (el: HTMLElement | null) => {
 export function Sheet({ open, onClose, title, subtitle, children, footer, wide }: {
   open: boolean; onClose: () => void; title: ReactNode; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode; wide?: boolean | 'table'
 }) {
-  const sheet = useRef<HTMLDivElement>(null)
+  const sheet = useRef<HTMLDivElement>(null), wrap = useRef<HTMLDivElement>(null)
+  useTouchContain(wrap, open)
   useEffect(() => {
     if (!open) return
     // Esc chỉ đóng tấm TRÊN CÙNG (chọn mã mở trên tấm sửa đơn, hộp hỏi trên tấm…) — không đóng hết một lượt
@@ -428,7 +429,7 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, wide }
   const keepOpen = useRef(false)
   if (!open) return null
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-stretch sm:justify-end" style={box}>
+    <div ref={wrap} className="fixed inset-0 z-50 flex items-end justify-center sm:items-stretch sm:justify-end" style={box}>
       <div className="absolute inset-0 bg-navy-950/45" style={{ animation: 'fade .15s' }}
         onPointerDown={e => { keepOpen.current = e.pointerType !== 'mouse' && typingIn(sheet.current) }}
         onClick={() => { if (keepOpen.current) (document.activeElement as HTMLElement).blur(); else onClose() }} />
@@ -454,8 +455,47 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, wide }
   )
 }
 
+/** Vuốt trong `ref` (tấm phủ, bảng gắn vào khung dính) chỉ cuộn các khung cuộn BÊN TRONG nó; hết chỗ cuộn thì thôi —
+ *  không kéo trang phía sau trôi (chủ dự án 01/11: bấm Login, vuốt trên bảng thì cả trang trượt dưới bảng). Thanh kéo
+ *  (range) và khung 3D tự lo cử chỉ của chúng. */
+export function useTouchContain(ref: RefObject<HTMLElement>, on: boolean) {
+  useEffect(() => {
+    const el = ref.current
+    if (!on || !el) return
+    let x0 = 0, y0 = 0
+    const start = (e: TouchEvent) => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY }
+    const move = (e: TouchEvent) => {
+      if (e.touches.length !== 1 || !e.cancelable) return
+      const dx = e.touches[0].clientX - x0, dy = e.touches[0].clientY - y0
+      const vert = Math.abs(dy) >= Math.abs(dx)
+      for (let a = e.target as HTMLElement | null; a; a = a.parentElement) {
+        if (a.matches('input, textarea, select, canvas')) return
+        const s = getComputedStyle(a)
+        const can = vert
+          ? /(auto|scroll)/.test(s.overflowY) && (dy < 0 ? a.scrollTop + a.clientHeight < a.scrollHeight - 1 : a.scrollTop > 0)
+          : /(auto|scroll)/.test(s.overflowX) && (dx < 0 ? a.scrollLeft + a.clientWidth < a.scrollWidth - 1 : a.scrollLeft > 0)
+        if (can) return
+        if (a === el) break
+      }
+      e.preventDefault()
+    }
+    el.addEventListener('touchstart', start, { passive: true })
+    el.addEventListener('touchmove', move, { passive: false })
+    return () => { el.removeEventListener('touchstart', start); el.removeEventListener('touchmove', move) }
+  }, [ref, on])
+}
+
+// nằm trong khung dính / cố định (thanh trên, dải xe + 3D trên điện thoại) ⇒ cuộn trang không đưa được nó vào màn
+const pinned = (el: HTMLElement) => {
+  for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) if (/(fixed|sticky)/.test(getComputedStyle(a).position)) return true
+  return false
+}
+
 /** Bảng nhỏ bật ra dưới nút (chọn chuyến, góc nhìn, menu ⋮, hướng dẫn). Bấm ra ngoài / Esc để đóng.
- *  `hover`: máy tính rê chuột là hiện (dùng làm chú thích), điện thoại vẫn chạm để mở. */
+ *  `hover`: máy tính rê chuột là hiện (dùng làm chú thích), điện thoại vẫn chạm để mở.
+ *  Bảng gắn vào khung dính (thanh trên…) không theo trang cuộn ⇒ cao tối đa = phần màn còn thấy, nội dung dài thì cuộn
+ *  TRONG bảng, vuốt trên bảng không kéo trang phía sau (màn thấp — máy xoay ngang, chữ hệ thống cỡ lớn — đáy bảng từng
+ *  khuất mà không kéo xuống được). Bảng tràn mép trái / phải màn thì đẩy vào trong. */
 export function Popover({ trigger, children, align = 'left', up, hover, className, panelClass }: {
   trigger: (p: { open: boolean; toggle: () => void }) => ReactNode
   children: (close: () => void) => ReactNode
@@ -463,6 +503,36 @@ export function Popover({ trigger, children, align = 'left', up, hover, classNam
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const panel = useRef<HTMLDivElement>(null)
+  const vv = useVisualView()
+  useLayoutEffect(() => {
+    const el = panel.current
+    if (!open || !el) return
+    const fit = (first: boolean) => {
+      el.style.maxHeight = ''; el.style.translate = ''
+      const r = el.getBoundingClientRect()
+      const top = vvSnap.height ? vvSnap.top : 0, bottom = top + (vvSnap.height || window.innerHeight)
+      const pin = pinned(el)
+      // gắn khung dính: cao tối đa tới mép màn; theo trang: cả màn trừ thanh trên (rồi cuộn trang cho bảng lọt vào màn).
+      // `--pop-h` = lòng bảng (trừ viền) — bảng có khung cuộn riêng (danh sách xe) co theo nó, ô tìm đứng yên
+      const room = Math.max(120, Math.floor(pin ? (up ? r.bottom - top - 8 : bottom - r.top - 8) : bottom - top - 72 - 8))
+      el.style.maxHeight = `${room}px`; el.style.setProperty('--pop-h', `${room - 2}px`)
+      const vw = document.documentElement.clientWidth
+      if (r.width <= vw - 16) {
+        if (r.left < 8) el.style.translate = `${Math.ceil(8 - r.left)}px 0`
+        else if (r.right > vw - 8) el.style.translate = `${Math.floor(vw - 8 - r.right)}px 0`
+      }
+      if (!pin && first) {
+        const q = el.getBoundingClientRect()
+        if (q.bottom > bottom - 8 || q.top < top + 64) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      }
+    }
+    fit(true)
+    const again = () => fit(false)
+    window.addEventListener('resize', again)
+    return () => window.removeEventListener('resize', again)
+  }, [open, up, vv.height, vv.top])
+  useTouchContain(panel, open)
   useEffect(() => {
     if (!open) return
     const down = (e: PointerEvent) => {
@@ -488,9 +558,10 @@ export function Popover({ trigger, children, align = 'left', up, hover, classNam
       {/* có `hover` + chuột: rê vào đã mở rồi, bấm thì GIỮ mở (đừng đảo lại thành đóng) */}
       {trigger({ open, toggle: () => setOpen(o => (hover && fine() ? true : !o)) })}
       {open && (
-        <div data-popover className={cx('absolute z-50 rounded-lg border border-slate-300 bg-white text-slate-900 shadow-pop',
-          up ? 'bottom-full mb-1.5' : 'top-full mt-1.5', align === 'right' ? 'right-0' : 'left-0', panelClass)}
-          style={{ animation: 'fade .12s' }}>
+        <div ref={panel} data-popover className={cx('absolute z-50 rounded-lg border border-slate-300 bg-white text-slate-900 shadow-pop',
+          up ? 'bottom-full mb-1.5' : 'top-full mt-1.5', align === 'right' ? 'right-0' : 'left-0', panelClass,
+          '!overflow-y-auto overscroll-contain')}
+          style={{ animation: 'fade .12s', scrollMarginTop: 64, scrollMarginBottom: 8 }}>
           {children(close)}
         </div>
       )}
@@ -515,6 +586,8 @@ export function Confirm({ open, title, body, okText = t('Xoá'), cancelText = t(
 }) {
   const box = useViewportBox(open)
   useBackClose(open, onClose)
+  const wrap = useRef<HTMLDivElement>(null)
+  useTouchContain(wrap, open)
   // Esc đóng hộp hỏi (tấm bên dưới giữ nguyên — xem Sheet)
   useEffect(() => {
     if (!open) return
@@ -524,7 +597,7 @@ export function Confirm({ open, title, body, okText = t('Xoá'), cancelText = t(
   }, [open, onClose])
   if (!open) return null
   return createPortal(
-    <div className="fixed inset-0 z-[60] grid place-items-center p-5" style={box}>
+    <div ref={wrap} className="fixed inset-0 z-[60] grid place-items-center p-5" style={box}>
       <div className="absolute inset-0 bg-navy-950/45" onClick={onClose} />
       <div role="alertdialog" aria-modal="true" className="relative w-full max-w-sm rounded-lg bg-white p-5 shadow-pop" style={{ animation: 'sheet-up .15s ease-out' }}>
         <h3 className="text-base font-semibold text-slate-900">{title}</h3>

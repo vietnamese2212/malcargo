@@ -1,5 +1,5 @@
-// Các màn / bảng thả / tấm cần soi — dùng chung cho ui-tap (nút chạm được) và ui-lang (sót chữ tiếng Việt khi giao
-// diện tiếng Anh). Thêm màn / tấm mới ⇒ thêm vào đây.
+// Các màn / bảng thả / tấm cần soi — dùng chung cho ui-tap (nút chạm được), ui-scroll (màn thấp: che chữ, vuốt trượt)
+// và ui-lang (sót chữ tiếng Việt khi giao diện tiếng Anh). Thêm màn / tấm mới ⇒ thêm vào đây.
 import { T, TP, TX } from './ui-lib.mjs'
 
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -23,7 +23,7 @@ export const SHARE_PACK = {
     { id: 'adm-i-tui110', owner: 'admin', code: 'MAU-TUI110', name: 'Thạch túi 110ml x24', l: 310, w: 130, h: 130, kg: 3.08, perPallet: 216, maxLayers: 8, light: true, updatedAt: 0 },
     { id: 'i-test', owner: 'me', code: 'TEST-1', name: 'Test item', l: 400, w: 300, h: 250, kg: 8, perPallet: 60, maxLayers: 6, light: false, updatedAt: 0 },
   ],
-  vehicles: [{ id: 'adm-v-p15t', owner: 'admin', name: 'Xe pallet 15 tấn', plate: '', kind: 'pallet', l: 9500, w: 2500, h: 2600, payloadKg: 15000, updatedAt: 0 }],
+  vehicles: [{ id: 'adm-v-p15t', owner: 'admin', name: 'Xe pallet 15 tấn', plate: '', kind: 'pallet', l: 9600, w: 2400, h: 2600, payloadKg: 15000, updatedAt: 0 }],
   pallet: { l: 1200, w: 1000, maxH: 1650, baseH: 150, kg: 25 },
 }
 /** Mở app bằng link chia sẻ …/s/<mã>; `pack` = null ⇒ máy chủ trả "không có" (link sai / đã xoá). */
@@ -42,6 +42,7 @@ export const STATES = [
   ['Danh sách xe', p => btn(p, T('Đổi xe')).click(), '[data-popover]'],
   ['Góc nhìn', p => btn(p, starts('Góc nhìn: {view}')).click(), '[data-popover]'],
   ['Danh mục', p => btn(p, T('Danh mục')).click(), '[data-popover]'],
+  ['Login', p => btn(p, T('Login')).click(), '[data-popover]'],
   ['Tuỳ chọn đơn', p => btn(p, starts('Tuỳ chọn {name}')).first().click(), '[data-popover]'],
   ['Đổi tên chuyến', async p => { await btn(p, starts('Chuyến đang mở: {name}. Bấm để xem các chuyến')).click(); await p.waitForTimeout(200); await btn(p, T('Đổi tên chuyến này')).click() }, '[data-popover]'],
   ['Sửa đơn (dải xe)', p => btn(p, T('Sửa đơn')).click(), '[role=dialog]'],

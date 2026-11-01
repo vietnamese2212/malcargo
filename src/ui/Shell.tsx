@@ -1,9 +1,9 @@
 // Khung app: MỘT màn làm việc (Bàn xếp xe). Danh mục mã hàng / xe / đơn / chuyến / tài khoản mở thành
 // tấm phủ (Panel) ngay trên màn đó — người mới không phải mò sang tab chuyên biệt.
-import { createContext, useContext, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, X } from 'lucide-react'
-import { IconButton, KeyboardShield, cx, useViewportBox } from './kit'
+import { IconButton, KeyboardShield, cx, useTouchContain, useViewportBox } from './kit'
 import { t } from '../i18n'
 import { useBackClose } from './route'
 
@@ -46,9 +46,11 @@ export function Panel({ open, onClose, children }: { open: boolean; onClose: () 
   }, [open, onClose])
   const box = useViewportBox(open)
   useBackClose(open, onClose)
+  const wrap = useRef<HTMLDivElement>(null)
+  useTouchContain(wrap, open)
   if (!open) return null
   return createPortal(
-    <div className="fixed inset-0 z-40 flex justify-end" style={box}>
+    <div ref={wrap} className="fixed inset-0 z-40 flex justify-end" style={box}>
       <div className="absolute inset-0 bg-navy-950/45" style={{ animation: 'fade .15s' }} onClick={onClose} />
       <KeyboardShield className="bg-canvas" />
       <div role="dialog" aria-modal="true" data-scroll className="relative h-full w-full overflow-y-auto overscroll-contain bg-canvas sm:max-w-4xl sm:border-l sm:border-slate-200"

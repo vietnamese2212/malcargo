@@ -84,8 +84,9 @@ for (const st of E.SAMPLE_TRIPS) {
       `${st.name}: ${r.totals.pallets} pallet (cần 17, có pallet gộp, thạch lẻ nằm trên pallet gộp)`)
     const on = run(true)
     invariants(st.name + ' · hàng nhẹ pallet riêng', on)
-    // chủ dự án tự sửa xe pallet 15 tấn lòng 9,5 m (30/10) ⇒ bật lên thì pallet thứ 18 không còn chỗ (báo thiếu 1) —
-    // công tắc vẫn thấy khác; chỉ giữ: 18 pallet, thạch đứng riêng
+    // xe pallet 15 tấn lòng 9,6 × 2,4 m chở tối đa 17 (chủ dự án 01/11: 9 quay ngang + 8 quay dọc) ⇒ bật lên thì pallet
+    // thứ 18 không còn chỗ (báo thiếu 1) — công tắc vẫn thấy khác; chỉ giữ: 18 pallet, thạch đứng riêng
+    ok(r.floorSlots === 17, `${st.name}: xe ${trucks[st.vehicleId].l} × ${trucks[st.vehicleId].w} đếm ${r.floorSlots} chỗ pallet (cần 17)`)
     ok(on.totals.pallets === 18 && lightIn(on).every(c => c.kind === 'own'), `${st.name}: bật hàng nhẹ pallet riêng ⇒ ${on.totals.pallets} pallet (cần 18, thạch lẻ đứng riêng)`)
   } else {
     ok(r.count.some(c => c.onTopOfOthers && os.some(o => o.lines.some(l => l.item.light && l.item.name === c.label))), `${st.name}: hàng nhẹ không nằm trên nóc`)
@@ -211,12 +212,12 @@ for (const [name, truck, orders] of cases) {
       if (m.mix) ok(r.plan.groups[gi].h <= P.maxH + 0.5, `${name}: ${m.label} cao ${r.plan.groups[gi].h} > ${P.maxH}`)
     }
     for (const [k, n] of remOn) ok(n === 1, `${name}: phần lẻ ${k} vắt qua ${n} pallet`)
-    // KHE 5 CM (chủ dự án 01/11: "giữa các pallet là 5cm, 4 phía"): hai pallet bất kỳ cách nhau ≥ 50mm theo ít nhất
-    // một chiều sàn (sát vách thì được); không ra ngoài lòng xe
+    // LÀN PALLET (chủ dự án 01/11: chia làn nhiều pallet nhất, khe 5 cm giữa hai làn, trong làn nối sát): hai pallet đứng
+    // cạnh nhau (chung một đoạn dọc xe) cách nhau ≥ 5 cm theo bề ngang; không ra ngoài lòng xe
     const ps = r.plan.placed, T = r.plan.truck
-    const close = ps.filter((a, i) => ps.some((b, j) => j > i && Math.max(b.x - a.x - a.l, a.x - b.x - b.l, b.y - a.y - a.w, a.y - b.y - b.w) < 49.5))
+    const close = ps.filter((a, i) => ps.some((b, j) => j > i && Math.min(a.x + a.l, b.x + b.l) - Math.max(a.x, b.x) > 1 && Math.max(b.y - a.y - a.w, a.y - b.y - b.w) < 49.5))
     ok(!close.length && ps.every(b => b.x >= 0 && b.y >= 0 && b.x + b.l <= T.length + 0.5 && b.y + b.w <= T.width + 0.5),
-      `${name}: ${close.length} pallet cách pallet bên dưới 5 cm / ra ngoài lòng xe`)
+      `${name}: ${close.length} pallet cách pallet làn bên dưới 5 cm / ra ngoài lòng xe`)
   }
   const show = r => r.count.map(c => `${c.label}${c.mix ? ' [' + c.mix.map(x => x.n + ' ' + x.label).join(' + ') + ']' : ''}`).join(' · ')
   // Ca ảnh chủ dự án 28/10: chuyến mẫu, xe 5 tấn đổi sang chở pallet

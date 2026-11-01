@@ -2,7 +2,7 @@
 // (một chạm đổi xá/pallet, chạm để chỉnh thùng xe), khung tên gọn ở góc trên trái (chạm để xem chi tiết).
 // Cột trái: đơn hàng của chuyến + bảng đếm chân. Thanh trên: chuyến đang mở ▾ (chọn / đổi tên / xoá chuyến).
 // Sửa mã hàng / xe MẪU CHUNG ⇒ tự thành bản "của tôi" rồi gắn vào chuyến, mẫu giữ nguyên.
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import {
   AlertTriangle, ArrowDown, ArrowUp, Camera, Check, ChevronDown, ClipboardCopy, ClipboardList, ClipboardPen, Crosshair, ExternalLink, Eye, EyeOff,
   FileSpreadsheet, HelpCircle, Layers, Loader2, LogOut, MapPin, Maximize2, Menu, Minimize2, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Rotate3d, Ruler,
@@ -21,7 +21,7 @@ import type { ViewPreset } from '../three/TruckScene'
 import { groupColor, itemColors, tint } from '../three/colors'
 import {
   Badge, BoxGlyph, Button, Confirm, Empty, Field, IconButton, KeyboardShield, LiveNum, MenuItem, Popover, SearchInput, SectionBand, Segmented, Sheet,
-  TextInput, cx, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3, usePhone, useViewportBox, useVisualView,
+  TextInput, cx, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3, usePhone, useTouchContain, useViewportBox, useVisualView,
 } from '../ui/kit'
 import { GoogleG, Logo, PageHeader, Panel } from '../ui/Shell'
 import { TruckGlyph } from './VehiclesPage'
@@ -134,6 +134,10 @@ export default function TripPage({ id }: { id: string }) {
   // Bàn phím mở thì khung 3D thôi dính, trôi theo trang — ô đang gõ luôn thấy được.
   const { kb } = useVisualView()
   const [full, setFull] = useToggleFull()
+  // Khung 3D chỉ DÍNH khi dưới nó còn chỗ xem đơn hàng: máy xoay ngang / màn thấp, thanh trên + dải xe + 3D cao hơn cả màn
+  // ⇒ cuộn mãi chỉ thấy khung 3D, đơn hàng khuất hẳn (01/11, sau "bấm Login bị trượt, không kéo được xuống")
+  const headRef = useRef<HTMLElement>(null), sceneRef = useRef<HTMLElement>(null)
+  const roomy = useStickRoom(headRef, sceneRef)
 
   // Sửa chuyến mẫu ⇒ kho đã tách thành chuyến mới: chuyển sang chuyến đó tại chỗ (màn giữ nguyên, ô đang mở
   // trỏ sang đơn bản sao), rồi báo mã chuyến mới. Chuyến mẫu không đổi.
@@ -297,7 +301,7 @@ export default function TripPage({ id }: { id: string }) {
   return (
     <div className="flex min-h-[100dvh] flex-col lg:h-[100dvh]">
       {/* ── thanh trên navy: nút danh mục (3 vạch) · chuyến mới · CHUYẾN đang mở ▾ · … · Login · logo MAL ── */}
-      <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-1 bg-navy-950 pl-1 pr-3 text-white sm:h-14 sm:gap-2 sm:pl-2 sm:pr-4">
+      <header ref={headRef} className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-1 bg-navy-950 pl-1 pr-3 text-white sm:h-14 sm:gap-2 sm:pl-2 sm:pr-4">
         <MainMenu onPanel={setPanel} onImport={() => setImporting('menu')} onTour={() => setTour(true)} />
         <Button variant="primary" onClick={newTrip} aria-label={t('Chuyến mới')} title={t('Tạo chuyến mới')} className="w-10 shrink-0 px-0 sm:w-auto sm:px-3.5"><Plus size={18} /><span className="hidden sm:inline">{t('Chuyến mới')}</span></Button>
         <TripSwitch trip={trip} trips={trips} onRename={name => upsertTrip({ ...trip, name })} onDelete={setDelTrip}
@@ -323,9 +327,9 @@ export default function TripPage({ id }: { id: string }) {
       <div className="lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(380px,440px)_1fr] lg:grid-rows-[minmax(0,1fr)]">
         {/* ── BẢN VẼ: dải thông số xe + 3D + khung tên ── */}
         {/* toàn màn hình: khung 3D phủ kín màn (máy có Fullscreen API thì ẩn luôn thanh trình duyệt) */}
-        <section data-scene className={full
+        <section ref={sceneRef} data-scene className={full
           ? 'fixed inset-0 z-40 flex flex-col bg-[#e7ecf2] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)]'
-          : cx('sticky top-12 z-10 flex flex-col bg-[#e7ecf2] sm:top-14 lg:relative lg:top-0 lg:order-2 lg:h-full', kb && 'max-lg:relative max-lg:top-0')}>
+          : cx('sticky top-12 z-10 flex flex-col bg-[#e7ecf2] sm:top-14 lg:relative lg:top-0 lg:order-2 lg:h-full', (kb || !roomy) && 'max-lg:relative max-lg:!top-0')}>
           <SpecStrip vehicle={vehicle} pallet={pallet} keep={full} onSpecs={() => (catalogLocked() ? setToast(t(LOCKED)) : setSpec(true))} onKind={k => patchVehicle({ kind: k })}
             orders={orderRows} onEditOrder={setEditOrder}
             picker={close => (
@@ -763,7 +767,7 @@ function AccountButton({ onData }: { onData: () => void }) {
               </button>
               {err && <p className="mt-2 text-[12px] text-red-700">{err}</p>}
               <p className="mt-2 text-[12px] text-slate-600">
-                {t('Không đăng nhập vẫn dùng đầy đủ, dữ liệu lưu trên máy này.')} <a href="/privacy.html" target="_blank" rel="noreferrer" className="text-brand-700 underline">{t('Chính sách bảo mật')}</a>
+                {t('Không đăng nhập vẫn dùng đầy đủ, dữ liệu lưu trên máy này.')} <a href="/privacy.html" target="_blank" rel="noreferrer" className="hit text-brand-700 underline">{t('Chính sách bảo mật')}</a>
               </p>
             </>
           )}
@@ -1010,6 +1014,26 @@ function Row({ label, value, pct, bad }: { label: string; value: string; pct?: n
   )
 }
 
+// Thanh trên + dải xe + 3D (khung dính trên điện thoại) chừa lại cho đơn hàng ít nhất max(140px, 1/4 màn) — không thì
+// thôi dính, khung 3D trôi theo trang. Cao khung 3D không đổi theo việc dính hay không ⇒ không lật qua lật lại.
+function useStickRoom(head: RefObject<HTMLElement>, scene: RefObject<HTMLElement>): boolean {
+  const [roomy, setRoomy] = useState(true)
+  useEffect(() => {
+    const h = head.current, s = scene.current
+    if (!h || !s) return
+    const check = () => {
+      const vh = window.innerHeight
+      setRoomy(h.offsetHeight + s.offsetHeight <= vh - Math.max(140, vh / 4))
+    }
+    check()
+    const ro = new ResizeObserver(check)
+    ro.observe(h); ro.observe(s)
+    window.addEventListener('resize', check)
+    return () => { ro.disconnect(); window.removeEventListener('resize', check) }
+  }, [head, scene])
+  return roomy
+}
+
 // ── Góc nhìn: MỘT nút, bấm mở danh sách hướng nhìn + ẩn/hiện vách ─────────────
 // Khung 3D toàn màn hình: phủ kín bằng CSS (iPhone không cho trang web vào toàn màn hình thật); máy có
 // Fullscreen API thì xin luôn để ẩn thanh trình duyệt — thoát bằng Esc / cử chỉ của máy ⇒ khung về chỗ cũ.
@@ -1115,7 +1139,7 @@ function VehicleList({ vehicle, vehicles, suggestion, fits, onShown, onPick, onE
     )
   }
   return (
-    <div className="flex max-h-[min(70vh,560px)] flex-col">
+    <div className="flex max-h-[min(70vh,560px,var(--pop-h,100vh))] flex-col">
       <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 px-2.5 py-2">
         <SearchInput className="min-w-0 flex-1" placeholder={t('Tên xe, biển số')} value={q} onChange={e => setQ(e.target.value)} aria-label={t('Tìm xe')} />
         <label className="tap flex shrink-0 cursor-pointer items-center gap-1.5 text-[13px] text-slate-700">
@@ -1157,6 +1181,9 @@ function SpecPopup({ vehicle, sharedWith, onClose, onPatch }: {
   const box = useViewportBox(true)
   const { kb } = useVisualView()
   useBackClose(true, onClose)
+  // vuốt trên bảng (bám đáy màn) chỉ cuộn lòng bảng — không kéo trang phía sau trôi
+  const panel = useRef<HTMLDivElement>(null)
+  useTouchContain(panel, true)
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && !document.querySelector('[data-sheet]')) onClose() }
     window.addEventListener('keydown', k)
@@ -1166,7 +1193,7 @@ function SpecPopup({ vehicle, sharedWith, onClose, onPatch }: {
     // điện thoại: khung bám phần màn còn thấy — bàn phím mở (ô lòng thùng) thì bảng nằm ngay trên bàn phím,
     // không chìm dưới nó; máy tính: khung không có hộp (contents), bảng đặt góc phải khung 3D như cũ
     <div className="pointer-events-none fixed inset-0 z-40 lg:contents" style={box}>
-    <div role="dialog" aria-label={t('Thùng xe')}
+    <div ref={panel} role="dialog" aria-label={t('Thùng xe')}
       className={cx('pointer-events-auto absolute inset-x-0 bottom-0 flex flex-col rounded-t-2xl border-t border-slate-300 bg-white shadow-pop lg:inset-x-auto lg:bottom-auto lg:right-3 lg:top-14 lg:max-h-[calc(100%-68px)] lg:w-[400px] lg:rounded-lg lg:border',
         kb ? 'max-h-[92%]' : 'pb-safe max-h-[56%]')}
       style={{ animation: 'sheet-up .18s ease-out' }}>
