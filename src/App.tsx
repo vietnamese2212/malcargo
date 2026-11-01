@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Shell } from './ui/Shell'
 import { useRoute } from './ui/route'
-import { newId, newTripLabel, useData } from './data/store'
+import { newId, newTripLabel, useData, useSpace } from './data/store'
 import TripPage from './pages/TripPage'
 import OrdersPage from './pages/OrdersPage'
 import OrderPage from './pages/OrderPage'
@@ -34,12 +34,14 @@ export default function App() {
   useEffect(() => { document.documentElement.lang = lang }, [lang])
   // Chuyến mẫu vừa tách thành chuyến mới: GIỮ nguyên màn chuyến (bảng đang mở, ô đang gõ), chỉ đổi id;
   // mọi lần đổi chuyến khác thì dựng màn mới như thường.
+  // Đổi bộ dữ liệu (Của tôi ↔ Family) cũng vậy: sang chuyến của bộ mới mà tấm / bảng đang mở (vd. tấm Family) vẫn giữ.
   const rid = route.page === 'trip' ? route.id : ''
-  const prev = useRef(rid), tripKey = useRef(rid)
+  const space = useSpace(s => s.id)
+  const prev = useRef(rid), tripKey = useRef(rid), ridSpace = useRef(space)
   if (rid !== prev.current) {
     const f = useData.getState().fork
-    if (!(f && f.from === prev.current && f.to === rid)) tripKey.current = rid
-    prev.current = rid
+    if (!(f && f.from === prev.current && f.to === rid) && space === ridSpace.current) tripKey.current = rid
+    prev.current = rid; ridSpace.current = space
   }
   // trang đơn mẫu cũng vậy: tách ⇒ đổi id đơn nhưng giữ màn (ô số thùng đang gõ không mất con trỏ)
   const oid = route.page === 'order' ? route.id : ''

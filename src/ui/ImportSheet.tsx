@@ -3,7 +3,7 @@
 // nhập gì (báo từng lỗi kèm số dòng), tiêu đề cột sai mẫu ⇒ từ chối cả file.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Download, FileSpreadsheet, Upload, X } from 'lucide-react'
-import { useAllItems, useAllVehicles, useData } from '../data/store'
+import { useAllItems, useAllVehicles, useCatalogLocked, useData } from '../data/store'
 import { SHEETS, parseImport, readWorkbook, sampleRows, saveTemplate, splitPasted, type Rows, type SheetKey } from '../data/importer'
 import { t, tx } from '../i18n'
 import { Button, Sheet, Tabs, cx, fmtInt } from './kit'
@@ -22,15 +22,19 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
   const orders = useData(s => s.orders)
   const trips = useData(s => s.trips)
   const importBatch = useData(s => s.importBatch)
-  const [tab, setTab] = useState<SheetKey>(start)
+  // thành viên Family: mã hàng, xe do chủ quản lý ⇒ chỉ nhập đơn + chuyến
+  const locked = useCatalogLocked()
+  const sheets = locked ? SHEETS.filter(s => s.key === 'orders' || s.key === 'trips') : SHEETS
+  const first = sheets.some(s => s.key === start) ? start : sheets[0].key
+  const [tab, setTab] = useState<SheetKey>(first)
   const [text, setText] = useState<Partial<Record<SheetKey, string>>>({})
   const [files, setFiles] = useState<Partial<Record<SheetKey, { name: string; rows: Rows }>>>({})
   const [msg, setMsg] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
-  useEffect(() => { if (open) { setTab(start); setText({}); setFiles({}); setMsg(null) } }, [open, start])
+  useEffect(() => { if (open) { setTab(first); setText({}); setFiles({}); setMsg(null) } }, [open, first])
 
   // ô dán có chữ thì dùng ô dán, không thì lấy file đã nạp cho loại đó
-  const src = useMemo(() => Object.fromEntries(SHEETS.map(s => [s.key, text[s.key]?.trim() ? splitPasted(text[s.key]!) : files[s.key]?.rows ?? []])), [text, files])
+  const src = useMemo(() => Object.fromEntries(SHEETS.map(s => [s.key, !sheets.includes(s) ? [] : text[s.key]?.trim() ? splitPasted(text[s.key]!) : files[s.key]?.rows ?? []])), [text, files, sheets])
   const res = useMemo(() => parseImport(src, { items, vehicles, orders, trips }), [src, items, vehicles, orders, trips])
   const n = { items: res.items.length, vehicles: res.vehicles.length, orders: res.orders.length, trips: res.trips.length }
   const total = n.items + n.vehicles + n.orders + n.trips, errs = res.errors.length
@@ -42,7 +46,7 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
   const onFile = async (f?: File) => {
     if (!f) return
     try {
-      const { rows: got, errors } = await readWorkbook(f, tab), keys = SHEETS.map(s => s.key).filter(k => got[k])
+      const { rows: got, errors } = await readWorkbook(f, tab), keys = sheets.map(s => s.key).filter(k => got[k])
       if (errors.length) setMsg([t('Không nhận file {file} — tiêu đề cột không đúng mẫu:', { file: f.name }), ...errors].join('\n'))
       else {
         setFiles(x => ({ ...x, ...Object.fromEntries(keys.map(k => [k, { name: f.name, rows: got[k]! }])) }))
@@ -80,7 +84,7 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
       {trip && <p className="mb-3 rounded-md bg-brand-50 px-3 py-2 text-[13px] text-brand-900">{t('Đơn nhập vào sẽ thêm vào {trip}.', { trip: tx(trip.name) })}</p>}
       {/* chọn loại trước: file mẫu, file nạp, ô dán bên dưới đều của loại này — cách điền nằm trong file mẫu, không giải thích thêm */}
       <Tabs value={tab} onChange={setTab}
-        options={SHEETS.map(s => ({ value: s.key, label: <>{t(s.title)}{n[s.key] ? <span className="num ml-1 text-brand-700">· {n[s.key]}</span> : null}</> }))} />
+        options={sheets.map(s => ({ value: s.key, label: <>{t(s.title)}{n[s.key] ? <span className="num ml-1 text-brand-700">· {n[s.key]}</span> : null}</> }))} />
       <div className="mt-3 flex gap-2">
         <Button className="flex-1" onClick={template}><Download size={17} />{t('Tải file mẫu')}</Button>
         <Button variant="primary" className="flex-1" onClick={() => fileRef.current?.click()}><Upload size={17} />{t('Nạp file')}</Button>
@@ -98,8 +102,8 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
 
       {msg && <p className="mt-3 whitespace-pre-line text-sm text-red-700">{msg}</p>}
       {total > 0 && (
-        <div className="mt-4 grid grid-cols-4 divide-x divide-slate-200 rounded-lg border border-slate-200">
-          {SHEETS.map(s => (
+        <div className={cx('mt-4 grid divide-x divide-slate-200 rounded-lg border border-slate-200', sheets.length === 4 ? 'grid-cols-4' : 'grid-cols-2')}>
+          {sheets.map(s => (
             <div key={s.key} className="px-3 py-2">
               <div className={cx('num text-lg font-semibold', n[s.key] ? 'text-slate-900' : 'text-slate-400')}>{fmtInt(n[s.key])}</div>
               <div className="break-words text-[12px] leading-tight text-slate-600">{t(s.title)}</div>

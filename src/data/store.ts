@@ -14,11 +14,32 @@ export const newId = () =>
 
 // Trình duyệt chặn bộ nhớ (chế độ riêng tư, xem trước…) thì app vẫn chạy, chỉ không nhớ.
 const memory = new Map<string, string>()
-const safeStorage: StateStorage = {
-  getItem: k => { try { return localStorage.getItem(k) } catch { return memory.get(k) ?? null } },
-  setItem: (k, v) => { try { localStorage.setItem(k, v) } catch { memory.set(k, v) } },
-  removeItem: k => { try { localStorage.removeItem(k) } catch { memory.delete(k) } },
+const safeStorage = {
+  getItem: (k: string): string | null => { try { return localStorage.getItem(k) } catch { return memory.get(k) ?? null } },
+  setItem: (k: string, v: string) => { try { localStorage.setItem(k, v) } catch { memory.set(k, v) } },
+  removeItem: (k: string) => { try { localStorage.removeItem(k) } catch { memory.delete(k) } },
+} satisfies StateStorage
+
+// ── BỘ DỮ LIỆU đang mở: "Của tôi" (id 'me') hoặc một FAMILY (id Family). Mỗi bộ lưu riêng trên máy (`dataKey`) — đổi bộ
+//    không lẫn dữ liệu; cloud.ts đồng bộ bộ đang mở với tài khoản / Family. Nhớ bộ đang mở (mở lại app vẫn ở đó).
+export interface SpaceInfo { id: string; name: string | null; role: 'owner' | 'member' | null }
+const SPACE = 'malcargo-space-v1'
+export const dataKey = (space: string) => (space === 'me' ? 'malcargo-data-v1' : `malcargo-data-fam-${space}`)
+const savedSpace = (): SpaceInfo => {
+  try { const s = JSON.parse(safeStorage.getItem(SPACE) ?? 'null'); if (s?.id) return s } catch { /* hỏng ⇒ của tôi */ }
+  return { id: 'me', name: null, role: null }
 }
+export const useSpace = create<SpaceInfo>(() => savedSpace())
+useSpace.subscribe(s => safeStorage.setItem(SPACE, JSON.stringify(s)))
+/** Thành viên Family (không phải chủ): mã hàng, xe, cỡ pallet CHỈ ĐỌC — chủ giữ danh mục (máy chủ cũng chặn). */
+export const catalogLocked = () => useSpace.getState().role === 'member'
+export const useCatalogLocked = () => useSpace(s => s.role === 'member')
+export const LOCKED = 'Mã hàng, xe, cỡ pallet do chủ Family quản lý.' // i18n-key — câu báo cho thành viên, gọi t(LOCKED) lúc vẽ
+
+// Family nhiều người cùng làm ⇒ chỉ dọn nháp trống do CHÍNH MÁY NÀY tạo (nháp người khác vừa bấm "+" không bị xoá)
+const DRAFTS = 'malcargo-drafts-v1'
+const drafts = new Set<string>((() => { try { return JSON.parse(safeStorage.getItem(DRAFTS) ?? '[]') as string[] } catch { return [] } })())
+const draft = (id: string) => { drafts.add(id); safeStorage.setItem(DRAFTS, JSON.stringify([...drafts].slice(-300))) }
 
 export interface DataState {
   items: Item[]          // chỉ của người dùng — mẫu chung nằm ở catalog.ts
@@ -190,10 +211,10 @@ export const useData = create<DataState>()(
       trips: SAMPLE_TRIPS,
       pallet: DEFAULT_PALLET_SETTINGS,
       deleted: {},
-      upsertItem: it => set(s => ({ items: upsert(s.items, { ...it, owner: 'me', updatedAt: Date.now() }) })),
-      removeItem: id => set(s => ({ items: s.items.filter(x => x.id !== id), deleted: mark(s.deleted, [id]) })),
-      upsertVehicle: v => set(s => ({ vehicles: upsert(s.vehicles, { ...v, owner: 'me', updatedAt: Date.now() }) })),
-      removeVehicle: id => set(s => ({
+      upsertItem: it => set(s => (catalogLocked() ? {} : { items: upsert(s.items, { ...it, owner: 'me', updatedAt: Date.now() }) })),
+      removeItem: id => set(s => (catalogLocked() ? {} : { items: s.items.filter(x => x.id !== id), deleted: mark(s.deleted, [id]) })),
+      upsertVehicle: v => set(s => (catalogLocked() ? {} : { vehicles: upsert(s.vehicles, { ...v, owner: 'me', updatedAt: Date.now() }) })),
+      removeVehicle: id => set(s => (catalogLocked() ? {} : {
         vehicles: s.vehicles.filter(x => x.id !== id),
         trips: s.trips.map(t => (t.vehicleId === id ? { ...t, vehicleId: null } : t)),
         deleted: mark(s.deleted, [id]),
@@ -201,7 +222,10 @@ export const useData = create<DataState>()(
       fork: null,
       upsertOrder: o => set(s => {
         const now = Date.now()
-        if (!isSample(o.id)) return { orders: upsert(s.orders, { ...o, updatedAt: now }) }
+        if (!isSample(o.id)) {
+          if (!s.orders.some(x => x.id === o.id)) draft(o.id)
+          return { orders: upsert(s.orders, { ...o, updatedAt: now }) }
+        }
         // đơn mẫu bị sửa: vừa tách xong (cùng một thao tác sửa nhiều đơn) ⇒ ghi vào bản sao; chưa tách ⇒ tách
         const f = s.fork
         if (f && !f.seen && f.orders[o.id]) {
@@ -220,6 +244,7 @@ export const useData = create<DataState>()(
       upsertTrip: t => set(s => {
         const now = Date.now()
         if (!isSample(t.id)) {
+          if (!s.trips.some(x => x.id === t.id)) draft(t.id)
           const k = detachSampleOrders(s, t)
           return { trips: upsert(s.trips, { ...k.trip, updatedAt: now }), ...(k.added.length ? { orders: [...k.added, ...s.orders] } : {}) }
         }
@@ -239,10 +264,11 @@ export const useData = create<DataState>()(
       sweepBlank: keep => set(s => {
         const k = new Set(keep)
         s.trips.forEach(t => { if (k.has(t.id)) t.orderIds.forEach(o => k.add(o)) })
-        const dropO = s.orders.filter(o => !k.has(o.id) && isBlankOrder(o)).map(o => o.id)
+        const own = (id: string) => useSpace.getState().id === 'me' || drafts.has(id)
+        const dropO = s.orders.filter(o => !k.has(o.id) && own(o.id) && isBlankOrder(o)).map(o => o.id)
         const orders = s.orders.filter(o => !dropO.includes(o.id))
         const alive = new Set(orders.map(o => o.id))
-        const dropT = s.trips.filter(t => !k.has(t.id) && isBlankTrip(t, alive)).map(t => t.id)
+        const dropT = s.trips.filter(t => !k.has(t.id) && own(t.id) && isBlankTrip(t, alive)).map(t => t.id)
         if (!dropO.length && !dropT.length) return s   // y nguyên ⇒ không báo đổi, không đẩy lên tài khoản
         return {
           orders, deleted: mark(s.deleted, [...dropO, ...dropT]),
@@ -250,7 +276,7 @@ export const useData = create<DataState>()(
         }
       }),
       markForkSeen: () => set(s => (s.fork ? { fork: { ...s.fork, seen: true } } : {})),
-      setPallet: pallet => set({ pallet }),
+      setPallet: pallet => set(catalogLocked() ? {} : { pallet }),
       // thay cả bộ (nạp file, xoá hết, bản từ tài khoản): thứ biến mất ⇒ đánh dấu đã xoá; thứ có trong bộ mới ⇒ bỏ dấu
       replaceAll: d => set(s => {
         const { trips, orders, dropped } = resetSamples(d)
@@ -265,15 +291,16 @@ export const useData = create<DataState>()(
         const put = <T extends { id: string }>(list: T[], add: T[], extra: Partial<T>) => add.reduce((l, x) => upsert(l, { ...x, ...extra, updatedAt: now }), list)
         // file nhập có ghi đè đơn mẫu / gắn đơn mẫu vào chuyến khác ⇒ vẫn giữ chuyến mẫu nguyên gốc
         const { trips, orders, dropped } = resetSamples({ orders: put(s.orders, d.orders, {}), trips: put(s.trips, d.trips, {}) })
+        const lock = catalogLocked()   // thành viên Family: file có mã hàng / xe thì bỏ phần đó
         return {
-          items: put(s.items, d.items, { owner: 'me' } as Partial<Item>),
-          vehicles: put(s.vehicles, d.vehicles, { owner: 'me' } as Partial<Vehicle>),
+          items: lock ? s.items : put(s.items, d.items, { owner: 'me' } as Partial<Item>),
+          vehicles: lock ? s.vehicles : put(s.vehicles, d.vehicles, { owner: 'me' } as Partial<Vehicle>),
           trips, orders, deleted: mark(s.deleted, dropped),
         }
       }),
     }),
     {
-      name: 'malcargo-data-v1', storage: createJSONStorage(() => safeStorage),
+      name: dataKey(useSpace.getState().id), storage: createJSONStorage(() => safeStorage),
       partialize: s => ({ items: s.items, vehicles: s.vehicles, orders: s.orders, trips: s.trips, pallet: s.pallet, deleted: s.deleted }),
       // máy đã lỡ xoá / sửa chuyến mẫu ở bản trước ⇒ mở app là chuyến mẫu về gốc (bản đã sửa thành chuyến mới)
       merge: (saved, cur) => {
@@ -289,7 +316,32 @@ export const useData = create<DataState>()(
 // lưu là xoá mất thay đổi của tab kia (thử 31/10: thêm mã ở tab A, sửa số ở tab B, tải lại A ⇒ mã của A mất).
 // Tab khác vừa lưu ⇒ nạp lại ngay (nạp lại không ghi ngược ra, không thành vòng qua lại giữa hai tab).
 if (typeof window !== 'undefined') {
-  window.addEventListener('storage', e => { if (e.key === 'malcargo-data-v1') void useData.persist.rehydrate() })
+  window.addEventListener('storage', e => { if (e.key === useData.persist.getOptions().name) void useData.persist.rehydrate() })
+}
+
+const EMPTY = { items: [], vehicles: [], orders: SAMPLE_ORDERS, trips: SAMPLE_TRIPS, pallet: DEFAULT_PALLET_SETTINGS, deleted: {} }
+/** Mở bộ dữ liệu khác TRÊN MÁY NÀY (bản đã lưu trên máy; chưa có thì bộ trống + chuyến mẫu). cloud.ts gọi rồi kéo bản trên
+ *  máy chủ về. */
+export async function openSpace(info: SpaceInfo) {
+  useSpace.setState(info, true)
+  const key = dataKey(info.id)
+  if (useData.persist.getOptions().name === key) return
+  // xoá dấu tách chuyến TRƯỚC khi đổi chỗ lưu (mỗi lần đổi trạng thái là ghi cả bộ vào chỗ lưu đang trỏ)
+  useData.setState({ fork: null })
+  useData.persist.setOptions({ name: key })
+  if (safeStorage.getItem(key) != null) await useData.persist.rehydrate()
+  else useData.setState(EMPTY)
+}
+/** Bỏ bản lưu trên máy của một Family (đăng xuất / rời / bị bỏ khỏi Family). */
+export const dropSpace = (id: string) => { if (id !== 'me') safeStorage.removeItem(dataKey(id)) }
+/** Mã hàng, xe, cỡ pallet của bộ "Của tôi" (đang mở bộ khác thì đọc bản lưu trên máy) — chép sang Family mới tạo. */
+export function myCatalog(): Pick<BackupData, 'items' | 'vehicles' | 'pallet'> {
+  if (useSpace.getState().id === 'me') { const s = useData.getState(); return { items: s.items, vehicles: s.vehicles, pallet: s.pallet } }
+  try {
+    const s = JSON.parse(safeStorage.getItem(dataKey('me')) ?? 'null')?.state
+    if (s) return { items: s.items ?? [], vehicles: s.vehicles ?? [], pallet: s.pallet ?? DEFAULT_PALLET_SETTINGS }
+  } catch { /* hỏng ⇒ trống */ }
+  return { items: [], vehicles: [], pallet: DEFAULT_PALLET_SETTINGS }
 }
 
 // ── Mẫu chung: admin sửa trên giao diện, lưu ở máy chủ (cloud.ts nạp về). Chưa nối máy chủ

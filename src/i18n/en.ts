@@ -4,8 +4,9 @@ import { COMMON } from './en/common'
 import { TRIP } from './en/trip'
 import { PAGES } from './en/pages'
 import { SHEETS } from './en/sheets'
+import { FAMILY } from './en/family'
 
-export const EN: Record<string, string> = { ...COMMON, ...TRIP, ...PAGES, ...SHEETS }
+export const EN: Record<string, string> = { ...COMMON, ...TRIP, ...PAGES, ...SHEETS, ...FAMILY }
 
 // Tên dữ liệu MẪU (mã hàng, xe, chuyến / đơn mẫu) — dữ liệu người dùng tự khai giữ nguyên
 export const EN_NAMES: Record<string, string> = {

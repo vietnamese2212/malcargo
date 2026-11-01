@@ -35,6 +35,7 @@ export const STATES = [
   ['Đơn hàng', menu('Đơn hàng'), '[role=dialog]'],
   ['Các chuyến', menu('Các chuyến'), '[role=dialog]'],
   ['Tài khoản', menu('Tài khoản & dữ liệu'), '[role=dialog]'],
+  ['Family (chưa đăng nhập)', menu('Family'), '[role=dialog]'],
   ['Hướng dẫn nhanh', menu('Hướng dẫn nhanh'), '[data-tour-card]'],
   ['Nhập từ Excel', menu('Nhập từ Excel'), '[role=dialog]', null, 'pc'],
 ]

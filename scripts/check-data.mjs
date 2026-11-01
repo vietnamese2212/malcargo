@@ -132,5 +132,34 @@ const f = D().fork, ft = D().trips.find(t => t.id === f?.to)
 ok(f?.from === 'sample-t2' && ft?.vehicleId === 'adm-v-c40' && ft.orderIds.length === 1 && D().orders.find(o => o.id === ft.orderIds[0])?.lines[0].qty === o2.lines[0].qty + 5 && samples() === want,
   'sửa đơn container mẫu ⇒ tách chuyến container (giữ xe, mang số mới), hai chuyến mẫu nguyên')
 
+console.log('• Bộ dữ liệu: Của tôi / Family')
+{
+  const item = (id, code) => ({ id, owner: 'me', code, name: code, l: 400, w: 300, h: 200, kg: 5, perPallet: null, maxLayers: null, light: false, updatedAt: now })
+  const backup = extra => ({ ...base, items: D().items, vehicles: D().vehicles, orders: D().orders, trips: D().trips, pallet: D().pallet, deleted: D().deleted, ...extra })
+  D().replaceAll({ ...base, items: [item('i-me', 'ME')], orders: [order('o-me', 'Khách A')], trips: [], deleted: {} })
+  await S.openSpace({ id: 'fam1', name: 'Cty', role: 'member' })
+  ok(!D().items.length && !mine(D().orders).length && D().trips.some(t => t.id === 'sample-t1'), 'mở Family lần đầu trên máy ⇒ bộ trống + chuyến mẫu, không mang dữ liệu của tôi sang')
+  D().upsertItem(item('i-x', 'X')); D().setPallet({ ...base.pallet, maxH: 1000 })
+  D().importBatch({ items: [item('i-y', 'Y')], vehicles: [], orders: [order('o-imp', 'Khách nhập')], trips: [] })
+  ok(!D().items.length && D().pallet.maxH === 1650 && D().orders.some(o => o.id === 'o-imp'), 'thành viên Family: không thêm mã hàng / đổi cỡ pallet (kể cả qua file nhập), đơn vẫn nhập được')
+  D().upsertOrder(order('o-fam', 'Đơn 7'))   // nháp trống do máy này tạo
+  D().replaceAll(backup({ orders: [...D().orders, order('o-other', 'Đơn 8')] }))   // nháp trống của người khác, về từ máy chủ
+  D().sweepBlank([])
+  ok(!D().orders.some(o => o.id === 'o-fam') && D().orders.some(o => o.id === 'o-other'), 'Family: chỉ dọn nháp trống do máy này tạo — nháp người khác vừa bấm "+" giữ nguyên')
+  await S.openSpace({ id: 'me', name: null, role: null })
+  ok(ids(D().items) === 'i-me' && D().orders.some(o => o.id === 'o-me') && !D().orders.some(o => o.id === 'o-imp'), 'về "Của tôi" ⇒ dữ liệu của tôi nguyên vẹn, không lẫn đơn Family')
+  D().upsertItem(item('i-2', 'ME2'))
+  await S.openSpace({ id: 'fam1', name: 'Cty', role: 'owner' })
+  ok(D().orders.some(o => o.id === 'o-other') && !D().items.length, 'mở lại Family ⇒ bản Family lưu trên máy')
+  ok(ids(S.myCatalog().items) === 'i-2,i-me', 'đang mở Family vẫn đọc được mã hàng của tôi (chép sang Family mới)')
+  D().upsertItem(item('i-own', 'OWN'))
+  ok(ids(D().items) === 'i-own', 'chủ Family sửa được danh mục')
+  await S.openSpace({ id: 'me', name: null, role: null })
+  S.dropSpace('fam1')   // như cloud.ts: rời bộ đó trước rồi mới bỏ bản lưu
+  await S.openSpace({ id: 'fam1', name: 'Cty', role: 'member' })
+  ok(!D().items.length && !D().orders.some(o => o.id === 'o-other'), 'bỏ bản lưu Family (đăng xuất / rời) ⇒ mở lại là bộ trống')
+  await S.openSpace({ id: 'me', name: null, role: null })
+}
+
 console.log(fail ? `\nĐỎ — ${fail} lỗi` : '\nXANH')
 process.exit(fail ? 1 : 0)

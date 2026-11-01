@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Copy, Trash2, X } from 'lucide-react'
 import type { Item } from '../data/types'
-import { newId, useData } from '../data/store'
+import { LOCKED, newId, useCatalogLocked, useData } from '../data/store'
 import { removeCatalog, saveCatalog, useAuth } from '../data/cloud'
 import { t, tx, untx } from '../i18n'
 import { Badge, Button, Confirm, Field, NumInput, Sheet, Switch, TextInput, fmtDec, fmtDims, fmtInt } from './kit'
@@ -31,6 +31,7 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample, onUnlink }: 
   // Mẫu chung vẫn sửa được: bấm Lưu ⇒ thành mã CỦA TÔI (id mới), mẫu giữ nguyên. Admin thì lưu thẳng vào mẫu chung.
   const sample = f.owner === 'admin'
   const adminEdit = sample && isAdmin
+  const ro = useCatalogLocked() && !adminEdit   // thành viên Family: chỉ xem (chủ giữ danh mục)
   const saveShared = async () => {
     setTried(true)
     if (!valid || badNum()) return
@@ -81,8 +82,8 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample, onUnlink }: 
     <Sheet open={open} onClose={onClose}
       title={sample ? (item ? t('Mã mẫu: {name}', { name: tx(item.name) }) : t('Thêm mã mẫu chung')) : item ? t('Sửa mã hàng') : t('Thêm mã hàng')}
       subtitle={adminEdit ? <><Badge tone="blue">Admin</Badge> {t('Lưu mẫu chung: mọi người dùng thấy ngay.')}</>
-        : sample ? t('Sửa rồi bấm Lưu, mã thành của bạn. Mẫu chung giữ nguyên.') : t('Kích thước tính bằng milimét (mm)')}
-      footer={<>
+        : ro ? t(LOCKED) : sample ? t('Sửa rồi bấm Lưu, mã thành của bạn. Mẫu chung giữ nguyên.') : t('Kích thước tính bằng milimét (mm)')}
+      footer={ro ? <Button className="w-full" onClick={onClose}>{t('Đóng')}</Button> : <>
         {err && <p className="mb-2 text-[13px] text-red-700">{err}</p>}
         <div className="flex gap-2">
           {item && !onUnlink && (!sample || adminEdit) && <Button variant="danger" onClick={() => setAskDel(true)} aria-label={sample ? t('Xoá mã mẫu') : t('Xoá mã')}><Trash2 size={17} /></Button>}
@@ -95,7 +96,7 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample, onUnlink }: 
           </>}
         </div>
       </>}>
-      <fieldset ref={box} className="space-y-4">
+      <fieldset ref={box} disabled={ro} className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-[1fr_2fr]">
           <Field label={t('Mã')} error={tried ? errs.code : null}><TextInput value={f.code} onChange={e => set('code', e.target.value)} placeholder="SP001" autoFocus={!item} /></Field>
           <Field label={t('Tên hàng')} error={tried ? errs.name : null}><TextInput value={f.name} onChange={e => set('name', e.target.value)} placeholder={t('Sữa 110ml x48')} /></Field>
@@ -120,13 +121,14 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample, onUnlink }: 
         </div>
         <Switch checked={f.light} onChange={v => set('light', v)} label={t('Hàng nhẹ — cho lên trên hàng khác')} hint={t('Túi, hộp giấy nhẹ… được xếp lên mặt các khối hàng nặng')} />
         {sample && item && <p className="text-xs text-slate-600">{t('Mẫu gốc: thùng {dims} mm, số tham khảo, nên đo lại thùng thật.', { dims: fmtDims(item?.l ?? 0, item?.w ?? 0, item?.h ?? 0) })}</p>}
-        {onUnlink && (
-          <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
-            <span className="text-[13px] text-slate-600">{sample ? t('Sửa số rồi Lưu: app tạo mã của bạn, thay vào đơn của chuyến này.') : t('Sửa ở đây là sửa cho mọi đơn dùng mã này.')}</span>
-            <Button variant="danger" className="shrink-0" onClick={() => { onUnlink(); onClose() }}><X size={16} />{t('Bỏ khỏi đơn')}</Button>
-          </div>
-        )}
       </fieldset>
+      {/* ngoài khung ô (khung chỉ đọc với thành viên Family) — bỏ mã khỏi đơn là sửa ĐƠN, ai cũng làm được */}
+      {onUnlink && (
+        <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
+          <span className="text-[13px] text-slate-600">{ro ? t('Bỏ mã này khỏi đơn của chuyến.') : sample ? t('Sửa số rồi Lưu: app tạo mã của bạn, thay vào đơn của chuyến này.') : t('Sửa ở đây là sửa cho mọi đơn dùng mã này.')}</span>
+          <Button variant="danger" className="shrink-0" onClick={() => { onUnlink(); onClose() }}><X size={16} />{t('Bỏ khỏi đơn')}</Button>
+        </div>
+      )}
       <Confirm open={askDel} onClose={() => setAskDel(false)} title={sample ? t('Xoá mã mẫu {code}?', { code: f.code }) : t('Xoá mã {code}?', { code: f.code })}
         body={sample ? t('Mã mẫu biến mất khỏi danh sách của MỌI người dùng; đơn nào đang dùng sẽ báo thiếu mã.')
           : usedIn ? t('Mã này đang có trong {n} đơn — các dòng đó sẽ báo thiếu mã.', { n: fmtInt(usedIn) }) : t('Không thể hoàn tác.')}

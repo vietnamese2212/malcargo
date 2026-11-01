@@ -6,10 +6,10 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from '
 import {
   AlertTriangle, ArrowDown, ArrowUp, Camera, Check, ChevronDown, ClipboardCopy, ClipboardList, ClipboardPen, Crosshair, ExternalLink, Eye, EyeOff,
   FileSpreadsheet, HelpCircle, Layers, Loader2, LogOut, MapPin, Maximize2, Menu, Minimize2, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Rotate3d, Ruler,
-  Settings, SlidersHorizontal, Smartphone, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, X,
+  Settings, SlidersHorizontal, Smartphone, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, UsersRound, X,
 } from 'lucide-react'
-import { findVehicle, isBlankOrder, isSample, newId, newTripLabel, nextName, useAllItems, useAllVehicles, useData } from '../data/store'
-import { signInGoogle, signOut, useAuth } from '../data/cloud'
+import { LOCKED, catalogLocked, findVehicle, isBlankOrder, isSample, newId, newTripLabel, nextName, useAllItems, useAllVehicles, useData, useSpace } from '../data/store'
+import { signInGoogle, signOut, switchSpace, useAuth, useFamily } from '../data/cloud'
 import { pickPool, resolveOrder, truckOf } from '../data/resolve'
 import { orderTotals, type TripInput, type TripResult } from '../engine/plan'
 import { useTripPlan } from '../engine/useTripPlan'
@@ -39,10 +39,11 @@ import VehiclesPage from './VehiclesPage'
 import OrdersPage from './OrdersPage'
 import TripsPage from './TripsPage'
 import AccountPage, { SyncStatus } from './AccountPage'
+import FamilyPage, { InvitePrompt } from './FamilyPage'
 import { TripTour } from './TripTour'
 
 const VIEWS = [['overview', 'Tổng thể'], ['rear', 'Nhìn từ cửa sau'], ['side', 'Nhìn bên hông'], ['top', 'Nhìn từ trên']] as const // i18n-key
-type PanelName = 'items' | 'vehicles' | 'orders' | 'trips' | 'account'
+type PanelName = 'items' | 'vehicles' | 'orders' | 'trips' | 'account' | 'family'
 const MENU: { p: PanelName; label: string; icon: typeof Package }[] = [
   { p: 'items', label: 'Mã hàng', icon: Package }, { p: 'vehicles', label: 'Xe', icon: Truck }, { p: 'orders', label: 'Đơn hàng', icon: ClipboardList }, // i18n-key
 ]
@@ -209,6 +210,7 @@ export default function TripPage({ id }: { id: string }) {
   // ── sửa XE ngay tại chỗ (xe mẫu ⇒ thành xe của tôi) ──
   const patchVehicle = (patch: Partial<Vehicle>) => {
     if (!vehicle) return
+    if (catalogLocked()) { setToast(t(LOCKED)); return }   // thành viên Family: xe do chủ quản lý
     if (vehicle.owner === 'admin') {
       const v: Vehicle = { ...vehicle, ...patch, id: newId(), owner: 'me', name: `${vehicle.name} (của tôi)` } // i18n-ok — dữ liệu lưu; tx() dịch lúc hiện
       // đã có bản "của tôi" y hệt (vd. đổi Thùng rời ↔ Pallet cùng xe mẫu ở chuyến khác) ⇒ dùng lại, đừng đẻ thêm xe trùng (thử 31/10)
@@ -322,13 +324,13 @@ export default function TripPage({ id }: { id: string }) {
         <section data-scene className={full
           ? 'fixed inset-0 z-40 flex flex-col bg-[#e7ecf2] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)]'
           : cx('sticky top-12 z-10 flex flex-col bg-[#e7ecf2] sm:top-14 lg:relative lg:top-0 lg:order-2 lg:h-full', kb && 'max-lg:relative max-lg:top-0')}>
-          <SpecStrip vehicle={vehicle} pallet={pallet} keep={full} onSpecs={() => setSpec(true)} onKind={k => patchVehicle({ kind: k })}
+          <SpecStrip vehicle={vehicle} pallet={pallet} keep={full} onSpecs={() => (catalogLocked() ? setToast(t(LOCKED)) : setSpec(true))} onKind={k => patchVehicle({ kind: k })}
             orders={orderRows} onEditOrder={setEditOrder}
             picker={close => (
               <VehicleList vehicle={vehicle} vehicles={vehicles} suggestion={suggestion} fits={hasCargo ? fits : {}} onShown={setPicking}
                 onPick={id => { close(); if (id !== vehicle?.id) pickVehicle(id) }}
                 onEdit={v => { close(); setEditVehicle({ v }) }} onAdd={() => { close(); setEditVehicle({ v: null }) }}
-                onSpecs={vehicle ? () => { close(); setSpec(true) } : undefined} />
+                onSpecs={vehicle && !catalogLocked() ? () => { close(); setSpec(true) } : undefined} />
             )}
             lightOwn={tripOrders.some(o => o.lines.some(l => l.qty > 0 && l.item.light)) ? !!trip.lightOwnPallet : null}
             onLightOwn={v => upsertTrip({ ...trip, lightOwnPallet: v })} onPallet={() => setPalletOpen(true)} />
@@ -526,9 +528,11 @@ export default function TripPage({ id }: { id: string }) {
         {panel === 'vehicles' && <VehiclesPage />}
         {panel === 'orders' && <OrdersPage />}
         {panel === 'trips' && <TripsPage />}
-        {panel === 'account' && <AccountPage />}
+        {panel === 'account' && <AccountPage onFamily={() => setPanel('family')} />}
+        {panel === 'family' && <FamilyPage />}
       </Panel>
       <TripTour open={tour} onOpen={() => setTour(true)} onClose={() => setTour(false)} />
+      <InvitePrompt />
     </div>
   )
 }
@@ -544,6 +548,7 @@ function TripSwitch({ trip, trips, onRename, onDelete, onAll, onNew }: {
   const items = useAllItems()
   const vehicles = useAllVehicles()
   const [renaming, setRenaming] = useState(false)
+  const family = useSpace(s => s.name)   // đang mở bộ dữ liệu Family ⇒ nhãn nhỏ ghi tên Family
   const rows = useMemo(() => [...trips].sort((a, b) => b.updatedAt - a.updatedAt).map(tr => {
     const os = tr.orderIds.map(id => orders.find(o => o.id === id)).filter((o): o is Order => !!o).map(o => resolveOrder(o, items))
     return { tr, v: findVehicle(vehicles, tr.vehicleId), tot: orderTotals(os.flatMap(o => o.lines), pallet) }
@@ -559,7 +564,9 @@ function TripSwitch({ trip, trips, onRename, onDelete, onAll, onNew }: {
             className={cx('hit flex h-10 w-full min-w-0 max-w-[320px] items-center gap-1.5 rounded-lg border border-brand-500 pl-2 pr-1 text-left transition-colors hover:bg-white/15 sm:h-11 sm:gap-2 sm:pl-2.5 sm:pr-1.5',
               open ? 'bg-white/15' : 'bg-white/[0.07]')}>
             <span className="min-w-0 flex-1 leading-tight">
-              <span className="block text-[10px] font-semibold uppercase tracking-wide text-brand-200 sm:text-[11px]">{t('Chuyến xe')}</span>
+              <span data-cut-ok className="block truncate text-[10px] font-semibold uppercase tracking-wide text-brand-200 sm:text-[11px]">
+                {t('Chuyến xe')}{family && <span className="text-white"> · {family}</span>}
+              </span>
               <span data-cut-ok className="block truncate text-[13px] font-bold text-white sm:text-[15px]">{tx(trip.name)}</span>
             </span>
             <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand-500 text-white sm:h-6 sm:w-6">
@@ -638,6 +645,8 @@ function RenameInput({ name, onDone }: { name: string; onDone: (v: string | null
 function MainMenu({ onPanel, onImport, onTour }: { onPanel: (p: PanelName) => void; onImport: () => void; onTour: () => void }) {
   const isAdmin = useAuth(s => s.isAdmin)
   const phone = usePhone()
+  const families = useFamily(s => s.families), invites = useFamily(s => s.invites).length
+  const space = useSpace(s => s.id)
   // tải app (APK) — CHỈ máy Android (chủ dự án 31/10); đang chạy trong chính app đã cài (cửa sổ riêng) thì thôi
   const android = /Android/i.test(navigator.userAgent) && !matchMedia('(display-mode: standalone)').matches && !document.referrer.startsWith('android-app://')
   return (
@@ -648,6 +657,19 @@ function MainMenu({ onPanel, onImport, onTour }: { onPanel: (p: PanelName) => vo
       )}>
       {close => (
         <>
+          {/* có Family ⇒ đổi bộ dữ liệu ngay đầu menu: Của tôi / từng Family */}
+          {!!families.length && (
+            <div role="radiogroup" aria-label={t('Dữ liệu đang mở')} className="border-b border-slate-200 pb-1">
+              <div className="px-3 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{t('Dữ liệu đang mở')}</div>
+              {[{ id: 'me', name: t('Của tôi') }, ...families].map(f => (
+                <button key={f.id} type="button" role="radio" aria-checked={space === f.id} onClick={() => { close(); void switchSpace(f.id) }}
+                  className={cx('tap flex w-full items-center gap-2.5 px-3 text-left text-sm transition-colors hover:bg-slate-100', space === f.id ? 'font-semibold text-brand-700' : 'text-slate-800')}>
+                  <span className="grid w-[18px] shrink-0 place-items-center">{space === f.id && <Check size={16} strokeWidth={3} />}</span>
+                  <span className="min-w-0 break-words">{f.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {[...MENU, { p: 'trips' as const, label: 'Các chuyến', icon: Table2 }].map(mn => ( // i18n-key
             <MenuItem key={mn.p} icon={<mn.icon size={18} strokeWidth={1.75} />} onClick={() => { close(); onPanel(mn.p) }}>{t(mn.label)}</MenuItem>
           ))}
@@ -659,6 +681,9 @@ function MainMenu({ onPanel, onImport, onTour }: { onPanel: (p: PanelName) => vo
           )}
           {!phone && <MenuItem icon={<FileSpreadsheet size={18} strokeWidth={1.75} />} onClick={() => { close(); onImport() }}>{t('Nhập từ Excel')}</MenuItem>}
           <MenuItem icon={<HelpCircle size={18} strokeWidth={1.75} />} onClick={() => { close(); onTour() }}>{t('Hướng dẫn nhanh')}</MenuItem>
+          <MenuItem icon={<UsersRound size={18} strokeWidth={1.75} />} onClick={() => { close(); onPanel('family') }}>
+            <span className="flex-1">Family</span>{!!invites && <Badge tone="amber">{t('{n} lời mời', { n: invites })}</Badge>}
+          </MenuItem>
           <MenuItem icon={<UserRound size={18} strokeWidth={1.75} />} onClick={() => { close(); onPanel('account') }}>{t('Tài khoản & dữ liệu')}</MenuItem>
           {isAdmin && (
             <MenuItem icon={<Users size={18} strokeWidth={1.75} />} onClick={() => { close(); onPanel('vehicles') }}>
@@ -1055,6 +1080,7 @@ function VehicleList({ vehicle, vehicles, suggestion, fits, onShown, onPick, onE
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const isAdmin = useAuth(s => s.isAdmin)
+  const space = useSpace()   // bộ Family: xe "của Family"; thành viên không thêm xe (chủ giữ danh mục)
   const needle = q.trim().toLowerCase()
   const list = vehicles.filter(v => (!needle || v.name.toLowerCase().includes(needle) || tx(v.name).toLowerCase().includes(needle) || v.plate.toLowerCase().includes(needle))
     && (!onlyFit || fits?.[v.id] === 'fit'))
@@ -1093,15 +1119,18 @@ function VehicleList({ vehicle, vehicles, suggestion, fits, onShown, onPick, onE
       </div>
       <div ref={scroller} className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="flex items-center gap-1.5 bg-brand-50 px-2.5 py-1 text-[12px] font-semibold text-brand-800">
-          <UserRound size={13} /><span className="flex-1">{t('Xe của tôi')}</span><span className="num">{mine.length}</span>
+          {space.name ? <UsersRound size={13} /> : <UserRound size={13} />}
+          <span className="flex-1">{space.name ? t('Xe của {name}', { name: space.name }) : t('Xe của tôi')}</span><span className="num">{mine.length}</span>
         </div>
         {mine.length ? <div className="divide-y divide-slate-100">{mine.map(row)}</div>
-          : <p className="px-3 py-2 text-[13px] text-slate-600">{needle || onlyFit ? t('Không có xe nào khớp.') : t('Chưa có. Sửa một xe mẫu hoặc thêm xe mới, xe sẽ nằm ở đây.')}</p>}
-        <button onClick={onAdd} className="tap flex w-full items-center gap-2 border-t border-slate-100 px-3 text-[13px] font-semibold text-brand-700 hover:bg-brand-50">
-          <Plus size={16} />{t('Thêm xe của tôi')}
-        </button>
+          : <p className="px-3 py-2 text-[13px] text-slate-600">{needle || onlyFit ? t('Không có xe nào khớp.') : space.role === 'member' ? t('Chủ Family chưa thêm xe nào.') : t('Chưa có. Sửa một xe mẫu hoặc thêm xe mới, xe sẽ nằm ở đây.')}</p>}
+        {space.role !== 'member' && (
+          <button onClick={onAdd} className="tap flex w-full items-center gap-2 border-t border-slate-100 px-3 text-[13px] font-semibold text-brand-700 hover:bg-brand-50">
+            <Plus size={16} />{space.name ? t('Thêm xe') : t('Thêm xe của tôi')}
+          </button>
+        )}
         <div className="flex items-center gap-1.5 border-t border-slate-200 bg-slate-100 px-2.5 py-1 text-[12px] font-semibold text-slate-700">
-          <Users size={13} /><span className="flex-1">{t('Mẫu chung')} <span className="font-normal text-slate-600">· {isAdmin ? t('bạn là admin, sửa được mẫu') : t('sửa sẽ thành xe của bạn')}</span></span><span className="num">{admin.length}</span>
+          <Users size={13} /><span className="flex-1">{t('Mẫu chung')}{space.role !== 'member' && <span className="font-normal text-slate-600"> · {isAdmin ? t('bạn là admin, sửa được mẫu') : t('sửa sẽ thành xe của bạn')}</span>}</span><span className="num">{admin.length}</span>
         </div>
         {admin.length ? <div className="divide-y divide-slate-100">{admin.map(row)}</div>
           : <p className="px-3 py-2 text-[13px] text-slate-600">{t('Không có xe nào khớp.')}</p>}

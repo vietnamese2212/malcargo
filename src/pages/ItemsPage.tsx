@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { ClipboardPaste, Package, Plus } from 'lucide-react'
-import { useAllItems, useData } from '../data/store'
+import { LOCKED, useAllItems, useData, useSpace } from '../data/store'
 import { useAuth } from '../data/cloud'
 import type { Item } from '../data/types'
 import { Badge, BoxGlyph, Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SearchInput, SelectBar, SummaryBand, Tabs, cx, fmtDec, fmtDims, fmtInt, usePhone, useSelection } from '../ui/kit'
@@ -19,6 +19,7 @@ export default function ItemsPage() {
   const isAdmin = useAuth(s => s.isAdmin)
   const [paste, setPaste] = useState(false)
   const phone = usePhone()   // điện thoại không có phần nhập Excel
+  const space = useSpace(), locked = space.role === 'member'   // thành viên Family: danh mục do chủ quản lý — chỉ xem
   const mine = all.filter(i => i.owner === 'me')
   const inTab = all.filter(i => i.owner === tab)
   const list = useMemo(() => {
@@ -27,7 +28,7 @@ export default function ItemsPage() {
     return inTab.filter(i => !k || i.code.toLowerCase().includes(k) || i.name.toLowerCase().includes(k) || tx(i.name).toLowerCase().includes(k))
   }, [inTab, q])
   // chọn nhiều để xoá: chỉ mã của tôi (mẫu chung người dùng không xoá được); chọn theo danh sách đang lọc
-  const canSel = tab === 'me'
+  const canSel = tab === 'me' && !locked
   const sel = useSelection(canSel ? list.map(i => i.id) : [])
   const [askDel, setAskDel] = useState(false)
   const remove = useData(s => s.removeItem)
@@ -38,16 +39,18 @@ export default function ItemsPage() {
     <>
       <PageHeader title={t('Mã hàng')} subtitle={t('Kích thước thùng, khối lượng, cách xếp')}
         actions={<>
-          {!phone && <Button onClick={() => setPaste(true)}><ClipboardPaste size={17} />{t('Dán từ Excel')}</Button>}
+          {!phone && !locked && <Button onClick={() => setPaste(true)}><ClipboardPaste size={17} />{t('Dán từ Excel')}</Button>}
           {tab === 'admin' && isAdmin
             ? <Button variant="primary" aria-label={t('Thêm mã mẫu')} onClick={() => setEdit({ item: null, sample: true })}><Plus size={18} /><span className="hidden sm:inline">{t('Thêm mã mẫu')}</span></Button>
-            : <Button variant="primary" aria-label={t('Thêm mã')} onClick={() => setEdit({ item: null })}><Plus size={18} /><span className="hidden sm:inline">{t('Thêm mã')}</span></Button>}
+            : !locked && <Button variant="primary" aria-label={t('Thêm mã')} onClick={() => setEdit({ item: null })}><Plus size={18} /><span className="hidden sm:inline">{t('Thêm mã')}</span></Button>}
         </>}>
         <Tabs value={tab} onChange={setTab} flush
-          options={[{ value: 'me', label: t('Của tôi · {n}', { n: mine.length }) }, { value: 'admin', label: t('Mẫu chung · {n}', { n: all.length - mine.length }) }]} />
+          options={[{ value: 'me', label: space.name ? t('{name} · {n}', { name: space.name, n: mine.length }) : t('Của tôi · {n}', { n: mine.length }) }, { value: 'admin', label: t('Mẫu chung · {n}', { n: all.length - mine.length }) }]} />
       </PageHeader>
       <Page flush={!(tab === 'me' && !mine.length)}>
-        {tab === 'me' && !mine.length ? (
+        {tab === 'me' && !mine.length && locked ? (
+          <Empty icon={<Package size={28} strokeWidth={1.5} />} title={t('Chủ Family chưa thêm mã hàng nào')} body={t(LOCKED)} />
+        ) : tab === 'me' && !mine.length ? (
           <Empty icon={<Package size={28} strokeWidth={1.5} />} title={t('Chưa có mã hàng nào của bạn')}
             body={phone ? t('Thêm từng mã, hoặc mở tab Mẫu chung và sao một mẫu về để sửa.') : t('Thêm từng mã, dán cả danh sách từ Excel, hoặc mở tab Mẫu chung và sao một mẫu về để sửa.')}
             action={<div className="flex flex-wrap justify-center gap-2">

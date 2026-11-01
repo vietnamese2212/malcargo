@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Copy, Trash2 } from 'lucide-react'
 import type { Vehicle } from '../data/types'
-import { newId, useData } from '../data/store'
+import { LOCKED, newId, useCatalogLocked, useData } from '../data/store'
 import { removeCatalog, saveCatalog, useAuth } from '../data/cloud'
 import { palletFloorSlots } from '../engine/loadPlan'
 import Scene from '../three/LazyScene'
@@ -29,6 +29,7 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
   // Mẫu chung vẫn sửa được: bấm Lưu ⇒ thành xe CỦA TÔI (id mới), mẫu giữ nguyên. Admin thì lưu thẳng vào mẫu chung.
   const sample = f.owner === 'admin'
   const adminEdit = sample && isAdmin
+  const ro = useCatalogLocked() && !adminEdit   // thành viên Family: chỉ xem (chủ giữ danh mục)
   const saveShared = async () => {
     setTried(true)
     if (!valid || badNum()) return
@@ -73,8 +74,8 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
     <Sheet open={open} onClose={onClose} wide
       title={sample ? (vehicle ? t('Xe mẫu: {name}', { name: tx(vehicle.name) }) : t('Thêm xe mẫu chung')) : vehicle ? t('Sửa xe') : t('Thêm xe')}
       subtitle={adminEdit ? <><Badge tone="blue">Admin</Badge> {t('Lưu mẫu chung: mọi người dùng thấy ngay.')}</>
-        : sample ? t('Sửa rồi bấm Lưu, xe thành của bạn. Mẫu chung giữ nguyên.') : t('Đo LÒNG thùng (bên trong), tính bằng mm')}
-      footer={<>
+        : ro ? t(LOCKED) : sample ? t('Sửa rồi bấm Lưu, xe thành của bạn. Mẫu chung giữ nguyên.') : t('Đo LÒNG thùng (bên trong), tính bằng mm')}
+      footer={ro ? <Button className="w-full" onClick={onClose}>{t('Đóng')}</Button> : <>
         {err && <p className="mb-2 text-[13px] text-red-700">{err}</p>}
         <div className="flex gap-2">
           {vehicle && (!sample || adminEdit) && <Button variant="danger" onClick={() => setAskDel(true)} aria-label={sample ? t('Xoá xe mẫu') : t('Xoá xe')}><Trash2 size={17} /></Button>}
@@ -98,7 +99,7 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
           </div>
         )}
       </div>
-      <fieldset ref={box} className="space-y-4">
+      <fieldset ref={box} disabled={ro} className="space-y-4">
         {/* điện thoại: tên xe trọn hàng — tên tiếng Anh dài hơn ("15-ton pallet truck (mine)") bị cắt trong ô nửa hàng */}
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t('Tên xe')} error={tried ? errs.name : null}><TextInput value={f.name} onChange={e => set('name', e.target.value)} placeholder={t('Xe 5 tấn số 1')} /></Field>

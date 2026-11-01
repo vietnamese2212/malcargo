@@ -1,12 +1,16 @@
 // Bước B — tài khoản Google + máy chủ Supabase RIÊNG của MalCargo (không dùng DB của SUPPLYC).
 //  · Mẫu chung (xe, mã hàng) nằm ở bảng `catalog`: ai cũng đọc, chỉ admin ghi (RLS, xem supabase/schema.sql).
-//  · Dữ liệu riêng: một bản JSON / người ở bảng `user_data` (RLS theo auth.uid()).
-//    Đăng nhập ⇒ dữ liệu trên máy GỘP vào tài khoản; sau đó mỗi thay đổi tự đẩy lên, mở lại tab thì kéo bản mới về.
+//  · Dữ liệu riêng: một bản JSON / người ở bảng `user_data` (RLS theo auth.uid()); Family: một bản JSON / nhóm ở `family_data`.
+//    Đăng nhập ⇒ dữ liệu trên máy GỘP vào tài khoản; sau đó mỗi thay đổi tự đẩy lên, quay lại tab / mỗi 20 giây thì kéo bản mới về.
 // Chưa khai VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY ⇒ app chạy như bước A: chỉ lưu trên máy, mẫu chung lấy từ catalog.ts.
 import { create } from 'zustand'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Item, Vehicle } from './types'
-import { exportBackup, mergeBackup, parseBackup, useCatalog, useData, type BackupData } from './store'
+import {
+  catalogLocked, dropSpace, exportBackup, mergeBackup, myCatalog, openSpace, parseBackup, useCatalog, useData, useSpace, type BackupData,
+} from './store'
+import { t } from '../i18n'
+import { replaceRoute } from '../ui/route'
 
 const URL_ = import.meta.env.VITE_SUPABASE_URL
 const KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -74,21 +78,51 @@ export async function removeCatalog(kind: 'item' | 'vehicle', id: string): Promi
   return null
 }
 
-// ── Dữ liệu riêng của người dùng ─────────────────────────────────────────────
+// ── Bộ dữ liệu đang mở ("Của tôi" = bảng `user_data`, Family = `family_data`) đồng bộ với máy chủ ─────────────
+// Ghi kèm SỐ PHIÊN BẢN đã đọc: người / máy khác vừa ghi trước ⇒ máy chủ trả "không khớp" ⇒ kéo bản mới về, gộp từng bản ghi
+// (sửa sau thắng, dấu đã xoá giữ nguyên tác dụng) rồi ghi lại — nhiều người cùng làm một Family không đè mất của nhau.
 let uid: string | null = null
-let applying = false            // đang thay bằng bản từ máy chủ ⇒ đừng đẩy ngược lên
-let lastSeen = ''               // updated_at của bản trên máy chủ mà máy này đã có
+let version: number | null = null   // phiên bản trên máy chủ của bộ đang mở mà máy này đang cầm (null = chưa có / chưa biết)
+let applying = false                // đang thay bằng bản từ máy chủ / đang đổi bộ ⇒ đừng đẩy ngược lên
 let pushTimer: ReturnType<typeof setTimeout> | undefined
+let saving: Promise<void> = Promise.resolve()
 
-async function push() {
-  if (!uid) return
-  useAuth.setState({ sync: 'saving' })
-  const c = await sb()
-  const at = new Date().toISOString()
-  const { error } = await c.from('user_data').upsert({ user_id: uid, data: exportBackup(), updated_at: at })
-  if (error) { useAuth.setState({ sync: 'error' }); return }
-  lastSeen = at
-  useAuth.setState({ sync: 'saved' })
+// bộ còn thay đổi chưa đẩy lên (mất mạng, đóng app giữa chừng) — mở lại thì gộp lên trước, không lấy bản máy chủ đè
+const DIRTY = 'malcargo-dirty-v1'
+const dirtyList = (): string[] => { try { return JSON.parse(localStorage.getItem(DIRTY) ?? '[]') } catch { return [] } }
+const isDirty = (id: string) => dirtyList().includes(id)
+const setDirty = (id: string, on: boolean) => {
+  const l = dirtyList().filter(x => x !== id)
+  try { localStorage.setItem(DIRTY, JSON.stringify(on ? [...l, id] : l)) } catch { /* bỏ qua */ }
+}
+
+type Remote = { ok: boolean; data: BackupData | null; version: number | null }
+async function fetchRemote(withData = true): Promise<Remote> {
+  const c = await sb(), sp = useSpace.getState().id
+  const cols = withData ? 'data, version' : 'version'
+  const { data, error } = sp === 'me'
+    ? await c.from('user_data').select(cols).eq('user_id', uid!).maybeSingle()
+    : await c.from('family_data').select(cols).eq('family_id', sp).maybeSingle()
+  if (error) return { ok: false, data: null, version: null }
+  const row = data as { data?: unknown; version: number } | null
+  const parsed = row?.data ? parseBackup(JSON.stringify(row.data)) : null
+  return { ok: true, data: parsed && typeof parsed !== 'string' ? parsed : null, version: row?.version ?? null }
+}
+
+async function saveRemote(d: BackupData): Promise<number | null> {
+  const c = await sb(), sp = useSpace.getState().id
+  const { data, error } = sp === 'me'
+    ? await c.rpc('user_save', { p_data: d, p_version: version })
+    : await c.rpc('family_save', { p_family: sp, p_data: d, p_version: version })
+  if (error) throw error
+  return data as number | null
+}
+
+/** Gộp bản trên máy chủ với bản trên máy (bản ghi: sửa sau thắng; cỡ pallet: của máy này). Thành viên Family không sửa
+ *  được danh mục ⇒ lấy nguyên mã hàng, xe, cỡ pallet trên máy chủ (máy chủ cũng bỏ phần đó khi thành viên ghi). */
+function withLocal(remote: BackupData): BackupData {
+  const m = mergeBackup(remote, exportBackup())
+  return catalogLocked() ? { ...m, items: remote.items, vehicles: remote.vehicles, pallet: remote.pallet } : m
 }
 
 function replaceFromRemote(d: BackupData) {
@@ -97,22 +131,197 @@ function replaceFromRemote(d: BackupData) {
   applying = false
 }
 
+/** Đẩy bộ đang mở lên (xếp hàng sau lần đẩy trước). Không khớp phiên bản ⇒ kéo về, gộp, ghi lại (≤ 4 lần). */
+function push(): Promise<void> {
+  saving = saving.then(async () => {
+    if (!uid) return
+    const sp = useSpace.getState().id
+    useAuth.setState({ sync: 'saving' })
+    for (let i = 0; i < 4; i++) {
+      const v = await saveRemote(exportBackup())
+      if (useSpace.getState().id !== sp) return   // đổi sang bộ khác giữa chừng
+      if (v != null) {
+        version = v
+        if (!pushTimer) setDirty(sp, false)
+        useAuth.setState({ sync: 'saved' })
+        return
+      }
+      const r = await fetchRemote()
+      if (!r.ok || useSpace.getState().id !== sp) break
+      if (r.data) replaceFromRemote(withLocal(r.data))
+      version = r.version
+    }
+    useAuth.setState({ sync: 'error' })
+  }).catch(() => { useAuth.setState({ sync: 'error' }) })
+  return saving
+}
+
+/** `first`: vừa đăng nhập / vừa mở bộ này. "Của tôi" ⇒ gộp dữ liệu trên máy vào tài khoản rồi đẩy lên (như trước); Family ⇒
+ *  máy này còn thay đổi chưa đẩy thì gộp + đẩy, không thì lấy bản máy chủ. Lần sau: máy chủ có bản mới thì lấy về. */
 async function pull(first: boolean) {
   if (!uid) return
-  const c = await sb()
-  const { data, error } = await c.from('user_data').select('data, updated_at').eq('user_id', uid).maybeSingle()
-  if (error) { useAuth.setState({ sync: 'error' }); return }
-  const remote = data ? parseBackup(JSON.stringify(data.data)) : null
+  const sp = useSpace.getState().id
+  const r = await fetchRemote()
+  if (useSpace.getState().id !== sp) return
+  if (!r.ok) { useAuth.setState({ sync: 'error' }); return }
   if (first) {
-    // lần đầu trên máy này: gộp dữ liệu đang có trên máy vào tài khoản rồi đẩy lên
-    replaceFromRemote(remote && typeof remote !== 'string' ? mergeBackup(exportBackup(), remote) : exportBackup())
+    version = r.version
+    if (sp !== 'me' && !r.data) return
+    if (sp !== 'me' && !isDirty(sp)) { replaceFromRemote(r.data!); return }
+    if (r.data) replaceFromRemote(sp === 'me' ? mergeBackup(exportBackup(), r.data) : withLocal(r.data))
     await push()
-  } else if (data && remote && typeof remote !== 'string' && data.updated_at !== lastSeen) {
-    lastSeen = data.updated_at
-    replaceFromRemote(remote)
+  } else if (r.data && r.version !== version && !pushTimer && !isDirty(sp)) {
+    version = r.version
+    replaceFromRemote(r.data)
   }
 }
 
+/** Hỏi nhẹ (chỉ số phiên bản) xem người khác vừa sửa chưa — có thì kéo bản mới về. */
+async function check() {
+  if (!uid || pushTimer || document.visibilityState !== 'visible' || useAuth.getState().sync === 'saving') return
+  const r = await fetchRemote(false)
+  if (r.ok && r.version !== version) await pull(false)
+}
+
+/** Đang ở màn một chuyến của bộ cũ ⇒ sang chuyến sửa gần nhất của bộ mới, tại chỗ (tấm / bảng đang mở vẫn giữ — App giữ
+ *  màn chuyến khi bộ dữ liệu vừa đổi). */
+function jumpToLatest() {
+  if (!location.hash.startsWith('#/trip/')) return
+  const latest = [...useData.getState().trips].sort((a, b) => b.updatedAt - a.updatedAt)[0]
+  if (latest) replaceRoute({ page: 'trip', id: latest.id })
+}
+
+/** Mở bộ dữ liệu khác: "me" hoặc id một Family đang tham gia. Đẩy nốt thay đổi của bộ đang mở trước. */
+export async function switchSpace(id: string) {
+  if (id === useSpace.getState().id) return
+  if (pushTimer) { clearTimeout(pushTimer); pushTimer = undefined; void push() }
+  await saving
+  const f = useFamily.getState().families.find(x => x.id === id)
+  applying = true
+  try { await openSpace({ id, name: f?.name ?? null, role: f?.role ?? null }) } finally { applying = false }
+  jumpToLatest()
+  version = null
+  if (uid) await pull(true)
+}
+
+// ── FAMILY: chủ tạo, mời bằng email; cả nhóm dùng chung một bộ dữ liệu (chủ giữ mã hàng, xe, cỡ pallet) ─────────────
+export interface Family { id: string; name: string; role: 'owner' | 'member'; discountCode: string | null; paidUntil: string | null }
+export interface Member { email: string; name: string | null; role: 'owner' | 'member'; status: 'invited' | 'active' }
+export interface Invite { familyId: string; name: string; owner: string }
+export interface Fee { price: number; people: number; code: string | null; percent: number; paidUntil: string | null }
+export interface Code { code: string; percent: number; active: boolean; featured: boolean }
+interface FamilyState {
+  loaded: boolean; families: Family[]; invites: Invite[]; members: Record<string, Member[]>; fees: Record<string, Fee>
+  price: number; codes: Code[]   // giá / người / tháng + mã giảm giá (người thường chỉ thấy mã công khai; admin thấy hết)
+}
+export const useFamily = create<FamilyState>(() => ({ loaded: false, families: [], invites: [], members: {}, fees: {}, price: 0, codes: [] }))
+
+const ERR: Record<string, string> = {
+  already_owner: 'Bạn đã làm chủ một Family.', // i18n-key
+  bad_code: 'Mã giảm giá không đúng hoặc đã ngừng.', // i18n-key
+  payment_required: 'Còn phí tháng phải trả nên chưa thêm người được — nhập mã giảm giá hoặc liên hệ MAL.', // i18n-key
+  bad_email: 'Email không hợp lệ.', // i18n-key
+  already_member: 'Email này đã có trong Family.', // i18n-key
+  not_owner: 'Chỉ chủ Family làm được việc này.', // i18n-key
+  no_invite: 'Lời mời không còn.', // i18n-key
+}
+/** Chạy một hàm của máy chủ; trả câu lỗi (theo ngôn ngữ) hoặc null. */
+async function call(fn: string, args: Record<string, unknown>): Promise<{ data: unknown; error: string | null }> {
+  const c = await sb()
+  const { data, error } = await c.rpc(fn, args)
+  return { data, error: error ? t(ERR[error.message] ?? error.message) : null }
+}
+
+export async function loadPricing() {
+  const c = await sb()
+  const [{ data: s }, { data: codes }] = await Promise.all([
+    c.from('app_settings').select('value').eq('key', 'family_price_vnd').maybeSingle(),
+    c.from('discount_codes').select('code, percent, active, featured').order('created_at'),
+  ])
+  useFamily.setState({ price: Number(s?.value ?? 0) || 0, codes: (codes ?? []) as Code[] })
+}
+
+/** Family đang tham gia + lời mời đang chờ + thành viên + phí. */
+export async function loadFamilies() {
+  const me = useAuth.getState().user?.email.toLowerCase()
+  if (!uid || !me) { useFamily.setState({ loaded: true, families: [], invites: [], members: {}, fees: {} }); return }
+  const c = await sb()
+  const [{ data: fs, error }, { data: ms }] = await Promise.all([
+    c.from('families').select('id, name, discount_code, paid_until, created_at').order('created_at'),
+    c.from('family_members').select('family_id, email, name, role, status, invited_at').order('invited_at'),
+  ])
+  if (error) return
+  const rows = (ms ?? []) as (Member & { family_id: string })[]
+  const families: Family[] = [], invites: Invite[] = [], members: Record<string, Member[]> = {}
+  for (const f of (fs ?? []) as { id: string; name: string; discount_code: string | null; paid_until: string | null }[]) {
+    const mine = rows.find(m => m.family_id === f.id && m.email === me)
+    const list = rows.filter(m => m.family_id === f.id)
+    if (mine?.status === 'active') { families.push({ id: f.id, name: f.name, role: mine.role, discountCode: f.discount_code, paidUntil: f.paid_until }); members[f.id] = list }
+    else if (mine) { const o = list.find(m => m.role === 'owner'); invites.push({ familyId: f.id, name: f.name, owner: o?.name || o?.email || '' }) }
+  }
+  families.sort((a, b) => (a.role === 'owner' ? -1 : b.role === 'owner' ? 1 : 0))
+  const fees: Record<string, Fee> = {}
+  await Promise.all(families.map(async f => {
+    const { data } = await c.rpc('family_fee', { p_family: f.id })
+    const x = data as { price: number; people: number; code: string | null; percent: number; paid_until: string | null } | null
+    if (x) fees[f.id] = { price: Number(x.price), people: x.people, code: x.code, percent: x.percent, paidUntil: x.paid_until }
+  }))
+  useFamily.setState({ loaded: true, families, invites, members, fees })
+  // bộ đang mở là một Family không còn tham gia (rời / bị bỏ / Family đã xoá) ⇒ về "Của tôi", bỏ bản lưu trên máy
+  const sp = useSpace.getState()
+  if (sp.id !== 'me') {
+    const f = families.find(x => x.id === sp.id)
+    if (!f) { await switchSpace('me'); dropSpace(sp.id) }
+    else if (f.name !== sp.name || f.role !== sp.role) useSpace.setState({ ...sp, name: f.name, role: f.role })
+  }
+}
+
+/** Tạo Family (chép mã hàng, xe, cỡ pallet của tôi sang nếu chọn) rồi mở luôn bộ dữ liệu Family. */
+export async function createFamily(name: string, copyMine: boolean, code: string): Promise<string | null> {
+  const cat = copyMine ? myCatalog() : { items: [], vehicles: [], pallet: useData.getState().pallet }
+  const data: BackupData = { app: 'malcargo', version: 1, ...cat, orders: [], trips: [], deleted: {} }
+  const r = await call('family_create', { p_name: name.trim(), p_data: data, p_code: code.trim() || null })
+  if (r.error) return r.error
+  await loadFamilies()
+  await switchSpace(r.data as string)
+  return null
+}
+export async function renameFamily(id: string, name: string) { const r = await call('family_rename', { p_family: id, p_name: name.trim() }); await loadFamilies(); return r.error }
+export async function inviteMember(id: string, email: string) { const r = await call('family_invite', { p_family: id, p_email: email }); await loadFamilies(); return r.error }
+export async function removeMember(id: string, email: string) { const r = await call('family_remove', { p_family: id, p_email: email }); await loadFamilies(); return r.error }
+export async function applyCode(id: string, code: string) { const r = await call('family_apply_code', { p_family: id, p_code: code }); await loadFamilies(); return r.error }
+export async function acceptInvite(id: string): Promise<string | null> {
+  const r = await call('family_accept', { p_family: id })
+  if (r.error) return r.error
+  await loadFamilies()
+  await switchSpace(id)
+  return null
+}
+export async function declineInvite(id: string) { const r = await call('family_decline', { p_family: id }); await loadFamilies(); return r.error }
+export async function leaveFamily(id: string) { const r = await call('family_leave', { p_family: id }); await loadFamilies(); return r.error }
+export async function deleteFamily(id: string) { const r = await call('family_delete', { p_family: id }); await loadFamilies(); return r.error }
+
+/** Admin: giá mỗi người / tháng (đồng) + mã giảm giá. */
+export async function adminSetPrice(vnd: number): Promise<string | null> {
+  const c = await sb()
+  const { error } = await c.from('app_settings').upsert({ key: 'family_price_vnd', value: vnd, updated_at: new Date().toISOString() })
+  await loadPricing(); await loadFamilies()
+  return error?.message ?? null
+}
+export async function adminSaveCode(x: Code): Promise<string | null> {
+  const c = await sb()
+  const { error } = await c.from('discount_codes').upsert({ ...x, code: x.code.trim().toUpperCase() })
+  await loadPricing(); await loadFamilies()
+  return error?.message ?? null
+}
+export async function adminDeleteCode(code: string): Promise<string | null> {
+  const c = await sb()
+  const { error } = await c.from('discount_codes').delete().eq('code', code)
+  await loadPricing(); await loadFamilies()
+  return error?.message ?? null
+}
+
+// ── Đăng nhập / đăng xuất ─────────────────────────────────────────────────────────────────────────────────────────
 async function onSignedIn(u: { id: string; email?: string; user_metadata?: Record<string, unknown> }) {
   if (uid === u.id) return
   uid = u.id
@@ -124,7 +333,24 @@ async function onSignedIn(u: { id: string; email?: string; user_metadata?: Recor
   const c = await sb()
   const { data } = await c.rpc('is_admin')
   useAuth.setState({ isAdmin: data === true })
-  await pull(true)
+  const before = useSpace.getState().id
+  await loadFamilies()   // bộ đang mở là Family không còn tham gia ⇒ đã tự về "Của tôi" (và kéo bản tài khoản về)
+  if (useSpace.getState().id === before) { version = null; await pull(true) }
+}
+
+async function onSignedOut() {
+  uid = null
+  version = null
+  const { families } = useFamily.getState(), open = useSpace.getState().id
+  useAuth.setState({ status: 'out', user: null, isAdmin: false, sync: 'idle' })
+  useFamily.setState({ loaded: true, families: [], invites: [], members: {}, fees: {} })
+  // dữ liệu Family cần đăng nhập ⇒ về "Của tôi", bỏ bản Family lưu trên máy (máy dùng chung)
+  if (useSpace.getState().id !== 'me') {
+    applying = true
+    try { await openSpace({ id: 'me', name: null, role: null }) } finally { applying = false }
+    jumpToLatest()
+  }
+  ;[open, ...families.map(f => f.id)].forEach(dropSpace)
 }
 
 let started = false
@@ -132,12 +358,13 @@ export function initCloud() {
   if (!cloudEnabled || started) return
   started = true
   loadCatalog().catch(() => { /* mất mạng: dùng bản đã có */ })
+  loadPricing().catch(() => { /* mất mạng */ })
   sb().then(async c => {
     c.auth.onAuthStateChange((_e, session) => {
       // chạy ngoài callback: supabase-js khuyên không gọi API khác ngay trong đây
       setTimeout(() => {
         if (session?.user) onSignedIn(session.user).catch(() => useAuth.setState({ sync: 'error' }))
-        else { uid = null; useAuth.setState({ status: 'out', user: null, isAdmin: false, sync: 'idle' }) }
+        else void onSignedOut()
       })
     })
     // đợi đổi xong mã đăng nhập rồi mới dọn ?code=… khỏi thanh địa chỉ
@@ -146,11 +373,11 @@ export function initCloud() {
   })
   useData.subscribe(() => {
     if (!uid || applying) return
+    setDirty(useSpace.getState().id, true)
     clearTimeout(pushTimer)
-    pushTimer = setTimeout(() => { pushTimer = undefined; push().catch(() => useAuth.setState({ sync: 'error' })) }, 1200)
+    pushTimer = setTimeout(() => { pushTimer = undefined; void push() }, 1200)
   })
-  // quay lại tab (có thể đã sửa trên máy khác) ⇒ kéo bản mới về — trừ khi máy này còn thay đổi chưa đẩy
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && !pushTimer && useAuth.getState().sync !== 'saving') pull(false).catch(() => {})
-  })
+  // quay lại tab / mỗi 20 giây khi đang xem: người khác (Family) hay máy khác vừa sửa ⇒ kéo bản mới về
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { void check(); void loadFamilies() } })
+  setInterval(() => { void check() }, 20000)
 }

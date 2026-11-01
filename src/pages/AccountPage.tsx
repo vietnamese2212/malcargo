@@ -2,8 +2,8 @@
 // đăng nhập · đồng bộ · nút) + số dữ liệu của bạn trên một dòng; mỗi khối sau chỉ một tên + một dòng ngắn, nút nằm bên
 // phải (máy tính) — bỏ dải tiêu đề và đoạn giải thích dài.
 import { useRef, useState, type ReactNode } from 'react'
-import { Check, CloudOff, Download, Loader2, LogOut, MessageCircle, Trash2, Upload, UserRound } from 'lucide-react'
-import { exportBackup, isSample, parseBackup, useData, type BackupData } from '../data/store'
+import { Check, CloudOff, Download, Loader2, LogOut, MessageCircle, Trash2, Upload, UserRound, UsersRound } from 'lucide-react'
+import { exportBackup, isSample, parseBackup, useData, useSpace, type BackupData } from '../data/store'
 import { signInGoogle, signOut, useAuth } from '../data/cloud'
 import { DEFAULT_PALLET_SETTINGS } from '../data/catalog'
 import { Badge, Button, Confirm, cx, fmtInt } from '../ui/kit'
@@ -40,8 +40,9 @@ function Row({ title, desc, side, children }: { title: string; desc: ReactNode; 
   )
 }
 
-export default function AccountPage() {
+export default function AccountPage({ onFamily }: { onFamily?: () => void }) {
   const s = useData()
+  const space = useSpace()   // đang mở bộ Family ⇒ số đếm là của Family; không nạp đè / xoá hết dữ liệu chung từ đây
   const fileRef = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<BackupData | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
@@ -94,16 +95,21 @@ export default function AccountPage() {
           </section>
           {signErr && <p className="-mt-2 px-4 pb-3 text-[13px] text-red-700">{signErr}</p>}
           <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-slate-200 bg-slate-50 px-4 py-2.5 text-[13px] text-slate-600">
-            <span className="font-medium text-slate-700">{t('Dữ liệu của bạn')}</span>
+            <span className="font-medium text-slate-700">{space.name ? t('Dữ liệu {name}', { name: space.name }) : t('Dữ liệu của bạn')}</span>
             {counts.map(([n, label], i) => (
               <span key={i} className="whitespace-nowrap"><b className="num text-[15px] font-semibold text-slate-900">{fmtInt(n)}</b> {label}</span>
             ))}
           </div>
 
+          {onFamily && (
+            <Row title="Family" desc={space.name ? t('Đang mở dữ liệu {name}.', { name: space.name }) : t('Dùng chung mã hàng, xe, đơn, chuyến với cả nhóm.')}
+              side={<Button className="max-sm:flex-1" onClick={onFamily}><UsersRound size={17} />{t('Mở Family')}</Button>} />
+          )}
+
           <Row title={t('Sao lưu')} desc={t('Giữ một bản phòng khi xoá trình duyệt, hoặc chuyển sang máy khác.')}
             side={<>
               <Button variant="primary" className="max-sm:flex-1" onClick={download}><Download size={17} />{t('Tải file sao lưu')}</Button>
-              <Button className="max-sm:flex-1" onClick={() => fileRef.current?.click()}><Upload size={17} />{t('Nạp từ file')}</Button>
+              {space.id === 'me' && <Button className="max-sm:flex-1" onClick={() => fileRef.current?.click()}><Upload size={17} />{t('Nạp từ file')}</Button>}
               <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={e => onFile(e.target.files?.[0])} />
             </>}>
             {msg && <p className="text-sm text-red-700">{msg}</p>}
@@ -113,8 +119,10 @@ export default function AccountPage() {
             <PalletFields cols="grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" />
           </Row>
 
-          <Row title={t('Xoá dữ liệu trên máy này')} desc={t('Mã hàng, xe, đơn, chuyến của bạn.')}
-            side={<Button variant="danger" className="max-sm:flex-1" onClick={() => setAskReset(true)}><Trash2 size={16} />{t('Xoá hết')}</Button>} />
+          {space.id === 'me' && (
+            <Row title={t('Xoá dữ liệu trên máy này')} desc={t('Mã hàng, xe, đơn, chuyến của bạn.')}
+              side={<Button variant="danger" className="max-sm:flex-1" onClick={() => setAskReset(true)}><Trash2 size={16} />{t('Xoá hết')}</Button>} />
+          )}
         </ListCard>
 
         <section className="mx-4 flex flex-col gap-3 rounded-lg bg-navy-950 p-5 text-white sm:mx-0 sm:flex-row sm:items-center">

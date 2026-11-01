@@ -510,8 +510,8 @@ export function MenuItem({ icon, children, onClick, danger, disabled }: { icon?:
 }
 
 /** Hộp xác nhận nhỏ giữa màn — chỉ dùng cho xoá / thay dữ liệu. */
-export function Confirm({ open, title, body, okText = t('Xoá'), danger = true, onOk, onClose }: {
-  open: boolean; title: string; body?: ReactNode; okText?: string; danger?: boolean; onOk: () => void; onClose: () => void
+export function Confirm({ open, title, body, okText = t('Xoá'), cancelText = t('Huỷ'), danger = true, onOk, onClose }: {
+  open: boolean; title: string; body?: ReactNode; okText?: string; cancelText?: string; danger?: boolean; onOk: () => void; onClose: () => void
 }) {
   const box = useViewportBox(open)
   useBackClose(open, onClose)
@@ -530,7 +530,7 @@ export function Confirm({ open, title, body, okText = t('Xoá'), danger = true, 
         <h3 className="text-base font-semibold text-slate-900">{title}</h3>
         {body && <div className="mt-1.5 text-sm text-slate-700">{body}</div>}
         <div className="mt-5 flex gap-2">
-          <Button className="flex-1" onClick={onClose}>{t('Huỷ')}</Button>
+          <Button className="flex-1" onClick={onClose}>{cancelText}</Button>
           <Button className="flex-1" variant={danger ? 'danger' : 'primary'} onClick={() => { onOk(); onClose() }}>{okText}</Button>
         </div>
       </div>

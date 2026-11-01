@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Plus, Truck } from 'lucide-react'
-import { useAllVehicles, useData } from '../data/store'
+import { LOCKED, useAllVehicles, useData, useSpace } from '../data/store'
 import { useAuth } from '../data/cloud'
 import type { Vehicle } from '../data/types'
 import { Badge, Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SelectBar, SummaryBand, Tabs, cx, fmtDims, fmtInt, fmtKgShort, fmtM3, useSelection } from '../ui/kit'
@@ -17,9 +17,10 @@ export default function VehiclesPage() {
   const [tab, setTab] = useState<'me' | 'admin'>(mine.length ? 'me' : 'admin')
   const [edit, setEdit] = useState<{ v: Vehicle | null; sample?: boolean } | null>(null)
   const isAdmin = useAuth(s => s.isAdmin)
+  const space = useSpace(), locked = space.role === 'member'   // thành viên Family: xe do chủ quản lý — chỉ xem
   const list = all.filter(v => v.owner === tab)
   // chọn nhiều để xoá: chỉ xe của tôi (mẫu chung người dùng không xoá được)
-  const canSel = tab === 'me'
+  const canSel = tab === 'me' && !locked
   const sel = useSelection(canSel ? list.map(v => v.id) : [])
   const [askDel, setAskDel] = useState(false)
   const remove = useData(s => s.removeVehicle)
@@ -30,12 +31,14 @@ export default function VehiclesPage() {
       <PageHeader title={t('Xe')} subtitle={t('Lòng thùng, tải trọng, cách chở')}
         actions={tab === 'admin' && isAdmin
           ? <Button variant="primary" aria-label={t('Thêm xe mẫu')} onClick={() => setEdit({ v: null, sample: true })}><Plus size={18} /><span className="hidden sm:inline">{t('Thêm xe mẫu')}</span></Button>
-          : <Button variant="primary" aria-label={t('Thêm xe')} onClick={() => setEdit({ v: null })}><Plus size={18} /><span className="hidden sm:inline">{t('Thêm xe')}</span></Button>}>
+          : !locked && <Button variant="primary" aria-label={t('Thêm xe')} onClick={() => setEdit({ v: null })}><Plus size={18} /><span className="hidden sm:inline">{t('Thêm xe')}</span></Button>}>
         <Tabs value={tab} onChange={setTab} flush
-          options={[{ value: 'me', label: t('Xe của tôi · {n}', { n: mine.length }) }, { value: 'admin', label: t('Mẫu chung · {n}', { n: all.length - mine.length }) }]} />
+          options={[{ value: 'me', label: space.name ? t('{name} · {n}', { name: space.name, n: mine.length }) : t('Xe của tôi · {n}', { n: mine.length }) }, { value: 'admin', label: t('Mẫu chung · {n}', { n: all.length - mine.length }) }]} />
       </PageHeader>
       <Page flush={!(tab === 'me' && !mine.length)}>
-        {tab === 'me' && !mine.length ? (
+        {tab === 'me' && !mine.length && locked ? (
+          <Empty icon={<Truck size={28} strokeWidth={1.5} />} title={t('Chủ Family chưa thêm xe nào.')} body={t(LOCKED)} />
+        ) : tab === 'me' && !mine.length ? (
           <Empty icon={<Truck size={28} strokeWidth={1.5} />} title={t('Chưa có xe nào của bạn')}
             body={t('Thêm xe với lòng thùng đo thật — mỗi nhà đóng thùng một khác, số đo thật cho sơ đồ đúng nhất. Hoặc sao một xe mẫu về để sửa.')}
             action={<Button variant="primary" onClick={() => setEdit({ v: null })}><Plus size={18} />{t('Thêm xe')}</Button>} />
