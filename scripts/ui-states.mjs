@@ -23,7 +23,7 @@ export const SHARE_PACK = {
     { id: 'adm-i-tui110', owner: 'admin', code: 'MAU-TUI110', name: 'Thạch túi 110ml x24', l: 310, w: 130, h: 130, kg: 3.08, perPallet: 216, maxLayers: 8, light: true, updatedAt: 0 },
     { id: 'i-test', owner: 'me', code: 'TEST-1', name: 'Test item', l: 400, w: 300, h: 250, kg: 8, perPallet: 60, maxLayers: 6, light: false, updatedAt: 0 },
   ],
-  vehicles: [{ id: 'adm-v-p15t', owner: 'admin', name: 'Xe pallet 15 tấn', plate: '', kind: 'pallet', l: 9600, w: 2400, h: 2600, payloadKg: 15000, updatedAt: 0 }],
+  vehicles: [{ id: 'adm-v-p15t', owner: 'admin', name: 'Xe pallet 15 tấn', plate: '', kind: 'pallet', l: 9600, w: 2350, h: 2600, payloadKg: 15000, updatedAt: 0 }],
   pallet: { l: 1200, w: 1000, maxH: 1650, baseH: 150, kg: 25 },
 }
 /** Mở app bằng link chia sẻ …/s/<mã>; `pack` = null ⇒ máy chủ trả "không có" (link sai / đã xoá). */

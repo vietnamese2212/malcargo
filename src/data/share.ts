@@ -69,6 +69,7 @@ export function cleanPack(x: unknown): SharePack | null {
     pallet: {
       l: opt(p.l, 100, 5000) ?? 1200, w: opt(p.w, 100, 5000) ?? 1000, maxH: opt(p.maxH, 100, 5000) ?? 1650,
       baseH: opt(p.baseH, 0, 1000) ?? 150, kg: opt(p.kg, 0, 1000) ?? 25,
+      ...(opt(p.gap, 0, 500) != null ? { gap: opt(p.gap, 0, 500)! } : {}),
     },
   }
 }

@@ -56,4 +56,6 @@ export interface PalletSettings {
   maxH: number           // cao tối đa pallet hàng lẻ (gồm đế)
   baseH: number          // cao đế pallet
   kg: number             // khối lượng 1 pallet rỗng
+  // khoảng cách / sai số giữa hai pallet kề nhau trên xe, mm — cả dọc lẫn ngang (chủ dự án 01/11); trống / 0 = xếp sát (chủ dự án 02/11)
+  gap?: number
 }

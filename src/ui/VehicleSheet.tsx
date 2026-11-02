@@ -3,7 +3,7 @@ import { Copy, Trash2 } from 'lucide-react'
 import type { Vehicle } from '../data/types'
 import { LOCKED, newId, useCatalogLocked, useData } from '../data/store'
 import { removeCatalog, saveCatalog, useAuth } from '../data/cloud'
-import { palletFloorSlots } from '../engine/loadPlan'
+import { PALLET_GAP, palletFloorSlots } from '../engine/loadPlan'
 import Scene from '../three/LazyScene'
 import { t, tx, untx } from '../i18n'
 import { Badge, Button, Confirm, Field, NumInput, Segmented, Sheet, TextInput, fmtDec, fmtInt } from './kit'
@@ -59,7 +59,7 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
     return bad
   }
   const m3 = dimsOk ? (f.l * f.w * f.h) / 1e9 : 0
-  const slots = dimsOk && f.kind === 'pallet' ? palletFloorSlots({ l: pallet.l, w: pallet.w, h: pallet.maxH, baseH: pallet.baseH, baseColor: '' }, { length: f.l, width: f.w, height: f.h }) : 0
+  const slots = dimsOk && f.kind === 'pallet' ? palletFloorSlots({ l: pallet.l, w: pallet.w, h: pallet.maxH, baseH: pallet.baseH, baseColor: '' }, { length: f.l, width: f.w, height: f.h }, pallet.gap ?? PALLET_GAP) : 0
 
   const save = () => {
     setTried(true)

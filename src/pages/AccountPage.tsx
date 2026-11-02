@@ -116,7 +116,7 @@ export default function AccountPage({ onFamily }: { onFamily?: () => void }) {
           </Row>
 
           <Row title={t('Cỡ pallet')} desc={t('Áp cho mọi chuyến xe pallet.')}>
-            <PalletFields cols="grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" />
+            <PalletFields cols="grid-cols-2 sm:grid-cols-3" />
           </Row>
 
           {space.id === 'me' && (

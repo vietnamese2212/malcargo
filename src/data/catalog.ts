@@ -15,8 +15,8 @@ export const ADMIN_VEHICLES: Vehicle[] = [
   { id: 'adm-v-8t', owner: 'admin', name: 'Xe tải 8 tấn', plate: '', kind: 'loose', l: 7400, w: 2350, h: 2150, payloadKg: 8000, updatedAt: T0 },
   { id: 'adm-v-15t', owner: 'admin', name: 'Xe tải 15 tấn', plate: '', kind: 'loose', l: 9200, w: 2350, h: 2400, payloadKg: 15000, updatedAt: T0 },
   { id: 'adm-v-p8t', owner: 'admin', name: 'Xe pallet 8 tấn', plate: '', kind: 'pallet', l: 7400, w: 2350, h: 2300, payloadKg: 8000, updatedAt: T0 },
-  // lòng 9,6 × 2,4 m (chủ dự án 01/11: "lòng thùng 9m6 đúng rồi", "2m4 không để được 2 pallet 1m2") — chở 17 pallet
-  { id: 'adm-v-p15t', owner: 'admin', name: 'Xe pallet 15 tấn', plate: '', kind: 'pallet', l: 9600, w: 2400, h: 2600, payloadKg: 15000, updatedAt: T0 },
+  // lòng 9,6 × 2,35 m (chủ dự án 02/11: "xếp sát và chỉnh lại lòng thùng 9m6 × 2m35") — 9 quay ngang + 8 quay dọc = 17 pallet
+  { id: 'adm-v-p15t', owner: 'admin', name: 'Xe pallet 15 tấn', plate: '', kind: 'pallet', l: 9600, w: 2350, h: 2600, payloadKg: 15000, updatedAt: T0 },
   // container khô tiêu chuẩn (lòng thùng ISO; tải tối đa 28 tấn — chủ dự án 29/10; 40ft 28,5 tấn — chủ dự án tự sửa mẫu chung 29/10)
   { id: 'adm-v-c20', owner: 'admin', name: 'Container 20ft', plate: '', kind: 'loose', l: 5898, w: 2352, h: 2393, payloadKg: 28000, container: true, updatedAt: T0 },
   { id: 'adm-v-c40', owner: 'admin', name: 'Container 40ft', plate: '', kind: 'loose', l: 12032, w: 2352, h: 2393, payloadKg: 28500, container: true, updatedAt: T0 },
@@ -35,7 +35,7 @@ export const ADMIN_ITEMS: Item[] = [
   { id: 'adm-i-tui110', owner: 'admin', code: 'MAU-TUI110', name: 'Thạch túi 110ml x24', l: 310, w: 130, h: 130, kg: 3.08, perPallet: 216, maxLayers: 8, light: true, updatedAt: T0 },
 ]
 
-export const DEFAULT_PALLET_SETTINGS: PalletSettings = { l: 1200, w: 1000, maxH: 1650, baseH: 150, kg: 25 }
+export const DEFAULT_PALLET_SETTINGS: PalletSettings = { l: 1200, w: 1000, maxH: 1650, baseH: 150, kg: 25, gap: 0 }
 
 // Hai chuyến mẫu cho lần mở đầu tiên — thấy ngay sơ đồ, không phải nhập gì. Đơn NHIỀU MÃ để làm quen bảng
 // Diễn giải (chủ dự án 29/10): xe pallet 17 pallet (6 mã: pallet chẵn, pallet gộp chung — phần lẻ thạch túi nằm

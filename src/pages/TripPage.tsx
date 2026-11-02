@@ -50,7 +50,9 @@ const MENU: { p: PanelName; label: string; icon: typeof Package }[] = [
 ]
 // Lòng thùng hợp lệ (mm) — khớp form Thêm xe
 const OK_L = (n: number) => n >= 500 && n <= 20000, OK_W = (n: number) => n >= 500 && n <= 3500, OK_H = (n: number) => n >= 500 && n <= 4500
-const m = (mm: number) => fmtDec(mm / 1000, 1)
+// mét, tới 2 số lẻ (bỏ số 0 cuối): lòng 2.350 mm phải hiện "2,35" — làm tròn 1 số lẻ ra "2,4" đúng cỡ chủ dự án nói
+// "2m4 không để được 2 pallet 1m2" (02/11)
+const m = (mm: number) => fmtDec(mm / 1000, 2)
 
 export default function TripPage({ id }: { id: string }) {
   // vừa tách chuyến mẫu: đọc NGAY chuyến mới — đường dẫn đổi sau một nhịp; phím gõ nhanh rơi vào nhịp đó mà còn thấy

@@ -84,9 +84,19 @@ for (const st of E.SAMPLE_TRIPS) {
       `${st.name}: ${r.totals.pallets} pallet (cần 17, có pallet gộp, thạch lẻ nằm trên pallet gộp)`)
     const on = run(true)
     invariants(st.name + ' · hàng nhẹ pallet riêng', on)
-    // xe pallet 15 tấn lòng 9,6 × 2,4 m chở tối đa 17 (chủ dự án 01/11: 9 quay ngang + 8 quay dọc) ⇒ bật lên thì pallet
-    // thứ 18 không còn chỗ (báo thiếu 1) — công tắc vẫn thấy khác; chỉ giữ: 18 pallet, thạch đứng riêng
-    ok(r.floorSlots === 17, `${st.name}: xe ${trucks[st.vehicleId].l} × ${trucks[st.vehicleId].w} đếm ${r.floorSlots} chỗ pallet (cần 17)`)
+    // xe pallet 15 tấn lòng 9,6 × 2,35 m xếp sát chở tối đa 17 (chủ dự án 02/11: 9 quay ngang + 8 quay dọc) ⇒ bật lên thì
+    // pallet thứ 18 không còn chỗ (báo thiếu 1) — công tắc vẫn thấy khác; chỉ giữ: 18 pallet, thạch đứng riêng
+    const T15 = trucks[st.vehicleId]
+    ok(r.floorSlots === 17, `${st.name}: xe ${T15.l} × ${T15.w} đếm ${r.floorSlots} chỗ pallet (cần 17)`)
+    // hai làn ép sát hai vách, bề ngang thừa thành rãnh giữa (chủ dự án 02/11)
+    const py0 = Math.min(...r.plan.placed.map(b => b.y)), py1 = Math.max(...r.plan.placed.map(b => b.y + b.w))
+    ok(py0 === 0 && py1 === T15.w, `${st.name}: làn pallet phải sát hai vách — được ${py0} … ${T15.w - py1} mm`)
+    // ô "Khoảng cách / sai số pallet" 5 mm ⇒ làn 1,2 m dọc xe chỉ còn 7 (8 × 1,2 + 7 × 0,005 > 9,6) ⇒ 16 chỗ
+    const g5 = E.computeTrip({ truck: T15, orders: os, pallet: { ...E.DEFAULT_PALLET_SETTINGS, gap: 5 } })
+    invariants(st.name + ' · khoảng cách 5 mm', g5)
+    const near = g5.plan.placed.filter((a, i) => g5.plan.placed.some((b, j) => j > i && Math.min(a.x + a.l, b.x + b.l) - Math.max(a.x, b.x) > 1 && Math.max(b.y - a.y - a.w, a.y - b.y - b.w) < 4.5
+      || j > i && Math.min(a.y + a.w, b.y + b.w) - Math.max(a.y, b.y) > 1 && Math.max(b.x - a.x - a.l, a.x - b.x - b.l) < 4.5))
+    ok(g5.floorSlots === 16 && g5.plan.placedCount === 16 && !near.length, `${st.name} · khoảng cách 5 mm: ${g5.plan.placedCount} pallet, ${g5.floorSlots} chỗ (cần 16), ${near.length} pallet sát hơn 5 mm`)
     ok(on.totals.pallets === 18 && lightIn(on).every(c => c.kind === 'own'), `${st.name}: bật hàng nhẹ pallet riêng ⇒ ${on.totals.pallets} pallet (cần 18, thạch lẻ đứng riêng)`)
   } else {
     ok(r.count.some(c => c.onTopOfOthers && os.some(o => o.lines.some(l => l.item.light && l.item.name === c.label))), `${st.name}: hàng nhẹ không nằm trên nóc`)
@@ -212,12 +222,16 @@ for (const [name, truck, orders] of cases) {
       if (m.mix) ok(r.plan.groups[gi].h <= P.maxH + 0.5, `${name}: ${m.label} cao ${r.plan.groups[gi].h} > ${P.maxH}`)
     }
     for (const [k, n] of remOn) ok(n === 1, `${name}: phần lẻ ${k} vắt qua ${n} pallet`)
-    // LÀN PALLET (chủ dự án 01/11: chia làn nhiều pallet nhất, khe 5 cm giữa hai làn, trong làn nối sát): hai pallet đứng
-    // cạnh nhau (chung một đoạn dọc xe) cách nhau ≥ 5 cm theo bề ngang; không ra ngoài lòng xe
-    const ps = r.plan.placed, T = r.plan.truck
-    const close = ps.filter((a, i) => ps.some((b, j) => j > i && Math.min(a.x + a.l, b.x + b.l) - Math.max(a.x, b.x) > 1 && Math.max(b.y - a.y - a.w, a.y - b.y - b.w) < 49.5))
+    // LÀN PALLET (chủ dự án 01/11: chia làn nhiều pallet nhất; "khoảng cách / sai số giữa các pallet 5mm" — cài đặt
+    // pallet): hai pallet đứng cạnh nhau cách ≥ khoảng cách theo bề ngang, nối nhau trong làn — theo chiều dọc; trong lòng xe
+    const ps = r.plan.placed, T = r.plan.truck, G = P.gap - 0.5
+    const close = ps.filter((a, i) => ps.some((b, j) => {
+      if (j <= i) return false
+      const ovX = Math.min(a.x + a.l, b.x + b.l) - Math.max(a.x, b.x), ovY = Math.min(a.y + a.w, b.y + b.w) - Math.max(a.y, b.y)
+      return (ovX > 1 && Math.max(b.y - a.y - a.w, a.y - b.y - b.w) < G) || (ovY > 1 && Math.max(b.x - a.x - a.l, a.x - b.x - b.l) < G)
+    }))
     ok(!close.length && ps.every(b => b.x >= 0 && b.y >= 0 && b.x + b.l <= T.length + 0.5 && b.y + b.w <= T.width + 0.5),
-      `${name}: ${close.length} pallet cách pallet làn bên dưới 5 cm / ra ngoài lòng xe`)
+      `${name}: ${close.length} pallet cách pallet bên cạnh dưới ${P.gap} mm / ra ngoài lòng xe`)
   }
   const show = r => r.count.map(c => `${c.label}${c.mix ? ' [' + c.mix.map(x => x.n + ' ' + x.label).join(' + ') + ']' : ''}`).join(' · ')
   // Ca ảnh chủ dự án 28/10: chuyến mẫu, xe 5 tấn đổi sang chở pallet

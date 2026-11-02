@@ -132,8 +132,9 @@ export const PAGES: Record<string, string> = {
   'Cỡ pallet': 'Pallet size',
   'Áp cho mọi chuyến xe pallet.': 'Used for every pallet-truck trip.',
   'Cao tối đa (cả đế)': 'Max height (incl. deck)',
-  'Cao tối đa chỉ áp cho pallet gộp hàng lẻ; pallet chẵn cao theo quy cách từng mã.':
-    "Max height only caps mixed pallets of remainders; full pallets follow each item's spec.",
+  'Cao tối đa chỉ áp cho pallet gộp hàng lẻ; pallet chẵn cao theo quy cách từng mã. Khoảng cách: chừa giữa hai pallet kề nhau trên xe, cả dọc lẫn ngang (0 = xếp sát).':
+    "Max height only caps mixed pallets of remainders; full pallets follow each item's spec. Gap: space left between neighbouring pallets on the truck, lengthwise and across (0 = packed tight).",
+  'Khoảng cách / sai số pallet': 'Pallet gap / tolerance',
   'Cài đặt pallet': 'Pallet settings',
   'Cao đế pallet': 'Pallet deck height',
   'Nặng pallet rỗng': 'Empty pallet weight',

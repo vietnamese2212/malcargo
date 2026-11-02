@@ -4,7 +4,7 @@
 // cảnh báo) là tiếng Việt gốc — Worker không biết ngôn ngữ; màn hình dịch bằng `tx()` (luật trong src/i18n/en.ts).
 import {
   cartonsPerPalletEstimate, computeLoadPlan, packPallet as packPalletBy, palletizeGroups, palletFitError, palletsTooTall,
-  palletFloorSlots, placePallets, spreadToDoor, type LoadGroup, type LoadPlan, type PalletSpec, type PalletizeInput,
+  palletFloorSlots, placePallets, spreadToDoor, PALLET_GAP, type LoadGroup, type LoadPlan, type PalletSpec, type PalletizeInput,
 } from './loadPlan'
 export { spreadTarget } from './loadPlan'
 import type { Item, PalletSettings, VehicleKind } from '../data/types'
@@ -76,6 +76,8 @@ const LIGHT_POOL = { key: 'light', label: 'hàng nhẹ' } // i18n-ok
 
 const toSpec = (p: PalletSettings): PalletSpec =>
   ({ l: p.l, w: p.w, h: p.maxH, baseH: p.baseH, baseColor: '#a07a4e', weightKg: p.kg })
+/** Khoảng cách / sai số giữa hai pallet kề nhau (cài đặt pallet; bản lưu cũ chưa có ⇒ 0 = xếp sát). */
+export const palletGap = (p: PalletSettings) => p.gap ?? PALLET_GAP
 
 /** Số thùng / pallet của mã: đã khai thì dùng; chưa khai thì ƯỚC theo cỡ thùng — số thùng gọn trong chân một
  *  lớp × số lớp vừa trần chiều cao pallet (≤ số lớp khai). Lõi coi mã thiếu quy cách là "1 pallet / mã" bất kể
@@ -183,7 +185,7 @@ export function computeTrip(input: TripInput): TripResult {
     const spec = toSpec(pallet)
     const fitErr = palletFitError(spec, T)
     if (fitErr) errors.push(fitErr)
-    floorSlots = fitErr ? null : palletFloorSlots(spec, T)
+    floorSlots = fitErr ? null : palletFloorSlots(spec, T, palletGap(pallet))
     const itemOf = (g: G) => allLines.find(l => l.item.id === g.meta.itemId)?.item
     // Xe pallet: MỌI hàng nằm gọn trên pallet của nó (user 28/10: "hàng trên pallet phải tách biệt với
     // pallet khác" — bỏ kiểu rải thùng rời lên nóc nhiều pallet). Đủ quy cách ⇒ pallet chẵn; phần lẻ:
@@ -251,8 +253,8 @@ export function computeTrip(input: TripInput): TripResult {
     plan = { truck: T, groups, placed: [], leftover: groups.map((g, i) => ({ group: i, count: g.count })).filter(x => x.count > 0),
       stepCount: 0, volumePct: 0, placedCount: 0, totalCount: groups.reduce((s, g) => s + g.count, 0), weightKg: 0, lengthUsedPct: 0 }
   } else {
-    // xe pallet: khe 5 cm giữa các pallet (luật 14 lõi)
-    plan = truck.kind === 'pallet' ? placePallets(T, groups) : computeLoadPlan(T, groups)
+    // xe pallet: chia làn nhiều pallet nhất, chừa khoảng cách / sai số giữa hai pallet kề nhau (luật 14 lõi)
+    plan = truck.kind === 'pallet' ? placePallets(T, groups, palletGap(pallet)) : computeLoadPlan(T, groups)
     // Dự phòng (đo 26/10): hàng nhẹ thùng TO hơn thùng nền nằm ở đơn xếp SAU bị thuật toán bỏ lại
     // toàn bộ dù xe còn chỗ — ca hiếm vì hàng nhẹ thường là túi / hộp nhỏ hơn thùng nền.
     // Không vá lõi (giữ bản chép khớp SUPPLYC): xếp lại các mã đó như hàng thường và NÓI RA.
