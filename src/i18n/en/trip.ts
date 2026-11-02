@@ -69,8 +69,8 @@ export const TRIP: Record<string, string> = {
     'Drag to rotate, pinch or scroll to zoom. The top strip shows pallets, payload % and volume %; "Breakdown" shows each item\'s layers and which pallets are mixed.',
   'Thêm mã, gõ số thùng — sơ đồ tính lại ngay. Nhiều điểm giao thì thêm đơn; đơn giao trước được xếp sát cửa.':
     'Add items and type the carton counts — the plan updates right away. Several drop-offs? Add orders; the first drop-off is loaded by the door.',
-  'Mã hàng, xe, đơn, các chuyến và sao lưu dữ liệu. Mở lại hướng dẫn này cũng ở đây.':
-    'Items, trucks, orders, all trips and data backup. You can reopen this tour here too.',
+  'Mã hàng, xe, đơn, các chuyến và tài khoản. Mở lại hướng dẫn này cũng ở đây.':
+    'Items, trucks, orders, all trips and your account. You can reopen this tour here too.',
   'đang mở': 'open',
   'Chưa chọn xe': 'No truck chosen',
   'Chuyến mặc định của app, không xoá được': 'The app’s default trip, cannot be deleted',
@@ -98,9 +98,7 @@ export const TRIP: Record<string, string> = {
   'Dùng cùng dữ liệu trên điện thoại và máy tính': 'Same data on your phone and computer',
   'Không mất dữ liệu khi xoá trình duyệt, đổi máy': 'No data lost when you clear the browser or change devices',
   'Dữ liệu đang có trên máy này tự chuyển lên tài khoản': 'Data already on this device moves to your account',
-  'Hiện dữ liệu chỉ nằm trong trình duyệt trên máy này. Nên tải file sao lưu định kỳ.':
-    'For now your data is only in this browser on this device. Download a backup file regularly.',
-  'Sao lưu dữ liệu': 'Back up data',
+  'Hiện dữ liệu chỉ nằm trong trình duyệt trên máy này.': 'For now your data is only in this browser on this device.',
   'Tiếp tục với Google': 'Continue with Google',
   'Không đăng nhập vẫn dùng đầy đủ, dữ liệu lưu trên máy này.': 'Everything works without signing in, data is saved on this device.',
   'Chính sách bảo mật': 'Privacy policy',

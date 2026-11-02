@@ -1,15 +1,15 @@
 // Tài khoản & dữ liệu — GỌN (chủ dự án 31/10: "làm gọn gàng lại phần account, info ngắn gọn"): dòng tài khoản (ai đang
 // đăng nhập · đồng bộ · nút) + số dữ liệu của bạn trên một dòng; mỗi khối sau chỉ một tên + một dòng ngắn, nút nằm bên
-// phải (máy tính) — bỏ dải tiêu đề và đoạn giải thích dài.
-import { useRef, useState, type ReactNode } from 'react'
-import { Check, CloudOff, Download, Loader2, LogOut, MessageCircle, Trash2, Upload, UserRound, UsersRound } from 'lucide-react'
-import { exportBackup, isSample, parseBackup, useData, useSpace, type BackupData } from '../data/store'
+// phải (máy tính) — bỏ dải tiêu đề và đoạn giải thích dài. Không còn sao lưu / nạp file (chủ dự án 02/11: sao lưu = đăng nhập
+// Google — dữ liệu tự lưu lên tài khoản).
+import { useState, type ReactNode } from 'react'
+import { Check, CloudOff, Loader2, LogOut, MessageCircle, Trash2, UserRound, UsersRound } from 'lucide-react'
+import { isSample, useData, useSpace } from '../data/store'
 import { signInGoogle, signOut, useAuth } from '../data/cloud'
 import { DEFAULT_PALLET_SETTINGS } from '../data/catalog'
 import { Badge, Button, Confirm, cx, fmtInt } from '../ui/kit'
 import { PalletFields } from '../ui/PalletSettings'
 import { GoogleG, ListCard, Page, PageHeader } from '../ui/Shell'
-import { saveFile } from '../ui/saveFile'
 import { t } from '../i18n'
 
 /** Trạng thái lưu lên tài khoản — dùng chung với bảng tài khoản trên thanh trên. */
@@ -43,22 +43,11 @@ function Row({ title, desc, side, children }: { title: string; desc: ReactNode; 
 export default function AccountPage({ onFamily }: { onFamily?: () => void }) {
   const s = useData()
   const space = useSpace()   // đang mở bộ Family ⇒ số đếm là của Family; không nạp đè / xoá hết dữ liệu chung từ đây
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [pending, setPending] = useState<BackupData | null>(null)
-  const [msg, setMsg] = useState<string | null>(null)
   const [signErr, setSignErr] = useState<string | null>(null)
   const [askReset, setAskReset] = useState(false)
   const { status, user, isAdmin } = useAuth()
   const signedIn = status === 'in' && !!user
 
-  const download = () => saveFile(`${t('malcargo-sao-luu')}-${new Date().toLocaleDateString('en-CA')}.json`,
-    () => new Blob([JSON.stringify(exportBackup(), null, 1)], { type: 'application/json' }))
-  const onFile = async (f: File | undefined) => {
-    if (!f) return
-    const r = parseBackup(await f.text())
-    if (typeof r === 'string') setMsg(r); else { setMsg(null); setPending(r) }
-    if (fileRef.current) fileRef.current.value = ''
-  }
   // chỉ đếm dữ liệu của người dùng — chuyến mẫu + 2 đơn mẫu có sẵn từ đầu, người mới chưa nhập gì không phải thấy "2 đơn · 1 chuyến"
   const [items, vehicles, orders, trips] = [s.items.length, s.vehicles.length, s.orders.filter(o => !isSample(o.id)).length, s.trips.filter(x => !isSample(x.id)).length]
   const counts = [
@@ -106,15 +95,6 @@ export default function AccountPage({ onFamily }: { onFamily?: () => void }) {
               side={<Button className="max-sm:flex-1" onClick={onFamily}><UsersRound size={17} />{t('Mở Family')}</Button>} />
           )}
 
-          <Row title={t('Sao lưu')} desc={t('Giữ một bản phòng khi xoá trình duyệt, hoặc chuyển sang máy khác.')}
-            side={<>
-              <Button variant="primary" className="max-sm:flex-1" onClick={download}><Download size={17} />{t('Tải file sao lưu')}</Button>
-              {space.id === 'me' && <Button className="max-sm:flex-1" onClick={() => fileRef.current?.click()}><Upload size={17} />{t('Nạp từ file')}</Button>}
-              <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={e => onFile(e.target.files?.[0])} />
-            </>}>
-            {msg && <p className="text-sm text-red-700">{msg}</p>}
-          </Row>
-
           <Row title={t('Cỡ pallet')} desc={t('Áp cho mọi chuyến xe pallet.')}>
             <PalletFields cols="grid-cols-2 sm:grid-cols-3" />
           </Row>
@@ -137,13 +117,8 @@ export default function AccountPage({ onFamily }: { onFamily?: () => void }) {
         </section>
       </Page>
 
-      <Confirm open={!!pending} onClose={() => setPending(null)} danger={false} okText={t('Nạp và thay')}
-        title={t('Thay dữ liệu bằng file sao lưu?')}
-        body={pending && t('File có {items} mã · {vehicles} xe · {orders} đơn · {trips} chuyến. Dữ liệu hiện tại trên máy sẽ bị thay.',
-          { items: pending.items.length, vehicles: pending.vehicles.length, orders: pending.orders.filter(o => !isSample(o.id)).length, trips: pending.trips.filter(x => !isSample(x.id)).length })}
-        onOk={() => { if (pending) s.replaceAll(pending) }} />
       <Confirm open={askReset} onClose={() => setAskReset(false)} okText={t('Xoá hết')} title={t('Xoá toàn bộ dữ liệu?')}
-        body={t('Mã hàng, xe, đơn, chuyến của bạn trên máy này sẽ mất. Nên tải file sao lưu trước.')}
+        body={t('Mã hàng, xe, đơn, chuyến của bạn sẽ mất hết, không lấy lại được.')}
         onOk={() => s.replaceAll({ app: 'malcargo', version: 1, items: [], vehicles: [], orders: [], trips: [], pallet: DEFAULT_PALLET_SETTINGS })} />
     </>
   )

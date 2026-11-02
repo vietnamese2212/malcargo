@@ -241,7 +241,7 @@ function FamilyCard({ f }: { f: Family }) {
       </section>
 
       <Confirm open={ask === 'delete'} onClose={() => setAsk(null)} okText={t('Xoá Family')} title={t('Xoá {name}?', { name: f.name })}
-        body={t('Mọi người mất quyền vào, đơn và chuyến của Family bị xoá. Tải file sao lưu trước nếu cần.')}
+        body={t('Mọi người mất quyền vào, đơn và chuyến của Family bị xoá, không lấy lại được.')}
         onOk={() => void run(deleteFamily(f.id))} />
       <Confirm open={ask === 'leave'} onClose={() => setAsk(null)} okText={t('Rời Family')} title={t('Rời {name}?', { name: f.name })}
         body={t('Bạn không còn thấy dữ liệu của Family; dữ liệu "Của tôi" giữ nguyên.')} onOk={() => void run(leaveFamily(f.id))} />

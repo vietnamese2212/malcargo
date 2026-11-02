@@ -757,10 +757,8 @@ function AccountButton({ onData }: { onData: () => void }) {
             <li className="flex gap-2"><Check size={15} className="mt-0.5 shrink-0 text-brand-600" />{t('Dữ liệu đang có trên máy này tự chuyển lên tài khoản')}</li>
           </ul>
           {off ? (
-            <>
-              <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-[12px] text-amber-900">{t('Hiện dữ liệu chỉ nằm trong trình duyệt trên máy này. Nên tải file sao lưu định kỳ.')}</p>
-              <Button className="mt-3 w-full" onClick={onData}>{t('Sao lưu dữ liệu')}</Button>
-            </>
+            // bản chưa nối máy chủ (chỉ lúc phát triển) — không còn sao lưu file (chủ dự án 02/11)
+            <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-[12px] text-amber-900">{t('Hiện dữ liệu chỉ nằm trong trình duyệt trên máy này.')}</p>
           ) : (
             <>
               <button onClick={() => signInGoogle().catch(e => setErr(String(e?.message ?? e)))}

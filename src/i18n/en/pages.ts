@@ -124,11 +124,6 @@ export const PAGES: Record<string, string> = {
   '{n:xe|xe}': '{n:truck|trucks}',
   '{n:đơn|đơn}': '{n:order|orders}',
   '{n:chuyến|chuyến}': '{n:trip|trips}',
-  'Sao lưu': 'Backup',
-  'Giữ một bản phòng khi xoá trình duyệt, hoặc chuyển sang máy khác.': 'Keep a copy in case browser data is cleared, or move to another device.',
-  'malcargo-sao-luu': 'malcargo-backup',
-  'Tải file sao lưu': 'Download backup',
-  'Nạp từ file': 'Restore from file',
   'Cỡ pallet': 'Pallet size',
   'Áp cho mọi chuyến xe pallet.': 'Used for every pallet-truck trip.',
   'Cao tối đa (cả đế)': 'Max height (incl. deck)',
@@ -144,14 +139,10 @@ export const PAGES: Record<string, string> = {
   'Cần quản lý cả kho và vận tải?': 'Need to manage your warehouse and transport too?',
   'SUPPLYC — phần mềm kho & vận tải, dùng thử 3 tháng miễn phí.': 'SUPPLYC — warehouse & transport software, free 3-month trial.',
   'Xem SUPPLYC': 'See SUPPLYC',
-  'Nạp và thay': 'Load and replace',
-  'Thay dữ liệu bằng file sao lưu?': 'Replace your data with the backup file?',
-  'File có {items} mã · {vehicles} xe · {orders} đơn · {trips} chuyến. Dữ liệu hiện tại trên máy sẽ bị thay.':
-    'The file has {items} {items:item|items} · {vehicles} {vehicles:truck|trucks} · {orders} {orders:order|orders} · {trips} {trips:trip|trips}. The current data on this device will be replaced.',
   'Xoá hết': 'Delete all',
   'Xoá toàn bộ dữ liệu?': 'Delete all data?',
-  'Mã hàng, xe, đơn, chuyến của bạn trên máy này sẽ mất. Nên tải file sao lưu trước.':
-    'Your items, trucks, orders and trips on this device will be lost. Download a backup first.',
+  'Mã hàng, xe, đơn, chuyến của bạn sẽ mất hết, không lấy lại được.':
+    'All your items, trucks, orders and trips will be lost for good.',
 
   // chọn nhiều để xoá (Mã hàng / Xe / Đơn hàng / Các chuyến)
   'Chọn tất cả': 'Select all',

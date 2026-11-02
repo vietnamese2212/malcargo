@@ -60,8 +60,8 @@ export const FAMILY: Record<string, string> = {
   'Áp dụng mã': 'Apply code',
   'Xoá Family': 'Delete Family',
   'Rời Family': 'Leave Family',
-  'Mọi người mất quyền vào, đơn và chuyến của Family bị xoá. Tải file sao lưu trước nếu cần.':
-    'Everyone loses access and the Family’s orders and trips are deleted. Download a backup first if needed.',
+  'Mọi người mất quyền vào, đơn và chuyến của Family bị xoá, không lấy lại được.':
+    'Everyone loses access and the Family’s orders and trips are deleted for good.',
   'Rời {name}?': 'Leave {name}?',
   'Bạn không còn thấy dữ liệu của Family; dữ liệu "Của tôi" giữ nguyên.': 'You will no longer see the Family’s data; your own data stays as it is.',
 

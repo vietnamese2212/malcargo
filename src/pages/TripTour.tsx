@@ -17,7 +17,7 @@ const STEPS: { target?: string; title: string; body: string }[] = [
   { target: 'kind', title: 'Thùng rời hay Pallet', body: 'Xếp xá từng thùng, hoặc xếp hàng lên pallet rồi đưa pallet lên xe.' }, // i18n-key
   { target: 'scene', title: 'Sơ đồ 3D', body: 'Kéo để xoay, chụm hoặc lăn chuột để phóng to. Dải trên cùng: số pallet, % tải, % thể tích; "Diễn giải": mỗi mã mấy lớp, pallet nào gộp chung.' }, // i18n-key
   { target: 'orders', title: 'Đơn hàng', body: 'Thêm mã, gõ số thùng — sơ đồ tính lại ngay. Nhiều điểm giao thì thêm đơn; đơn giao trước được xếp sát cửa.' }, // i18n-key
-  { target: 'menu', title: 'Danh mục', body: 'Mã hàng, xe, đơn, các chuyến và sao lưu dữ liệu. Mở lại hướng dẫn này cũng ở đây.' }, // i18n-key
+  { target: 'menu', title: 'Danh mục', body: 'Mã hàng, xe, đơn, các chuyến và tài khoản. Mở lại hướng dẫn này cũng ở đây.' }, // i18n-key
 ]
 const seen = () => { try { return !!localStorage.getItem(SEEN) } catch { return true } }
 const markSeen = () => { try { localStorage.setItem(SEEN, '1') } catch { /* chế độ riêng tư — lần sau hiện lại */ } }
