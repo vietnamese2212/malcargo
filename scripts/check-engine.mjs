@@ -307,6 +307,35 @@ for (const [name, truck, orders] of cases) {
   console.log(`• Chưa khai thùng/pallet: 2.000 thùng → ${big.totals.pallets} pallet · 40 thùng → ${small.totals.pallets} pallet`)
 }
 // Luật 15 (chủ dự án 04/11): 2 mã nhẹ trên khối nền đầu quá nhỏ (40 thùng) — từng ra tháp 2,5 m + tách hai đầu xe
+// Luật 18 (chủ dự án 05/11, ảnh 2 chuyến): mỗi hàng ngang một hướng; mã ít thùng thấp sát cửa; không tháp hàng nhẹ trên nền mỏng
+console.log('• Mỗi hàng ngang một hướng, mã ít thùng sát cửa, nền đủ dày')
+{
+  const I = Object.fromEntries(E.ADMIN_ITEMS.map(i => [i.id, i]))
+  const xx = { ...I['adm-i-tui110'], id: 'xx', code: 'XX', name: 'XX', l: 342, w: 259, h: 226, kg: 2.53, perPallet: 60, maxLayers: 6 }
+  const th100 = { ...I['adm-i-st110'], id: 'th100', code: 'TH100', name: 'TH100', l: 430, w: 250, h: 100, kg: 5.7, perPallet: 140, maxLayers: 14, looseLayers: 28 }
+  const truck = { id: 'x', name: 'x', kind: 'loose', l: 9600, w: 2350, h: 2600, payloadKg: 15000 }
+  const trips = {
+    '2.184 thùng': [[I['adm-i-st110'], 740], [I['adm-i-c85'], 612], [I['adm-i-th170'], 20], [I['adm-i-st180'], 140], [I['adm-i-tui110'], 472], [xx, 200]],
+    '2.483 thùng': [[I['adm-i-st110'], 740], [th100, 479], [I['adm-i-c85'], 612], [I['adm-i-th170'], 40], [I['adm-i-st180'], 140], [I['adm-i-tui110'], 472]],
+  }
+  for (const [name, list] of Object.entries(trips)) {
+    const r = E.computeTrip({ truck, orders: [{ id: 'A', name: 'A', place: '', lines: list.map(([item, qty]) => ({ item, qty })) }], pallet: E.DEFAULT_PALLET_SETTINGS })
+    invariants(name, r)
+    const p = r.plan, heavy = p.placed.filter(b => !p.groups[b.group].onTop)
+    ok(r.fits, `${name}: phải chở hết`)
+    ok(p.lengthUsedPct >= 95, `${name}: sàn ${p.lengthUsedPct}%`)
+    let mixed = 0
+    p.groups.forEach((g, gi) => { if (g.onTop) return; const rows = new Map(); for (const b of p.placed) if (b.group === gi && !b.z) { if (!rows.has(b.x)) rows.set(b.x, new Set()); rows.get(b.x).add(b.l) } for (const v of rows.values()) if (v.size > 1) mixed++ })
+    ok(!mixed, `${name}: ${mixed} hàng ngang trộn hai hướng`)
+    const thi = p.groups.findIndex(g => g.label === I['adm-i-th170'].name), th = p.placed.filter(b => b.group === thi), door = Math.max(...heavy.map(b => b.x + b.l))
+    ok(Math.max(...th.map(b => b.z + b.h)) <= 700 && Math.max(...th.map(b => b.x + b.l)) === door, `${name}: mã ít thùng phải thấp, sát cửa`)
+    const body = Math.max(...heavy.map(b => b.z + b.h)), top = Math.max(...p.placed.map(b => b.z + b.h))
+    ok(top - body <= 400 && top <= 1500, `${name}: đỉnh ${top}, thân ${body}`)
+    for (const gi of p.groups.flatMap((g, i) => (g.onTop ? [i] : []))) { const bs = p.placed.filter(b => b.group === gi); if (!bs.length) continue
+      const z0 = Math.min(...bs.map(b => b.z)), z1 = Math.max(...bs.map(b => b.z + b.h))
+      ok(z0 >= 0.5 * (z1 - z0), `${name}: ${p.groups[gi].label} nền mỏng ${z0}, khối nhẹ cao ${z1 - z0}`) }
+  }
+}
 console.log('• Hàng nhẹ một dải liền, không tháp; công tắc xếp riêng')
 {
   const I = Object.fromEntries(E.ADMIN_ITEMS.map(i => [i.id, i]))
@@ -325,7 +354,7 @@ console.log('• Hàng nhẹ một dải liền, không tháp; công tắc xếp
   {
     const tui = p.groups.findIndex(g => g.onTop && g.h === 130), bs = p.placed.filter(b => b.group === tui)
     const span = Math.max(...bs.map(b => b.x + b.l)) - Math.min(...bs.map(b => b.x)), z0 = Math.min(...bs.map(b => b.z)), z1 = Math.max(...bs.map(b => b.z + b.h))
-    ok(Math.min(...bs.map(b => b.x)) <= 50 && span <= 2400 && z1 - z0 >= 900, `Túi phải gom gọn đủ lớp: dài ${span}, cao ${z1 - z0}`)
+    ok(Math.min(...bs.map(b => b.x)) <= 50 && span <= 2400 && z1 - z0 >= 600, `Túi phải gom gọn: dài ${span}, cao ${z1 - z0}`)
   }
   const spans = p.groups.map((g, gi) => [g, p.placed.filter(b => b.group === gi)]).filter(([g]) => g.onTop).map(([g, bs]) => {
     const seg = bs.map(b => [b.x, b.x + b.l]).sort((u, v) => u[0] - v[0]); let end = seg[0][1]

@@ -255,7 +255,7 @@ export function computeTrip(input: TripInput): TripResult {
       stepCount: 0, volumePct: 0, placedCount: 0, totalCount: groups.reduce((s, g) => s + g.count, 0), weightKg: 0, lengthUsedPct: 0 }
   } else {
     // xe pallet: chia làn nhiều pallet nhất, chừa khoảng cách / sai số giữa hai pallet kề nhau (luật 14 lõi)
-    plan = truck.kind === 'pallet' ? placePallets(T, groups, palletGap(pallet)) : computeLoadPlan(T, groups)
+    plan = truck.kind === 'pallet' ? placePallets(T, groups, palletGap(pallet)) : computeLoadPlan(T, groups, { quick: input.quick })
     // Dự phòng (đo 26/10): hàng nhẹ thùng TO hơn thùng nền nằm ở đơn xếp SAU bị thuật toán bỏ lại
     // toàn bộ dù xe còn chỗ — ca hiếm vì hàng nhẹ thường là túi / hộp nhỏ hơn thùng nền.
     // Không vá lõi (giữ bản chép khớp SUPPLYC): xếp lại các mã đó như hàng thường và NÓI RA.
@@ -264,7 +264,7 @@ export function computeTrip(input: TripInput): TripResult {
       const stuck = new Set(plan.leftover.filter(x => groups[x.group].onTop).map(x => x.group))
       if (stuck.size) {
         const retryGroups = groups.map((g, i) => (stuck.has(i) ? { ...g, onTop: false } : g))
-        const retry = computeLoadPlan(T, retryGroups)
+        const retry = computeLoadPlan(T, retryGroups, { quick: input.quick })
         if (leftOf(retry) < leftOf(plan)) {
           plan = retry; gs = retryGroups
           warnings.push(`Không đặt được lên trên hàng khác: ${[...stuck].map(i => groups[i].label).join(', ')} — đã xếp như hàng thường.`) // i18n-ok
