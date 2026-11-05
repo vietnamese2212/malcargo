@@ -176,11 +176,11 @@ export type BandTile = { label: string; value: ReactNode; sub?: ReactNode; tone?
 export function SummaryBand({ tiles, className, square }: { tiles: BandTile[]; className?: string; square?: boolean }) {
   const four = tiles.length >= 4
   return (
-    <div className={cx('grid bg-navy-900 text-white', four ? (square ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4') : tiles.length === 3 ? 'grid-cols-3' : 'grid-cols-2', className)}>
+    <div className={cx('grid bg-navy-900 text-white', four ? (square ? 'grid-cols-2' : tiles.length === 5 ? 'grid-cols-2 sm:grid-cols-5' : 'grid-cols-2 sm:grid-cols-4') : tiles.length === 3 ? 'grid-cols-3' : 'grid-cols-2', className)}>
       {tiles.map((t, i) => (
-        // 4 ô xếp 2 × 2: ô 3 sang hàng mới — bỏ vạch trái, thêm vạch trên
+        // 4 ô trở lên xếp hai cột: ô đầu mỗi hàng bỏ vạch trái, từ hàng hai thêm vạch trên
         <div key={t.label} className={cx('min-w-0 border-white/10 px-4 py-3', i > 0 && 'border-l',
-          four && i === 2 && (square ? 'border-l-0' : 'max-sm:border-l-0'), four && i >= 2 && (square ? 'border-t' : 'max-sm:border-t'))}>
+          four && i > 0 && i % 2 === 0 && (square ? 'border-l-0' : 'max-sm:border-l-0'), four && i >= 2 && (square ? 'border-t' : 'max-sm:border-t'))}>
           <div className="break-words text-[12px] leading-tight text-slate-300">{t.label}</div>
           <div className={cx('num mt-0.5 truncate text-xl font-semibold leading-tight',
             t.tone === 'bad' ? 'text-red-300' : t.tone === 'warn' ? 'text-amber-300' : 'text-white')}>{t.value}</div>
@@ -190,7 +190,7 @@ export function SummaryBand({ tiles, className, square }: { tiles: BandTile[]; c
                 style={{ width: `${Math.min(100, Math.max(0, t.pct))}%` }} />
             </div>
           )}
-          {t.sub && <div className="num mt-1 truncate text-[12px] text-slate-300">{t.sub}</div>}
+          {t.sub && <div className={cx('num mt-1 text-[12px] text-slate-300', tiles.length === 5 ? 'break-words' : 'truncate')}>{t.sub}</div>}
         </div>
       ))}
     </div>

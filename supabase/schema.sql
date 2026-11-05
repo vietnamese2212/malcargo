@@ -156,6 +156,27 @@ create policy "discount_codes: read featured" on public.discount_codes for selec
 drop policy if exists "discount_codes: admin write" on public.discount_codes;
 create policy "discount_codes: admin write" on public.discount_codes for all using (public.is_super_admin()) with check (public.is_super_admin());
 
+-- Khách vãng lai: thiết bị mở app mà chưa từng đăng nhập. Chỉ giữ mã ngẫu nhiên + ngày, không tên, không IP, không dữ liệu nhập.
+-- Không policy: chỉ hàm guest_ping + admin_stats chạm vào. Giữ 90 ngày; tối đa 5.000 thiết bị / ngày (khoá công khai ai cũng gọi được).
+create table if not exists public.guest_visits (
+  device text not null,
+  day date not null default current_date,
+  primary key (device, day)
+);
+create index if not exists guest_visits_day on public.guest_visits (day);
+alter table public.guest_visits enable row level security;
+create or replace function public.guest_ping(p_device text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if p_device is null or p_device !~ '^[0-9a-f-]{36}$' then return; end if;
+  if auth.uid() is not null then delete from guest_visits where device = p_device; return; end if;   -- thiết bị đã đăng nhập: không phải khách
+  if (select count(*) from guest_visits where day = current_date) >= 5000 then return; end if;
+  insert into guest_visits (device) values (p_device) on conflict do nothing;
+  delete from guest_visits where day < current_date - 90;
+end $$;
+revoke all on function public.guest_ping(text) from public;
+grant execute on function public.guest_ping(text) to anon, authenticated;
+
 -- Màn Quản trị: số tổng, chỉ admin gọi được. "Đang dùng" = đăng nhập hoặc lưu dữ liệu trong 30 ngày; "trả phí" = Family còn hạn paid_until.
 create or replace function public.admin_stats() returns jsonb
 language plpgsql stable security definer set search_path = public as $$
@@ -166,6 +187,8 @@ begin
     'new30', (select count(*) from auth.users where created_at >= now() - interval '30 days'),
     'active30', (select count(*) from auth.users u left join public.user_data d on d.user_id = u.id
       where greatest(u.last_sign_in_at, d.updated_at) >= now() - interval '30 days'),
+    'guests30', (select count(distinct device) from public.guest_visits where day >= current_date - 30),
+    'guests_today', (select count(*) from public.guest_visits where day = current_date),
     'families', (select count(*) from public.families),
     'family_people', (select count(*) from public.family_members where status = 'active'),
     'paying_families', (select count(*) from public.families where paid_until >= current_date),
@@ -174,6 +197,41 @@ begin
 end $$;
 revoke all on function public.admin_stats() from public, anon;
 grant execute on function public.admin_stats() to authenticated;
+
+-- Danh sách người dùng + Family: CHỈ super admin. Chỉ trả SỐ đơn / chuyến / mã / xe, không bao giờ trả nội dung (chủ dự án 05/11: "chỉ đếm").
+create or replace function public.admin_count(p jsonb) returns int
+language sql immutable set search_path = public as $$
+  select count(*)::int from jsonb_array_elements(case when jsonb_typeof(p) = 'array' then p else '[]'::jsonb end) e
+  where coalesce(e ->> 'id', '') not like 'sample-%'   -- đơn / chuyến mẫu không tính
+$$;
+revoke all on function public.admin_count(jsonb) from public, anon, authenticated;
+create or replace function public.admin_people() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_super_admin() then raise exception 'not_super'; end if;
+  return jsonb_build_object(
+    'users', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', u.id, 'email', u.email,
+        'name', coalesce(u.raw_user_meta_data ->> 'full_name', u.raw_user_meta_data ->> 'name', ''),
+        'created_at', u.created_at, 'last_used', greatest(u.last_sign_in_at, d.updated_at),
+        'orders', public.admin_count(d.data -> 'orders'), 'trips', public.admin_count(d.data -> 'trips'),
+        'items', public.admin_count(d.data -> 'items'), 'vehicles', public.admin_count(d.data -> 'vehicles'),
+        'families', coalesce((select jsonb_agg(jsonb_build_object('name', f.name, 'role', m.role) order by f.name)
+          from public.family_members m join public.families f on f.id = m.family_id
+          where m.user_id = u.id and m.status = 'active'), '[]'::jsonb)
+      ) order by greatest(u.last_sign_in_at, d.updated_at) desc nulls last, u.created_at desc)
+      from auth.users u left join public.user_data d on d.user_id = u.id), '[]'::jsonb),
+    'families', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', f.id, 'name', f.name, 'created_at', f.created_at, 'paid_until', f.paid_until,
+        'orders', public.admin_count(d.data -> 'orders'), 'trips', public.admin_count(d.data -> 'trips'),
+        'members', coalesce((select jsonb_agg(jsonb_build_object('email', m.email, 'name', m.name, 'role', m.role, 'status', m.status)
+            order by m.role desc, m.status, m.email)   -- chủ trước, người đã vào trước người đang chờ
+          from public.family_members m where m.family_id = f.id), '[]'::jsonb)
+      ) order by f.created_at desc)
+      from public.families f left join public.family_data d on d.family_id = f.id), '[]'::jsonb));
+end $$;
+revoke all on function public.admin_people() from public, anon;
+grant execute on function public.admin_people() to authenticated;
 
 -- giá đang áp cho một Family: { price, people, code, percent, paid_until }
 create or replace function public.family_fee(p_family uuid) returns jsonb

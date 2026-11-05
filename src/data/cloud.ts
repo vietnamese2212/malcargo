@@ -71,7 +71,16 @@ export async function saveCatalog(kind: 'item' | 'vehicle', x: Item | Vehicle): 
   return null
 }
 /** Màn Quản trị: số tổng do hàm máy chủ tính, chỉ admin gọi được. Trả câu lỗi nếu không đọc được. */
-export interface AdminStats { users: number; new30: number; active30: number; families: number; family_people: number; paying_families: number; paying_people: number }
+export interface AdminStats { users: number; new30: number; active30: number; guests30: number; guests_today: number; families: number; family_people: number; paying_families: number; paying_people: number }
+/** Danh sách cho super admin: máy chủ chỉ trả SỐ đơn / chuyến / mã / xe, không trả nội dung. */
+export interface AdminUser { id: string; email: string; name: string; created_at: string; last_used: string | null; orders: number; trips: number; items: number; vehicles: number; families: { name: string; role: 'owner' | 'member' }[] }
+export interface AdminFamily { id: string; name: string; created_at: string; paid_until: string | null; orders: number; trips: number; members: { email: string; name: string | null; role: 'owner' | 'member'; status: 'invited' | 'active' }[] }
+export interface AdminPeople { users: AdminUser[]; families: AdminFamily[] }
+export async function loadAdminPeople(): Promise<AdminPeople | string> {
+  const c = await sb()
+  const { data, error } = await c.rpc('admin_people')
+  return error ? error.message : data as AdminPeople
+}
 export async function loadAdminStats(): Promise<AdminStats | string> {
   const c = await sb()
   const { data, error } = await c.rpc('admin_stats')
@@ -443,6 +452,27 @@ async function onSignedOut() {
   ;[open, ...families.map(f => f.id)].forEach(dropSpace)
 }
 
+// Đếm khách vãng lai: thiết bị chưa từng đăng nhập gửi một mã ngẫu nhiên, mỗi ngày một lần (không tên, không dữ liệu nhập).
+// Đăng nhập ⇒ máy chủ bỏ mã đó khỏi danh sách khách, máy này thôi gửi. Trình duyệt tự động (bot, script kiểm) không đếm.
+const GUEST_KEY = 'malcargo-guest-v1'
+async function countGuest(c: SupabaseClient, signedIn: boolean) {
+  if (navigator.webdriver) return
+  try {
+    const g = JSON.parse(localStorage.getItem(GUEST_KEY) ?? 'null') as { id?: string; day?: string; known?: boolean } | null
+    if (g?.known) return
+    if (signedIn) {
+      if (g?.id) await c.rpc('guest_ping', { p_device: g.id })
+      localStorage.setItem(GUEST_KEY, JSON.stringify({ known: true }))
+      return
+    }
+    const day = new Date().toISOString().slice(0, 10)
+    if (g?.day === day) return
+    const id = g?.id ?? crypto.randomUUID()
+    const { error } = await c.rpc('guest_ping', { p_device: id })
+    if (!error) localStorage.setItem(GUEST_KEY, JSON.stringify({ id, day }))
+  } catch { /* bộ nhớ bị chặn / mất mạng: lần sau */ }
+}
+
 let started = false
 export function initCloud() {
   if (!cloudEnabled || started) return
@@ -458,8 +488,9 @@ export function initCloud() {
       })
     })
     // đợi đổi xong mã đăng nhập rồi mới dọn ?code=… khỏi thanh địa chỉ
-    await c.auth.getSession()
+    const { data: { session } } = await c.auth.getSession()
     if (location.search.includes('code=')) history.replaceState(null, '', location.pathname + location.hash)
+    void countGuest(c, !!session)
   })
   useData.subscribe(() => {
     if (!uid || applying) return
