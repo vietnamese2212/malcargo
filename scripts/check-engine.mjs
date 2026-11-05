@@ -63,6 +63,9 @@ function invariants(name, r) {
 }
 
 const items = Object.fromEntries(E.ADMIN_ITEMS.map(i => [i.id, i]))
+// hai mã admin đã bỏ khỏi mẫu chung (03/11) — giữ làm dữ liệu thử: các ca pallet dưới đây đo theo đúng cỡ của chúng
+items['adm-i-scu180'] = { id: 'adm-i-scu180', owner: 'admin', code: 'MAU-SCU180', name: 'Sữa chua 180ml x48', l: 420, w: 255, h: 130, kg: 10.05, perPallet: 110, maxLayers: 11, light: false, updatedAt: 0 }
+items['adm-i-c100'] = { id: 'adm-i-c100', owner: 'admin', code: 'MAU-C100', name: 'Sữa chua chai 100ml x48', l: 430, w: 250, h: 100, kg: 5.9, perPallet: 143, maxLayers: 14, light: false, updatedAt: 0 }
 const trucks = Object.fromEntries(E.ADMIN_VEHICLES.map(v => [v.id, v]))
 const orderOf = o => ({ id: o.id, name: o.name, place: o.place, lines: o.lines.map(l => ({ item: items[l.itemId], qty: l.qty })) })
 // bộ đơn thử cố định = 2 đơn mẫu đời trước (xe 5 tấn) — các ca dưới đây đã chốt số trên bộ này
@@ -303,6 +306,39 @@ for (const [name, truck, orders] of cases) {
   ok(big.warnings.some(w => w.includes('ước theo cỡ thùng')), 'chưa khai thùng/pallet: có cảnh báo "đang ước theo cỡ thùng"')
   console.log(`• Chưa khai thùng/pallet: 2.000 thùng → ${big.totals.pallets} pallet · 40 thùng → ${small.totals.pallets} pallet`)
 }
+// Luật 15 (chủ dự án 04/11): 2 mã nhẹ trên khối nền đầu quá nhỏ (40 thùng) — từng ra tháp 2,5 m + tách hai đầu xe
+console.log('• Hàng nhẹ một dải liền, không tháp; công tắc xếp riêng')
+{
+  const I = Object.fromEntries(E.ADMIN_ITEMS.map(i => [i.id, i]))
+  const xx = { ...I['adm-i-tui110'], id: 'xx', code: 'XX', name: 'XX', l: 342, w: 259, h: 226, kg: 2.53, perPallet: 60, maxLayers: 6 }
+  const lines = [[I['adm-i-st110'], 740], [I['adm-i-c85'], 612], [I['adm-i-th170'], 40], [I['adm-i-st180'], 140], [I['adm-i-tui110'], 472], [xx, 190]].map(([item, qty]) => ({ item, qty }))
+  const truck = { id: 'x', name: 'x', kind: 'loose', l: 9600, w: 2350, h: 2600, payloadKg: 15000 }
+  const orders = [{ id: 'A', name: 'A', place: '', lines }]
+  const r = E.computeTrip({ truck, orders, pallet: E.DEFAULT_PALLET_SETTINGS })
+  invariants('2 mã nhẹ', r)
+  const p = r.plan
+  ok(r.fits, '2 mã nhẹ: phải chở hết')
+  const heavyTop = Math.max(...p.placed.filter(b => !p.groups[b.group].onTop).map(b => b.z + b.h))
+  const top = Math.max(...p.placed.map(b => b.z + b.h))
+  ok(top - heavyTop <= 300, `2 mã nhẹ: tháp — đỉnh ${top}, thân hàng ${heavyTop}`)
+  const spans = p.groups.map((g, gi) => [g, p.placed.filter(b => b.group === gi)]).filter(([g]) => g.onTop).map(([g, bs]) => {
+    const seg = bs.map(b => [b.x, b.x + b.l]).sort((u, v) => u[0] - v[0]); let end = seg[0][1]
+    for (const [s, e] of seg) { ok(s - end <= 700, `${g.label}: tách khối ở ${end}–${s}`); end = Math.max(end, e) }
+    return [seg[0][0], end]
+  }).sort((u, v) => u[0] - v[0])
+  ok(spans.length === 2 && spans[1][0] - spans[0][1] <= 700, `2 mã nhẹ phải liền nhau: ${JSON.stringify(spans)}`)
+  ok(p.lengthUsedPct >= 90, `2 mã nhẹ: sàn ${p.lengthUsedPct}% — phải trải theo tải`)
+  const own = E.computeTrip({ truck, orders, pallet: E.DEFAULT_PALLET_SETTINGS, lightOwnLoose: true })
+  invariants('xếp riêng', own)
+  ok(own.fits, 'xếp riêng: phải chở hết')
+  const under = own.plan.placed.filter(b => own.plan.groups[b.group].label === 'XX')
+  ok(under.some(b => b.z === 0), 'xếp riêng: mã nhẹ phải đứng sàn')
+  ok(own.plan.groups.every(g => !g.onTop), 'xếp riêng: không mã nào còn lên nóc')
+  const palOwn = E.computeTrip({ truck: { ...truck, kind: 'pallet' }, orders, pallet: E.DEFAULT_PALLET_SETTINGS, lightOwnLoose: true })
+  const palBase = E.computeTrip({ truck: { ...truck, kind: 'pallet' }, orders, pallet: E.DEFAULT_PALLET_SETTINGS })
+  ok(palOwn.plan.placed.length === palBase.plan.placed.length, 'công tắc xe xá không được đổi xe pallet')
+}
+
 const t0 = performance.now()
 const sug = E.suggestTruck(sample, E.DEFAULT_PALLET_SETTINGS, E.pickPool(E.ADMIN_VEHICLES, undefined))
 console.log(`• Gợi ý xe cho chuyến mẫu: ${sug} (${Math.round(performance.now() - t0)} ms)`)

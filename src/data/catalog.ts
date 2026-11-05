@@ -27,12 +27,14 @@ export const ADMIN_VEHICLES: Vehicle[] = [
 export const ADMIN_ITEMS: Item[] = [
   { id: 'adm-i-st180', owner: 'admin', code: 'MAU-ST180', name: 'Sữa 180ml x48', l: 420, w: 255, h: 130, kg: 9.85, perPallet: 110, maxLayers: 11, light: false, updatedAt: T0 },
   { id: 'adm-i-st110', owner: 'admin', code: 'MAU-ST110', name: 'Sữa 110ml x48', l: 420, w: 255, h: 100, kg: 6.2, perPallet: 140, maxLayers: 14, looseLayers: 28, light: false, updatedAt: T0 },
-  { id: 'adm-i-scu180', owner: 'admin', code: 'MAU-SCU180', name: 'Sữa chua 180ml x48', l: 420, w: 255, h: 130, kg: 10.05, perPallet: 110, maxLayers: 11, light: false, updatedAt: T0 },
   { id: 'adm-i-th170', owner: 'admin', code: 'MAU-TH170', name: 'Sữa thạch 170ml x48', l: 430, w: 250, h: 130, kg: 9.5, perPallet: 100, maxLayers: 11, light: false, updatedAt: T0 },
-  { id: 'adm-i-c100', owner: 'admin', code: 'MAU-C100', name: 'Sữa chua chai 100ml x48', l: 430, w: 250, h: 100, kg: 5.9, perPallet: 143, maxLayers: 14, light: false, updatedAt: T0 },
-  { id: 'adm-i-c85', owner: 'admin', code: 'MAU-C85', name: 'Sữa chai 85ml x48', l: 357, w: 276, h: 105, kg: 5.05, perPallet: 143, maxLayers: 13, light: false, updatedAt: T0 },
+  { id: '961dcd8c-92c7-4f7a-b84f-c5223ec13433', owner: 'admin', code: 'MAU-TH100', name: 'Sữa thạch 100ml x48', l: 430, w: 250, h: 100, kg: 5.7, perPallet: 140, maxLayers: 14, looseLayers: 28, light: false, updatedAt: T0 },
+  { id: '276012d0-01bb-4045-9366-0e1c90bb4905', owner: 'admin', code: 'MAU-CHAI240', name: 'Chai 240ml x24', l: 361, w: 237, h: 151, kg: 6.8, perPallet: 108, maxLayers: 9, light: false, updatedAt: T0 },
+  { id: 'adm-i-c85', owner: 'admin', code: 'MAU-C85', name: 'Sữa chai 85ml x48', l: 357, w: 276, h: 105, kg: 5.3, perPallet: 143, maxLayers: 13, light: false, updatedAt: T0 },
   // túi nhẹ, xếp được lên mặt khối hàng khác
-  { id: 'adm-i-tui110', owner: 'admin', code: 'MAU-TUI110', name: 'Thạch túi 110ml x24', l: 310, w: 130, h: 130, kg: 3.08, perPallet: 216, maxLayers: 8, light: true, updatedAt: T0 },
+  { id: 'adm-i-tui110', owner: 'admin', code: 'MAU-TUI110', name: 'Túi 110ml x24', l: 310, w: 130, h: 130, kg: 3.08, perPallet: 216, maxLayers: 8, light: true, updatedAt: T0 },
+  { id: 'f9428150-8e0d-4f6b-9de5-ec134ff530c8', owner: 'admin', code: 'MAU-XX1', name: 'Xúc xích 57g x24', l: 342, w: 259, h: 226, kg: 2.53, perPallet: 60, maxLayers: 6, light: true, updatedAt: T0 },
+  { id: 'f5b6706e-3abd-4a0c-bbdc-cf0ba56471b2', owner: 'admin', code: 'MAU-XX2', name: 'Xúc xích ly 42g x48', l: 342, w: 259, h: 226, kg: 3.4, perPallet: 60, maxLayers: 6, light: true, updatedAt: T0 },
 ]
 
 export const DEFAULT_PALLET_SETTINGS: PalletSettings = { l: 1200, w: 1000, maxH: 1650, baseH: 150, kg: 25, gap: 0 }
@@ -43,7 +45,7 @@ export const DEFAULT_PALLET_SETTINGS: PalletSettings = { l: 1200, w: 1000, maxH:
 // gần đủ tải 28 tấn (2 mã nặng thành khối + thạch túi nhẹ trên nóc).
 export const SAMPLE_ORDERS: Order[] = [
   { id: 'sample-o1', name: 'Đơn mẫu pallet', place: 'Nhà phân phối A', updatedAt: T0, lines: [
-    { itemId: 'adm-i-st110', qty: 740 }, { itemId: 'adm-i-c100', qty: 479 }, { itemId: 'adm-i-c85', qty: 612 },
+    { itemId: 'adm-i-st110', qty: 740 }, { itemId: '961dcd8c-92c7-4f7a-b84f-c5223ec13433', qty: 479 }, { itemId: 'adm-i-c85', qty: 612 },
     { itemId: 'adm-i-th170', qty: 40 }, { itemId: 'adm-i-st180', qty: 140 }, { itemId: 'adm-i-tui110', qty: 472 },
   ] },
   { id: 'sample-o2', name: 'Đơn mẫu 40ft', place: 'Kho B', updatedAt: T0, lines: [
@@ -80,6 +82,16 @@ export const PREV_SAMPLES: { trips: Trip[]; orders: Order[] }[] = [
       { id: 'sample-o2', name: 'Đơn mẫu 40ft', place: 'Kho B', updatedAt: T0, lines: [
         { itemId: 'adm-i-st180', qty: 1100 }, { itemId: 'adm-i-st110', qty: 900 }, { itemId: 'adm-i-tui110', qty: 600 },
       ] },
+    ],
+  },
+  { // tới 05/11/2026: dòng Sữa chua chai 100ml — admin đã xoá mã này khỏi mẫu chung (03/11)
+    trips: SAMPLE_TRIPS,
+    orders: [
+      { id: 'sample-o1', name: 'Đơn mẫu pallet', place: 'Nhà phân phối A', updatedAt: T0, lines: [
+        { itemId: 'adm-i-st110', qty: 740 }, { itemId: 'adm-i-c100', qty: 479 }, { itemId: 'adm-i-c85', qty: 612 },
+        { itemId: 'adm-i-th170', qty: 40 }, { itemId: 'adm-i-st180', qty: 140 }, { itemId: 'adm-i-tui110', qty: 472 },
+      ] },
+      SAMPLE_ORDERS[1],
     ],
   },
 ]

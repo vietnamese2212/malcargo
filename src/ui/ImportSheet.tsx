@@ -3,10 +3,11 @@
 // nhập gì (báo từng lỗi kèm số dòng), tiêu đề cột sai mẫu ⇒ từ chối cả file.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Download, FileSpreadsheet, Upload, X } from 'lucide-react'
-import { useAllItems, useAllVehicles, useCatalogLocked, useData } from '../data/store'
+import { myCatalog, saveToMine, useAllItems, useAllVehicles, useData, useSpace } from '../data/store'
+import { saveCatalogMany, saveToFamily, useAuth, useFamily } from '../data/cloud'
 import { SHEETS, parseImport, readWorkbook, sampleRows, saveTemplate, splitPasted, type Rows, type SheetKey } from '../data/importer'
 import { t, tx } from '../i18n'
-import { Button, Sheet, Tabs, cx, fmtInt } from './kit'
+import { Button, Confirm, Sheet, Tabs, cx, fmtInt } from './kit'
 
 // "Đã nhập 3 mã hàng, 2 xe" — mỗi trang một cụm đếm (tiếng Anh chia số ít / nhiều)
 const COUNT: Record<SheetKey, string> = {
@@ -22,10 +23,12 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
   const orders = useData(s => s.orders)
   const trips = useData(s => s.trips)
   const importBatch = useData(s => s.importBatch)
-  // thành viên Family: mã hàng, xe do chủ quản lý ⇒ chỉ nhập đơn + chuyến
-  const locked = useCatalogLocked()
-  const sheets = locked ? SHEETS.filter(s => s.key === 'orders' || s.key === 'trips') : SHEETS
-  const first = sheets.some(s => s.key === start) ? start : sheets[0].key
+  const sheets = SHEETS
+  const first = start
+  const admin = useAuth(s => s.isAdmin)
+  const space = useSpace()
+  const ownId = useFamily(s => s.families.find(f => f.role === 'owner')?.id), ownName = useFamily(s => s.families.find(f => f.role === 'owner')?.name)
+  const [ask, setAsk] = useState(false), [busy, setBusy] = useState(false)
   const [tab, setTab] = useState<SheetKey>(first)
   const [text, setText] = useState<Partial<Record<SheetKey, string>>>({})
   const [files, setFiles] = useState<Partial<Record<SheetKey, { name: string; rows: Rows }>>>({})
@@ -35,9 +38,19 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
 
   // ô dán có chữ thì dùng ô dán, không thì lấy file đã nạp cho loại đó
   const src = useMemo(() => Object.fromEntries(SHEETS.map(s => [s.key, !sheets.includes(s) ? [] : text[s.key]?.trim() ? splitPasted(text[s.key]!) : files[s.key]?.rows ?? []])), [text, files, sheets])
-  const res = useMemo(() => parseImport(src, { items, vehicles, orders, trips }), [src, items, vehicles, orders, trips])
-  const n = { items: res.items.length, vehicles: res.vehicles.length, orders: res.orders.length, trips: res.trips.length }
+  const res = useMemo(() => parseImport(src, { items, vehicles, orders, trips }, { admin, ownFamily: ownId ? { id: ownId, name: ownName ?? '' } : null, space, mine: space.id === 'me' ? undefined : myCatalog() }), [src, items, vehicles, orders, trips, admin, ownId, ownName, space])
+  const n = {
+    items: res.items.length + res.toMine.items.length + res.toFamily.items.length + res.toShared.items.length, vehicles: res.vehicles.length + res.toMine.vehicles.length + res.toFamily.vehicles.length + res.toShared.vehicles.length,
+    orders: res.orders.length, trips: res.trips.length,
+  }
   const total = n.items + n.vehicles + n.orders + n.trips, errs = res.errors.length
+  // sẽ vào đâu — nhìn là biết trước khi bấm Nhập (chủ dự án 05/11)
+  const nMine = res.toMine.items.length + res.toMine.vehicles.length, nShared = res.toShared.items.length + res.toShared.vehicles.length, nFam = res.toFamily.items.length + res.toFamily.vehicles.length
+  const nOpen = total - nMine - nShared - nFam
+  const dests = [
+    { label: space.id === 'me' ? t('Của tôi') : space.name ?? 'Family', n: nOpen }, { label: t('Của tôi'), n: nMine }, { label: ownName ?? 'Family', n: nFam }, { label: t('Mẫu chung'), n: nShared },
+  ].filter(d => d.n)
+  const sharedList = [res.toShared.items.length && t(COUNT.items, { n: fmtInt(res.toShared.items.length) }), res.toShared.vehicles.length && t(COUNT.vehicles, { n: fmtInt(res.toShared.vehicles.length) })].filter(Boolean).join(', ')
   const def = SHEETS.find(s => s.key === tab)!
   const name = t(def.title), file = files[tab]
 
@@ -59,7 +72,18 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
   // file mẫu kèm danh sách chọn lấy từ dữ liệu đang có (mã hàng, xe, đơn)
   const template = () => saveTemplate(tab, { items, vehicles, orders }).catch(() => setMsg(t('Không tạo được file mẫu.')))
   // mở từ Bàn xếp xe: đơn chưa thuộc chuyến nào vào chuyến này; chuyến dùng dòng xe của đơn ĐẦU có ghi (trống / sai ⇒ giữ như cũ)
-  const save = () => {
+  const save = async () => {
+    setAsk(false)
+    // Mẫu chung trước: máy chủ từ chối / mất mạng ⇒ báo, chưa ghi gì khác
+    if (nShared || nFam) {
+      setBusy(true)
+      const e = nShared ? await saveCatalogMany('item', res.toShared.items) ?? await saveCatalogMany('vehicle', res.toShared.vehicles) : null
+      if (e) { setBusy(false); setMsg(t('Không ghi được Mẫu chung: {e}', { e })); return }
+      const f = nFam && ownId ? await saveToFamily(ownId, res.toFamily.items, res.toFamily.vehicles) : null
+      setBusy(false)
+      if (f) { setMsg(t('Không ghi được vào Family: {e}', { e: f })); return }
+    }
+    if (nMine) saveToMine(res.toMine.items, res.toMine.vehicles)
     importBatch(res)
     if (trip) {
       const s = useData.getState(), cur = s.trips.find(x => x.id === trip.id)
@@ -77,7 +101,7 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
       footer={<div className="flex gap-2">
         <Button className="flex-1" onClick={onClose}>{t('Huỷ')}</Button>
         {/* còn một lỗi là không nhập gì — sửa file rồi nạp lại */}
-        <Button variant="primary" className="flex-[2]" disabled={!total || !!errs} onClick={save}>
+        <Button variant="primary" className="flex-[2]" disabled={!total || !!errs || busy} onClick={() => (nShared ? setAsk(true) : void save())}>
           {errs ? t('Còn {n} lỗi, chưa nhập được', { n: fmtInt(errs) }) : total ? t('Nhập {n} dòng dữ liệu', { n: fmtInt(total) }) : t('Chưa có gì để nhập')}
         </Button>
       </div>}>
@@ -111,6 +135,8 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
           ))}
         </div>
       )}
+      {!errs && !!dests.length && <p data-dest className="mt-2 break-words text-[13px] font-medium text-slate-900">{t('Sẽ nhập vào: {list}', { list: dests.map(d => `${d.label} (${fmtInt(d.n)})`).join(' · ') })}</p>}
+      {res.denied > 0 && <p className="mt-2 text-[13px] text-slate-700">{t('{n} dòng ghi Admin / Family nhưng tài khoản không có quyền ⇒ vào Của tôi.', { n: fmtInt(res.denied) })}</p>}
       {res.updated > 0 && <p className="mt-2 text-[13px] text-slate-700">{t('{n} dòng trùng với dữ liệu đã có sẽ được cập nhật.', { n: fmtInt(res.updated) })}</p>}
       {!!res.unknownTrucks.length && <p className="mt-2 break-words text-[13px] text-slate-700">{t('Dòng xe không có trong app, bỏ qua: {list}', { list: res.unknownTrucks.join(', ') })}</p>}
       {!!errs && (
@@ -119,6 +145,8 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
           {errs > 20 && <li>{t('… và {n} lỗi khác', { n: fmtInt(errs - 20) })}</li>}
         </ul>
       )}
+      <Confirm open={ask} onClose={() => setAsk(false)} danger={false} title={t('Ghi {list} vào Mẫu chung?', { list: sharedList })}
+        body={t('Mọi người dùng app đều thấy. Mã, xe trùng sẽ bị ghi đè.')} okText={t('Ghi vào Mẫu chung')} onOk={() => void save()} />
     </Sheet>
   )
 }

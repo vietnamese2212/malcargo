@@ -83,7 +83,7 @@ export default function TripPage({ id }: { id: string }) {
   const fallback = useMemo(() => [...candidates].sort((a, b) => b.l * b.w * b.h - a.l * a.w * a.h)[0], [candidates])
   const truck = vehicle ? truckOf(vehicle) : fallback
   const hasCargo = tripOrders.some(o => o.lines.some(l => l.qty > 0))
-  const input: TripInput | null = trip && truck && hasCargo ? { truck, orders: tripOrders, pallet, lightOwnPallet: trip.lightOwnPallet } : null
+  const input: TripInput | null = trip && truck && hasCargo ? { truck, orders: tripOrders, pallet, lightOwnPallet: trip.lightOwnPallet, lightOwnLoose: trip.lightOwnLoose } : null
   // danh sách chọn xe đang mở ⇒ thử hàng trên MỌI xe để đánh dấu ✓ / ✗
   const { result, suggestion, fits, busy, error } = useTripPlan(input, candidates, picking ? allTrucks : undefined)
 
@@ -340,8 +340,8 @@ export default function TripPage({ id }: { id: string }) {
                 onEdit={v => { close(); setEditVehicle({ v }) }} onAdd={() => { close(); setEditVehicle({ v: null }) }}
                 onSpecs={vehicle && !catalogLocked() ? () => { close(); setSpec(true) } : undefined} />
             )}
-            lightOwn={tripOrders.some(o => o.lines.some(l => l.qty > 0 && l.item.light)) ? !!trip.lightOwnPallet : null}
-            onLightOwn={v => upsertTrip({ ...trip, lightOwnPallet: v })} onPallet={() => setPalletOpen(true)} />
+            lightOwn={tripOrders.some(o => o.lines.some(l => l.qty > 0 && l.item.light)) ? !!(truck?.kind === 'pallet' ? trip.lightOwnPallet : trip.lightOwnLoose) : null}
+            onLightOwn={v => upsertTrip({ ...trip, ...(truck?.kind === 'pallet' ? { lightOwnPallet: v } : { lightOwnLoose: v }) })} onPallet={() => setPalletOpen(true)} />
           {/* điện thoại: khung 3D cao cố định (nửa màn trừ một hàng thông số) — dải thông số xuống dòng không bóp khung */}
           <div data-tour="scene" className={cx('relative min-h-0', full ? 'flex-1' : 'h-[calc(50vh-56px)] min-h-[264px] sm:h-[calc(50vh-48px)] lg:h-auto lg:flex-1')}>
             <Scene className="h-full w-full" truck={vehicle ? { l: vehicle.l, w: vehicle.w, h: vehicle.h, container: vehicle.container, plate: vehicle.plate } : null}
@@ -779,7 +779,7 @@ function AccountButton({ onData }: { onData: () => void }) {
 
 // ── Dải thông số xe ở đầu bản vẽ: đọc một dòng là biết đang cấu hình gì; xá/pallet một chạm ──────
 // Không đủ chỗ thì XUỐNG DÒNG (không cắt chữ, không đẩy nút ra ngoài mép). `lightOwn` null = không hiện
-// công tắc hàng nhẹ (chuyến không có hàng nhẹ).
+// công tắc hàng nhẹ (chuyến không có hàng nhẹ). Xe pallet: phần lẻ đứng pallet riêng; xe xá: xếp trên / xếp riêng.
 function SpecStrip({ vehicle, pallet, lightOwn, keep, picker, orders, onSpecs, onKind, onLightOwn, onPallet, onEditOrder }: {
   vehicle?: Vehicle; pallet: { l: number; w: number; maxH: number }; lightOwn: boolean | null; keep: boolean
   picker: (close: () => void) => ReactNode   // danh sách xe thả xuống ngay dưới ô tên xe (như bộ lọc Excel)
@@ -843,9 +843,11 @@ function SpecStrip({ vehicle, pallet, lightOwn, keep, picker, orders, onSpecs, o
             {orderEdit('sm:order-1 sm:ml-auto')}
             {lightOwn != null && (
               <button role="switch" aria-checked={lightOwn} onClick={() => onLightOwn(!lightOwn)}
-                title={lightOwn ? t('Phần lẻ hàng nhẹ đứng pallet riêng') : t('Phần lẻ hàng nhẹ dồn lên trên cùng pallet gộp')}
-                className={cx(chip, 'gap-2 font-semibold max-sm:min-w-0 max-sm:flex-1 max-sm:justify-between', palOnly)}>
-                {t('Hàng nhẹ: pallet riêng')}
+                title={vehicle?.kind === 'pallet'
+                  ? (lightOwn ? t('Phần lẻ hàng nhẹ đứng pallet riêng') : t('Phần lẻ hàng nhẹ dồn lên trên cùng pallet gộp'))
+                  : (lightOwn ? t('Hàng nhẹ đứng khối riêng dưới sàn') : t('Hàng nhẹ xếp phía trên hàng khác, thành một dải liền'))}
+                className={cx(chip, 'gap-2 font-semibold max-sm:min-w-0 max-sm:flex-1 max-sm:justify-between')}>
+                {vehicle?.kind === 'pallet' ? t('Hàng nhẹ: pallet riêng') : t('Hàng nhẹ: xếp riêng')}
                 <span className={cx('relative h-5 w-9 shrink-0 rounded-full transition-colors', lightOwn ? 'bg-brand-500' : 'bg-slate-300')}>
                   <span className={cx('absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform', lightOwn && 'translate-x-4')} />
                 </span>

@@ -244,7 +244,7 @@ for (const [hash, label] of [['#/trip/sample-t1', 'chuyến mẫu'], ['#/order/s
   await q.getByRole('button', { name: /^Sửa đơn Đơn mẫu pallet/ }).click()
   const sheet = q.locator('[data-sheet]')
   await sheet.getByLabel('Số thùng Sữa 180ml x48').fill('99')
-  await sheet.getByRole('button', { name: 'Bỏ Thạch túi 110ml x24 khỏi đơn' }).click()
+  await sheet.getByRole('button', { name: 'Bỏ Túi 110ml x24 khỏi đơn' }).click()
   await sheet.getByRole('button', { name: 'Lưu', exact: true }).click(); await q.waitForTimeout(500)
   const st = await q.evaluate(() => JSON.parse(localStorage.getItem('malcargo-data-v1')).state)
   const o = st.orders.find(x => !x.id.startsWith('sample-') && x.name === 'Đơn 1')

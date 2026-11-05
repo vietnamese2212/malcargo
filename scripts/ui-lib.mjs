@@ -50,6 +50,9 @@ export async function launch() {
   const open = b.newContext.bind(b)
   b.newContext = async ({ freshTour, ...opts } = {}) => {
     const ctx = await open(opts)
+    // Mẫu chung: bảng trống ⇒ app dùng mẫu mặc định (catalog.ts) — kết quả kiểm không đổi theo việc admin vừa sửa mẫu
+    // trên máy chủ thật (04/11: đổi tên / bỏ mã mẫu làm ui-flow, ui-keyboard đỏ). Soi mẫu thật: UI_REAL_CATALOG=1.
+    if (!process.env.UI_REAL_CATALOG) await ctx.route('**/rest/v1/catalog*', r => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }))
     await ctx.addInitScript(([l, tour]) => {
       try {
         localStorage.setItem('malcargo-lang-v1', JSON.stringify({ state: { lang: l }, version: 0 }))

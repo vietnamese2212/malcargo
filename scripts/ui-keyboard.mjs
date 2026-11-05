@@ -61,7 +61,7 @@ await len.blur(); await kb(false); await p.keyboard.press('Escape'); await p.wai
 
 // 3. Bàn xếp xe: gõ số thùng — khung 3D thôi dính
 await p.evaluate(() => window.scrollTo(0, 600)); await p.waitForTimeout(200)
-const qty = p.getByLabel(T('Số thùng {name}', { name: 'Sữa chua chai 100ml x48' }))
+const qty = p.getByLabel(T('Số thùng {name}', { name: 'Sữa thạch 100ml x48' }))
 await qty.focus(); await kb(true)
 const pos = await p.evaluate(() => getComputedStyle(document.querySelector('[data-scene]')).position)
 ok(pos === 'relative', `khung 3D khi bàn phím mở: ${pos}`)

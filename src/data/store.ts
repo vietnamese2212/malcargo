@@ -191,7 +191,7 @@ function resetSamples(d: TO): TO & { dropped: string[] } {
   }
   // chuyến rác: bản sao y hệt một chuyến mẫu (mọi đời) — đơn của nó không nằm ở chuyến nào khác
   const byId = new Map(orders.map(o => [o.id, o]))
-  const isClone = (t: Trip) => !isSample(t.id) && t.name === t.code && !t.lightOwnPallet && SAMPLE_SETS.some(v => v.trips.some(s =>
+  const isClone = (t: Trip) => !isSample(t.id) && t.name === t.code && !t.lightOwnPallet && !t.lightOwnLoose && SAMPLE_SETS.some(v => v.trips.some(s =>
     s.vehicleId === t.vehicleId && s.orderIds.length === t.orderIds.length && s.orderIds.every((sid, i) => {
       const p = v.orders.find(x => x.id === sid), o = byId.get(t.orderIds[i])
       return !!p && !!o && (o.place ?? '') === p.place && (o.name === p.name || DEFAULT_ORDER.test(o.name)) && linesKey(o.lines) === linesKey(p.lines)
@@ -336,6 +336,16 @@ export async function openSpace(info: SpaceInfo) {
   useData.persist.setOptions({ name: key })
   if (safeStorage.getItem(key) != null) await useData.persist.rehydrate()
   else useData.setState(EMPTY)
+}
+/** Thêm / ghi đè mã hàng, xe vào bộ "Của tôi" khi đang mở bộ khác (nhập Excel, dòng "Của tôi"): ghi thẳng bản lưu trên máy;
+ *  lần tới mở "Của tôi" app tự gộp lên tài khoản (`pull` lúc mở bộ). */
+export function saveToMine(items: Item[], vehicles: Vehicle[]) {
+  const key = dataKey('me'), now = Date.now()
+  let saved: { state?: Partial<BackupData>; version?: number } | null = null
+  try { saved = JSON.parse(safeStorage.getItem(key) ?? 'null') } catch { /* hỏng ⇒ bộ trống */ }
+  const s = { ...EMPTY, ...saved?.state }
+  const put = <T extends { id: string }>(list: T[], add: T[]) => add.reduce((l, x) => upsert(l, { ...x, owner: 'me', updatedAt: now } as T), list)
+  safeStorage.setItem(key, JSON.stringify({ state: { ...s, items: put(s.items, items), vehicles: put(s.vehicles, vehicles) }, version: saved?.version ?? 0 }))
 }
 /** Bỏ bản lưu trên máy của một Family (đăng xuất / rời / bị bỏ khỏi Family). */
 export const dropSpace = (id: string) => { if (id !== 'me') safeStorage.removeItem(dataKey(id)) }

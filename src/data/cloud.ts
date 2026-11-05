@@ -70,6 +70,46 @@ export async function saveCatalog(kind: 'item' | 'vehicle', x: Item | Vehicle): 
   useCatalog.setState(kind === 'item' ? { items: next as Item[] } : { vehicles: next as Vehicle[] })
   return null
 }
+/** Chủ Family nhập Excel, dòng "Family" khi bộ Family không mở: ghi thẳng lên máy chủ — trùng mã / biển số ⇒ ghi đè. Không khớp
+ *  phiên bản (ai đó vừa ghi) ⇒ đọc lại, gộp lại (≤ 4 lần). Mở bộ Family thì app kéo bản này về như thường. */
+export async function saveToFamily(fid: string, items: Item[], vehicles: Vehicle[]): Promise<string | null> {
+  const c = await sb(), now = Date.now(), same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+  for (let i = 0; i < 4; i++) {
+    const { data, error } = await c.from('family_data').select('data, version').eq('family_id', fid).maybeSingle()
+    if (error) return error.message
+    const row = data as { data: Partial<BackupData> | null; version: number } | null
+    if (!row) return 'family_data'
+    const d = row.data ?? {}
+    const put = <T extends { id: string }>(list: T[], add: T[], at: (x: T) => T | undefined) =>
+      add.reduce((l, x) => { const o = at(x); return [{ ...x, id: o?.id ?? x.id, owner: 'me', updatedAt: now } as T, ...l.filter(y => y.id !== o?.id)] }, list)
+    const curI = d.items ?? [], curV = d.vehicles ?? []
+    const next = {
+      app: 'malcargo', version: 1, orders: [], trips: [], pallet: useData.getState().pallet, ...d,
+      items: put(curI, items, x => curI.find(y => same(y.code, x.code))),
+      vehicles: put(curV, vehicles, x => curV.find(y => (x.plate ? same(y.plate, x.plate) : !y.plate && same(y.name, x.name)))),
+    }
+    const r = await c.rpc('family_save', { p_family: fid, p_data: next, p_version: row.version })
+    if (r.error) return r.error.message
+    if (r.data != null) return null
+  }
+  return 'version'
+}
+/** Admin nhập Excel vào Mẫu chung: ghi một lần cả danh sách (không được quyền ⇒ máy chủ từ chối, không ghi gì). */
+export async function saveCatalogMany(kind: 'item' | 'vehicle', xs: (Item | Vehicle)[]): Promise<string | null> {
+  if (!xs.length) return null
+  const c = await sb()
+  const cur = useCatalog.getState()
+  const list: (Item | Vehicle)[] = kind === 'item' ? cur.items : cur.vehicles
+  const now = Date.now(), datas = xs.map(x => ({ ...x, owner: 'admin' as const, updatedAt: now }))
+  const { error } = await c.from('catalog').upsert(datas.map((data, i) => {
+    const idx = list.findIndex(y => y.id === data.id)
+    return { id: data.id, kind, data, sort: idx >= 0 ? idx : list.length + i, updated_at: new Date(now).toISOString() }
+  }))
+  if (error) return error.message
+  const next = [...list.map(y => datas.find(d => d.id === y.id) ?? y), ...datas.filter(d => !list.some(y => y.id === d.id))]
+  useCatalog.setState(kind === 'item' ? { items: next as Item[] } : { vehicles: next as Vehicle[] })
+  return null
+}
 export async function removeCatalog(kind: 'item' | 'vehicle', id: string): Promise<string | null> {
   const c = await sb()
   const { error } = await c.from('catalog').delete().eq('id', id)

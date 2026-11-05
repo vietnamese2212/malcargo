@@ -63,7 +63,7 @@ export function cleanPack(x: unknown): SharePack | null {
     trip: {
       id: id(t.id) ?? 'trip', name: str(t.name, 80), ...(typeof t.code === 'string' ? { code: str(t.code, 40) } : {}),
       vehicleId: id(t.vehicleId), orderIds: (t.orderIds as unknown[]).slice(0, 200).map(id).filter((y): y is string => !!y),
-      ...(t.lightOwnPallet === true ? { lightOwnPallet: true } : {}), updatedAt: 0,
+      ...(t.lightOwnPallet === true ? { lightOwnPallet: true } : {}), ...(t.lightOwnLoose === true ? { lightOwnLoose: true } : {}), updatedAt: 0,
     },
     orders: list(x.orders, cleanOrder, 200), items: list(x.items, cleanItem, 1000), vehicles: list(x.vehicles, cleanVehicle, 5),
     pallet: {
@@ -127,7 +127,7 @@ export function shareBatch(p: SharePack, mine: Mine, shared: Shared): { batch: I
   const tc = tripCode(mine.trips)
   const trip: Trip = {
     id: newId(), code: tc, name: !p.trip.name.trim() || isDefaultTripName(p.trip.name) ? tc : p.trip.name,
-    vehicleId, orderIds: orders.map(o => o.id), ...(p.trip.lightOwnPallet ? { lightOwnPallet: true } : {}), updatedAt: now,
+    vehicleId, orderIds: orders.map(o => o.id), ...(p.trip.lightOwnPallet ? { lightOwnPallet: true } : {}), ...(p.trip.lightOwnLoose ? { lightOwnLoose: true } : {}), updatedAt: now,
   }
   return { batch: { items, vehicles, orders, trips: [trip] }, tripId: trip.id }
 }

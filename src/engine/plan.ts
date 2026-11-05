@@ -13,6 +13,7 @@ export interface TruckInput { id: string; name: string; kind: VehicleKind; l: nu
 export interface OrderInput { id: string; name: string; place: string; lines: { item: Item; qty: number }[] }
 export interface TripInput {
   truck: TruckInput; orders: OrderInput[]; pallet: PalletSettings
+  lightOwnLoose?: boolean    // xe xá: hàng nhẹ đứng khối riêng dưới sàn (mặc định xếp phía trên hàng khác)
   lightOwnPallet?: boolean   // xe pallet: phần lẻ hàng nhẹ đứng pallet riêng (mặc định dồn lên trên cùng pallet gộp)
   quick?: boolean            // chỉ cần biết chở hết hay không (gợi ý xe, ✓/✗ từng xe) — bỏ bước trải hàng tới cửa
 }
@@ -89,7 +90,7 @@ export function perPalletOf(item: Item, spec: PalletSpec): number | null {
 type G = LoadGroup & { meta: PlanGroupMeta }
 
 /** Gom đơn thành nhóm (đơn × mã). Đơn GIAO SAU xếp TRƯỚC (vào sâu trong, sát cabin). */
-function cartonGroupsOf(orders: OrderInput[]): G[] {
+function cartonGroupsOf(orders: OrderInput[], lightOwn = false): G[] {
   const out: G[] = []
   const loadOrder = [...orders].reverse()
   loadOrder.forEach((o, oi) => {
@@ -104,7 +105,7 @@ function cartonGroupsOf(orders: OrderInput[]): G[] {
         key: `${doKey}|${it.id}`, label: it.name || it.code, doKey, doLabel: o.name,
         count: ln.qty, l: it.l, w: it.w, h: it.h, weightKg: it.kg, assumed: false,
         // xếp xá chồng được cao hơn trên pallet (chủ dự án 29/10: 110ml pallet 14 lớp, xá 28) — chưa khai thì như pallet
-        maxLayers: it.looseLayers || it.maxLayers, onTop: it.light,
+        maxLayers: it.looseLayers || it.maxLayers, onTop: it.light && !lightOwn,
         meta: { label: it.name || it.code, orderName: o.name, orderId: o.id, itemId: it.id, isPallet: false, colorKey: it.id },
       }
       byItem.set(it.id, g); out.push(g)
@@ -174,7 +175,7 @@ export function computeTrip(input: TripInput): TripResult {
   const T = { length: truck.l, width: truck.w, height: truck.h }
   const errors: string[] = []
   const warnings: string[] = []
-  const cartons = cartonGroupsOf(orders)
+  const cartons = cartonGroupsOf(orders, truck.kind === 'loose' && input.lightOwnLoose)
   const allLines = orders.flatMap(o => o.lines)
   const totals = orderTotals(allLines, pallet)
 
@@ -297,7 +298,7 @@ export function computeTrip(input: TripInput): TripResult {
 const leftOf = (p: LoadPlan) => p.leftover.reduce((s, x) => s + x.count, 0)
 
 /** Xe nhỏ nhất (theo thể tích lòng thùng) chở hết hàng và không vượt tải — cùng kiểu xe. */
-export function suggestTruck(orders: OrderInput[], pallet: PalletSettings, candidates: TruckInput[], lightOwnPallet?: boolean): string | null {
+export function suggestTruck(orders: OrderInput[], pallet: PalletSettings, candidates: TruckInput[], lightOwnPallet?: boolean, lightOwnLoose?: boolean): string | null {
   const t = orderTotals(orders.flatMap(o => o.lines), pallet)
   if (!t.cartons) return null
   const list = candidates
@@ -306,7 +307,7 @@ export function suggestTruck(orders: OrderInput[], pallet: PalletSettings, candi
     .filter(c => !(c.payloadKg && t.kgKnown && t.kg > c.payloadKg))
     .sort((a, b) => a.l * a.w * a.h - b.l * b.w * b.h)
   for (const c of list) {
-    const r = computeTrip({ truck: c, orders, pallet, lightOwnPallet, quick: true })
+    const r = computeTrip({ truck: c, orders, pallet, lightOwnPallet, lightOwnLoose, quick: true })
     if (r.fits) return c.id
   }
   return null
