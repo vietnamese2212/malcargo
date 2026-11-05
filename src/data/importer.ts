@@ -20,17 +20,18 @@ const BOX_L: Rule = { min: 500, max: 20000 }, BOX_W: Rule = { min: 500, max: 350
 const PAYLOAD: Rule = { min: 100, max: 60000 }
 const QTY: Rule = { min: 1, max: 100000, int: true }
 /** Danh sách chọn của cột trong file mẫu: lấy từ dữ liệu trong app (mã hàng, xe, đơn) hoặc giá trị cố định. */
-type Pick = 'codes' | 'trucks' | 'orders' | 'modes' | 'x' | 'scope'
+type Pick = 'codes' | 'trucks' | 'orders' | 'modes' | 'x' | 'scope' | 'scope2'
 
 /** `text`: chữ hiện trên giao diện tiếng Anh khi nghĩa cột khác chữ dịch của `label` (vd cột "Mã hàng" = mã, không phải danh mục).
  *  `old`: tiêu đề cột đời trước vẫn nhận (file mẫu người dùng đã tải về). `late`: cột thêm sau — file mẫu cũ thiếu cột
  *  này vẫn nhận. `rule` / `pick` / `uniq` (không trùng dòng khác): ràng buộc ô. `file`: tên file mẫu của loại này. */
-type Col = { label: string; text?: string; old?: string[]; late?: boolean; req?: boolean; w: number; rule?: Rule; pick?: Pick; uniq?: boolean }
+type Col = { label: string; text?: string; old?: string[]; late?: boolean; req?: boolean; w: number; rule?: Rule; pick?: Pick; uniq?: boolean; scope?: boolean }
 export interface SheetDef { key: SheetKey; title: string; file: string; cols: Col[]; sample: (string | number)[][] }
 
-// Cột cuối file Mã hàng / Xe (chủ dự án 05/11): Admin / Family / Riêng — có quyền thì vào đó, không có quyền thì vẫn vào riêng
-// (`destOf`). Trống = Riêng. Đơn, chuyến không có cột này: luôn vào bộ đang mở.
-const SCOPE_COL: Col = { label: 'Nhập vào (Admin / Family / Riêng)', w: 28, pick: 'scope', late: true } // i18n-key
+// Cột cuối mọi file mẫu (chủ dự án 05/11): có quyền thì vào đó, không có quyền thì vẫn vào riêng (`destOf`). Trống = Riêng.
+// Mã hàng, xe: Admin / Family / Riêng. Đơn, chuyến: Family / Riêng — Mẫu chung không chứa đơn; thành viên Family thêm đơn được.
+const SCOPE_COL: Col = { label: 'Nhập vào (Admin / Family / Riêng)', w: 28, pick: 'scope', late: true, scope: true } // i18n-key
+const SCOPE_COL2: Col = { label: 'Nhập vào (Family / Riêng)', w: 24, pick: 'scope2', late: true, scope: true } // i18n-key
 
 // Thứ tự cột = thứ tự trong file mẫu. Đổi ở đây là đổi cả file mẫu lẫn cách đọc.
 // File mẫu theo ngôn ngữ giao diện: tên trang + tiêu đề cột tiếng Việt (`title`, `label`) hoặc bản tiếng Anh
@@ -67,16 +68,18 @@ export const SHEETS: SheetDef[] = [
     cols: [
       { label: 'Tên đơn', req: true, w: 18 }, { label: 'Điểm giao', w: 24 }, { label: 'Mã hàng', text: 'Mã', req: true, w: 34, pick: 'codes' }, // i18n-key
       { label: 'Số thùng', req: true, w: 10, rule: QTY }, { label: 'Dòng xe', w: 22, pick: 'trucks', late: true }, // i18n-key
+      SCOPE_COL2,
     ],
-    sample: [['Đơn 101', 'Cửa hàng A', 'SP001', 120, 'Xe tải 5 tấn'], ['Đơn 101', 'Cửa hàng A', 'SP002', 30, 'Xe tải 5 tấn'], ['Đơn 102', 'Cửa hàng B', 'SP001', 80, '']], // i18n-ok
+    sample: [['Đơn 101', 'Cửa hàng A', 'SP001', 120, 'Xe tải 5 tấn', 'Riêng'], ['Đơn 101', 'Cửa hàng A', 'SP002', 30, 'Xe tải 5 tấn', 'Riêng'], ['Đơn 102', 'Cửa hàng B', 'SP001', 80, '', 'Riêng']], // i18n-ok
   },
   {
     key: 'trips', title: 'Chuyến', file: 'malcargo-mau-chuyen.xlsx', // i18n-key
     cols: [
       { label: 'Tên chuyến', req: true, w: 18 }, { label: 'Xe (tên hoặc biển số)', w: 22, pick: 'trucks' }, // i18n-key
       { label: 'Tên đơn (giao trước ghi trước)', old: ['Tên đơn'], req: true, w: 30, pick: 'orders' }, // i18n-key
+      SCOPE_COL2,
     ],
-    sample: [['Chuyến sáng 28/10', '29C12345', 'Đơn 101'], ['Chuyến sáng 28/10', '29C12345', 'Đơn 102']], // i18n-ok
+    sample: [['Chuyến sáng 28/10', '29C12345', 'Đơn 101', 'Riêng'], ['Chuyến sáng 28/10', '29C12345', 'Đơn 102', 'Riêng']], // i18n-ok
   },
 ]
 
@@ -105,18 +108,20 @@ export type Rows = (string | number | boolean | null | undefined)[][]
 /** `orderTruck`: id đơn → id xe ghi ở cột Dòng xe; `unknownTrucks`: dòng xe ghi mà app không có (bỏ qua, chỉ báo). */
 export interface ImportResult extends ImportBatch {
   errors: string[]; updated: number; orderTruck: Record<string, string>; unknownTrucks: string[]
-  toMine: { items: Item[]; vehicles: Vehicle[] }     // đang mở Family mà dòng vào "Của tôi" (bộ không mở)
-  toFamily: { items: Item[]; vehicles: Vehicle[] }   // chủ Family ghi "Family" mà bộ Family không mở
+  toMine: ImportBatch                                // đang mở Family mà dòng vào "Của tôi" (bộ không mở)
+  toFamily: ImportBatch                              // ghi "Family" mà bộ Family không mở
   toShared: { items: Item[]; vehicles: Vehicle[] }   // admin ghi "Admin" ⇒ Mẫu chung
+  sharedDup: string[]                                // mã / xe đã có trong Mẫu chung sẽ bị ghi đè — cảnh báo trước khi ghi
   denied: number                                     // số dòng ghi Admin / Family mà không có quyền ⇒ vào Của tôi
 }
-/** Ai đang nhập, ở bộ nào. `mine`: danh mục bộ "Của tôi" khi đang mở Family (để ghi đè đúng mã cũ).
- *  `ownFamily`: Family người này làm chủ (ghi "Family" là vào đó, bộ nào đang mở cũng vậy). */
+type DataSet = { items: Item[]; vehicles: Vehicle[]; orders: Order[]; trips: Trip[] }
+/** Ai đang nhập, ở bộ nào. `mine`: bộ "Của tôi" khi đang mở Family (ghi đè đúng bản cũ, đơn tra đúng mã của bộ đó).
+ *  `family`: Family ghi "Family" sẽ vào khi bộ đó không mở — Family người này làm chủ, không thì Family duy nhất đang ở. */
 export interface ImportCtx {
   admin?: boolean
-  ownFamily?: { id: string; name: string } | null
+  family?: ({ id: string; name: string; role: 'owner' | 'member' } & Partial<DataSet>) | null
   space?: { id: string; role: 'owner' | 'member' | null }
-  mine?: { items: Item[]; vehicles: Vehicle[] }
+  mine?: Partial<DataSet>
 }
 type Dest = 'open' | 'mine' | 'catalog' | 'family'
 type Scope = 'admin' | 'family' | 'mine'
@@ -126,7 +131,14 @@ function destOf(v: Scope, ctx: ImportCtx): { dest: Dest; denied: boolean } {
   const fam = !!ctx.space && ctx.space.id !== 'me', mine: Dest = fam ? 'mine' : 'open'
   if (v === 'admin' && ctx.admin) return { dest: 'catalog', denied: false }
   if (v === 'family' && fam && ctx.space!.role === 'owner') return { dest: 'open', denied: false }
-  if (v === 'family' && ctx.ownFamily) return { dest: 'family', denied: false }
+  if (v === 'family' && ctx.family?.role === 'owner') return { dest: 'family', denied: false }
+  return { dest: mine, denied: v !== 'mine' }
+}
+/** Đơn, chuyến: thành viên Family cũng thêm được. Mẫu chung không chứa đơn ⇒ ghi Admin là không có quyền. */
+function destOfOrder(v: Scope, ctx: ImportCtx): { dest: Dest; denied: boolean } {
+  const fam = !!ctx.space && ctx.space.id !== 'me', mine: Dest = fam ? 'mine' : 'open'
+  if (v === 'family' && fam) return { dest: 'open', denied: false }
+  if (v === 'family' && ctx.family) return { dest: 'family', denied: false }
   return { dest: mine, denied: v !== 'mine' }
 }
 
@@ -155,7 +167,7 @@ const names = (c: Col) => [...heads(c), ...(c.old ?? []).flatMap(o => [o, EN[o] 
 export function headError(k: SheetKey, row: Rows[number] | undefined): string | null {
   for (const [i, c] of cols(k).entries()) {
     // cột Nhập vào là cột cuối: file cũ có cột tự thêm ở vị trí đó vẫn là "thừa cột cuối" (đọc bỏ qua — `scopeOn`)
-    if (names(c).includes(norm(row?.[i])) || (c.late && !str(row?.[i])) || c === SCOPE_COL) continue
+    if (names(c).includes(norm(row?.[i])) || (c.late && !str(row?.[i])) || c.scope) continue
     const got = str(row?.[i])
     return got ? t('cột {col} là "{got}", mẫu là "{want}"', { col: letter(i), got, want: colHead(c) })
       : t('thiếu cột {col} "{want}"', { col: letter(i), want: colHead(c) })
@@ -166,7 +178,7 @@ export function headError(k: SheetKey, row: Rows[number] | undefined): string | 
 /** Có đọc cột Nhập vào không: có dòng tiêu đề thì ô đó phải đúng tên cột; bảng dán không tiêu đề thì theo vị trí. */
 function scopeOn(rows: Rows, k: SheetKey, i: number) {
   const r = rows.find(x => x.some(c => str(c)))
-  return !r || !names(cols(k)[0]).includes(norm(r[0])) || names(SCOPE_COL).includes(norm(r[i]))
+  return !r || !names(cols(k)[0]).includes(norm(r[0])) || names(cols(k)[i]).includes(norm(r[i]))
 }
 
 /** Bỏ dòng trống. Dòng đầu là tiêu đề (ô đầu trùng tên cột đầu, hoặc ô phải là số lại là chữ) ⇒ phải đúng mẫu rồi bỏ đi;
@@ -187,7 +199,7 @@ const SC_MINE = /^(riêng|rieng|của tôi|cua toi|private|mine)$/i // i18n-ok �
 const scopeVal = (v: unknown): Scope | null => { const s = str(v); return !s || SC_MINE.test(s) ? 'mine' : SC_ADMIN.test(s) ? 'admin' : SC_FAMILY.test(s) ? 'family' : null }
 
 export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items: Item[]; vehicles: Vehicle[]; orders: Order[]; trips: Trip[] }, ctx: ImportCtx = {}): ImportResult {
-  const out: ImportResult = { items: [], vehicles: [], orders: [], trips: [], errors: [], updated: 0, orderTruck: {}, unknownTrucks: [], toMine: { items: [], vehicles: [] }, toFamily: { items: [], vehicles: [] }, toShared: { items: [], vehicles: [] }, denied: 0 }
+  const out: ImportResult = { items: [], vehicles: [], orders: [], trips: [], errors: [], updated: 0, orderTruck: {}, unknownTrucks: [], toMine: { items: [], vehicles: [], orders: [], trips: [] }, toFamily: { items: [], vehicles: [], orders: [], trips: [] }, toShared: { items: [], vehicles: [] }, sharedDup: [], denied: 0 }
   const err = (k: SheetKey, line: number, msg: string) =>
     out.errors.push(t('{sheet}, dòng {line}: {msg}', { sheet: t(SHEETS.find(s => s.key === k)!.title), line, msg }))
   // số ở cột i theo `rule` của cột: trống ⇒ null (cột bắt buộc thì báo thiếu); sai ⇒ báo lỗi, trả undefined
@@ -202,13 +214,30 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
   }
   const mineItems = have.items.filter(i => i.owner === 'me'), mineVehicles = have.vehicles.filter(v => v.owner === 'me')
   // danh mục để so trùng theo nơi đến: bộ đang mở · bộ Của tôi (không mở) · Mẫu chung
-  const pool = <T extends Item | Vehicle>(d: Dest, open: T[], mine: T[] | undefined, all: T[]) => d === 'open' ? open : d === 'mine' ? mine ?? [] : d === 'family' ? [] : all.filter(x => x.owner === 'admin')   // family: so trùng lúc ghi (saveToFamily)
+  const pool = <T extends Item | Vehicle>(d: Dest, open: T[], mine: T[] | undefined, fam: T[] | undefined, all: T[]) => d === 'open' ? open : d === 'mine' ? mine ?? [] : d === 'family' ? fam ?? [] : all.filter(x => x.owner === 'admin')
   // cột Nhập vào: ghi sai ⇒ lỗi; trả nơi đến của dòng
   const scope = (k: SheetKey, ln: number, v: unknown): Dest | null => {
     const sv = scopeVal(v)
     if (!sv) { err(k, ln, t('{col}: ghi Admin, Family hoặc {c}', { col: colHead(SCOPE_COL), c: t('Riêng') })); return null }
     return destOf(sv, ctx).dest
   }
+  const scope2 = (k: SheetKey, ln: number, v: unknown): Dest | null => {
+    const sv = scopeVal(v)
+    if (!sv) { err(k, ln, t('{col}: ghi Family hoặc {c}', { col: colHead(SCOPE_COL2), c: t('Riêng') })); return null }
+    return destOfOrder(sv, ctx).dest
+  }
+  const wasDenied2 = (v: unknown) => { const sv = scopeVal(v); return !!sv && destOfOrder(sv, ctx).denied }
+  // đơn, chuyến chỉ tham chiếu được mã, xe, đơn của CHÍNH bộ nó vào + Mẫu chung
+  const sharedOf = <T extends Item | Vehicle>(l: T[]) => l.filter(x => x.owner === 'admin')
+  const itemsFor = (d: Dest): Item[] => d === 'mine' ? [...out.toMine.items, ...out.toShared.items, ...(ctx.mine?.items ?? []), ...sharedOf(have.items)]
+    : d === 'family' ? [...out.toFamily.items, ...out.toShared.items, ...(ctx.family?.items ?? []), ...sharedOf(have.items)]
+    : [...out.items, ...out.toShared.items, ...have.items]
+  const vehiclesFor = (d: Dest): Vehicle[] => d === 'mine' ? [...out.toMine.vehicles, ...out.toShared.vehicles, ...(ctx.mine?.vehicles ?? []), ...sharedOf(have.vehicles)]
+    : d === 'family' ? [...out.toFamily.vehicles, ...out.toShared.vehicles, ...(ctx.family?.vehicles ?? []), ...sharedOf(have.vehicles)]
+    : [...out.vehicles, ...out.toShared.vehicles, ...have.vehicles]
+  const oldOrders = (d: Dest) => d === 'mine' ? ctx.mine?.orders ?? [] : d === 'family' ? ctx.family?.orders ?? [] : have.orders
+  const oldTrips = (d: Dest) => d === 'mine' ? ctx.mine?.trips ?? [] : d === 'family' ? ctx.family?.trips ?? [] : have.trips
+  const scopeCell = (rows: Rows, k: SheetKey, i: number) => { const on = scopeOn(rows, k, i); return (r: Rows[number]) => (on ? r[i] : '') }
   const wasDenied = (v: unknown) => { const sv = scopeVal(v); return !!sv && destOf(sv, ctx).denied }
 
   // ── Mã hàng (một mã chỉ một dòng)
@@ -228,8 +257,9 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     const sc = itemScope ? r[10] : '', dest = scope('items', ln, sc)
     if (l == null || w == null || h == null || [kg, pp, ml, lx].includes(undefined) || badLight || cm || !dest) continue
     if (wasDenied(sc)) out.denied++
-    const old = pool<Item>(dest, mineItems, ctx.mine?.items, have.items).find(i => key(i.code) === key(code))
+    const old = pool<Item>(dest, mineItems, ctx.mine?.items, ctx.family?.items, have.items).find(i => key(i.code) === key(code))
     if (old) out.updated++
+    if (old && dest === 'catalog') out.sharedDup.push(code)
     const row: Item = { id: old?.id ?? newId(), owner: dest === 'catalog' ? 'admin' : 'me', code, name, l, w, h, kg: kg ?? null, perPallet: pp ?? null, maxLayers: ml ?? null, looseLayers: lx ?? null, light: YES.test(light), updatedAt: 0 }
     ;(dest === 'open' ? out.items : dest === 'mine' ? out.toMine.items : dest === 'family' ? out.toFamily.items : out.toShared.items).push(row)
   }
@@ -248,29 +278,37 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     const sc = truckScope ? r[7] : '', dest = scope('vehicles', ln, sc)
     if (l == null || w == null || h == null || kg === undefined || !kind || !dest) continue
     if (wasDenied(sc)) out.denied++
-    const old = pool<Vehicle>(dest, mineVehicles, ctx.mine?.vehicles, have.vehicles).find(v => (plate && key(v.plate) === key(plate)) || (!plate && key(v.name) === key(name)))
+    const old = pool<Vehicle>(dest, mineVehicles, ctx.mine?.vehicles, ctx.family?.vehicles, have.vehicles).find(v => (plate && key(v.plate) === key(plate)) || (!plate && key(v.name) === key(name)))
     if (old) out.updated++
+    if (old && dest === 'catalog') out.sharedDup.push(name || plate)
     const row: Vehicle = { id: old?.id ?? newId(), owner: dest === 'catalog' ? 'admin' : 'me', name: name || plate, plate, kind, l, w, h, payloadKg: kg, updatedAt: 0 }
     ;(dest === 'open' ? out.vehicles : dest === 'mine' ? out.toMine.vehicles : dest === 'family' ? out.toFamily.vehicles : out.toShared.vehicles).push(row)
   }
 
   // xe theo biển số, rồi theo tên (tên xe / đơn mẫu khớp cả bản tiếng Anh — file mẫu tiếng Anh ghi tên tiếng Anh)
   const named = (name: string, s: string) => key(name) === key(s) || key(txEn(name)) === key(s)
-  const allVehicles = [...out.vehicles, ...out.toShared.vehicles, ...have.vehicles]
-  const findVehicle = (s: string) => allVehicles.find(v => v.plate && key(v.plate) === key(s)) ?? allVehicles.find(v => named(v.name, s))
+  const findVehicle = (s: string, d: Dest = 'open') => { const l = vehiclesFor(d); return l.find(v => v.plate && key(v.plate) === key(s)) ?? l.find(v => named(v.name, s)) }
 
   // ── Đơn hàng (gom dòng theo tên đơn; cùng mã ghi hai dòng thì cộng dồn; một đơn chỉ một điểm giao;
   // dòng xe: lấy dòng đầu có ghi xe có trong app, ghi sai thì bỏ qua — không chặn)
-  const allItems = [...out.items, ...out.toShared.items, ...have.items]
   // mã → "Mã - Tên" như danh sách chọn (tên mẫu tiếng Việt hay tiếng Anh) → phần trước " - " (tên hàng đã đổi sau khi tải file)
-  const byCode = (c: string) => allItems.find(i => key(i.code) === key(c)) ?? allItems.find(i => key(i.code) === key(`MAU-${c}`))
-  const findItem = (s: string) => byCode(s) ?? allItems.find(i => [i.name, txEn(i.name)].some(n => key(itemLabel(i.code, n)) === key(s)))
-    ?? (s.includes(SEP) ? byCode(s.slice(0, s.indexOf(SEP))) : undefined)
+  const findItem = (s: string, d: Dest) => {
+    const all = itemsFor(d)
+    const byCode = (c: string) => all.find(i => key(i.code) === key(c)) ?? all.find(i => key(i.code) === key(`MAU-${c}`))
+    return byCode(s) ?? all.find(i => [i.name, txEn(i.name)].some(n => key(itemLabel(i.code, n)) === key(s)))
+      ?? (s.includes(SEP) ? byCode(s.slice(0, s.indexOf(SEP))) : undefined)
+  }
   const orderMap = new Map<string, Order>(), placeAt = new Map<string, [string, number]>()
+  const orderDest = new Map<string, Dest>(), orderScope = scopeCell(src.orders ?? [], 'orders', 5)
   for (const [ln, r] of body(src.orders ?? [], 'orders', (l, m) => err('orders', l, m), 3)) {
     const name = str(r[0]), place = str(r[1]), code = str(r[2]), truck = str(r[4])
     if (!name || !code) { err('orders', ln, t('thiếu tên đơn hoặc mã hàng')); continue }
-    const it = findItem(code)
+    const sc = orderScope(r), dest = scope2('orders', ln, sc)
+    if (!dest) continue
+    const d0 = orderDest.get(key(name))
+    if (d0 && d0 !== dest) { err('orders', ln, t('đơn "{name}": các dòng phải cùng nơi nhập vào', { name })); continue }
+    if (!d0) { orderDest.set(key(name), dest); if (wasDenied2(sc)) out.denied++ }
+    const it = findItem(code, dest)
     if (!it) { err('orders', ln, t('không thấy mã hàng "{code}"', { code })); continue }
     const qty = cell('orders', ln, r, 3)
     if (qty == null) continue
@@ -279,7 +317,7 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     if (place && !p0) placeAt.set(key(name), [place, ln])
     let o = orderMap.get(key(name))
     if (!o) {
-      const old = have.orders.find(x => key(x.name) === key(name))
+      const old = oldOrders(dest).find(x => key(x.name) === key(name))
       if (old) out.updated++
       o = { id: old?.id ?? newId(), name, place: place || old?.place || '', lines: [], updatedAt: 0 }
       orderMap.set(key(name), o)
@@ -287,22 +325,28 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     if (place) o.place = place
     const line = o.lines.find(l => l.itemId === it.id)
     if (line) line.qty += qty; else o.lines.push({ itemId: it.id, qty })
-    const v = truck ? findVehicle(truck) : null
+    const v = truck ? findVehicle(truck, dest) : null
     if (v && !out.orderTruck[o.id]) out.orderTruck[o.id] = v.id
     if (truck && !v && !out.unknownTrucks.includes(truck)) out.unknownTrucks.push(truck)
   }
-  out.orders = [...orderMap.values()]
+  const listOf = (d: Dest) => (d === 'mine' ? out.toMine : d === 'family' ? out.toFamily : out)
+  for (const [k, o] of orderMap) listOf(orderDest.get(k)!).orders.push(o)
 
   // ── Chuyến (gom dòng theo tên chuyến, giữ thứ tự dòng = thứ tự giao; một chuyến một xe, mỗi đơn một dòng;
   // không dòng nào ghi xe ⇒ lấy dòng xe của đơn ĐẦU có ghi ở file Đơn hàng)
-  const allOrders = [...out.orders, ...have.orders]
   const tripMap = new Map<string, Trip>(), truckOf = new Map<string, [string, number]>(), orderAt = new Map<string, number>()
+  const tripDest = new Map<string, Dest>(), tripScope = scopeCell(src.trips ?? [], 'trips', 3)
   for (const [ln, r] of body(src.trips ?? [], 'trips', (l, m) => err('trips', l, m))) {
     const name = str(r[0]), vs = str(r[1]), on = str(r[2])
     if (!name || !on) { err('trips', ln, t('thiếu tên chuyến hoặc tên đơn')); continue }
-    const o = allOrders.find(x => named(x.name, on))
+    const sc = tripScope(r), dest = scope2('trips', ln, sc)
+    if (!dest) continue
+    const d0 = tripDest.get(key(name))
+    if (d0 && d0 !== dest) { err('trips', ln, t('chuyến "{name}": các dòng phải cùng nơi nhập vào', { name })); continue }
+    if (!d0) { tripDest.set(key(name), dest); if (wasDenied2(sc)) out.denied++ }
+    const o = [...listOf(dest).orders, ...oldOrders(dest)].find(x => named(x.name, on))
     if (!o) { err('trips', ln, t('không thấy đơn "{name}"', { name: on })); continue }
-    const v = vs ? findVehicle(vs) : null
+    const v = vs ? findVehicle(vs, dest) : null
     if (vs && !v) { err('trips', ln, t('không thấy xe "{name}"', { name: vs })); continue }
     const v0 = truckOf.get(key(name))
     if (vs && v0 && key(v0[0]) !== key(vs)) { err('trips', ln, t('chuyến "{name}": xe khác dòng {line} ("{truck}")', { name, line: v0[1], truck: v0[0] })); continue }
@@ -312,7 +356,7 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     orderAt.set(`${key(name)}|${o.id}`, ln)
     let trip = tripMap.get(key(name))
     if (!trip) {
-      const old = have.trips.find(x => key(x.name) === key(name))
+      const old = oldTrips(dest).find(x => key(x.name) === key(name))
       if (old) out.updated++
       // chuyến đã có: giữ mã chuyến + cài đặt (hàng nhẹ xe pallet…), file chỉ ghi đè xe và đơn
       trip = { ...old, id: old?.id ?? newId(), name, vehicleId: old?.vehicleId ?? null, orderIds: [], updatedAt: 0 }
@@ -325,7 +369,7 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     const v = truckOf.has(k) ? undefined : trip.orderIds.map(id => out.orderTruck[id]).find(Boolean)
     if (v) trip.vehicleId = v
   }
-  out.trips = [...tripMap.values()]
+  for (const [k, trip] of tripMap) listOf(tripDest.get(k)!).trips.push(trip)
   return out
 }
 
@@ -346,7 +390,7 @@ function checks(s: SheetDef, have: Have): { xml: string; lists: string[][] } {
   const pick: Record<Pick, string[]> = {
     codes: uniq(have.items.map(i => itemLabel(i.code, tx(i.name)))), orders: uniq(have.orders.map(o => tx(o.name))),
     trucks: uniq(have.vehicles.flatMap(v => [tx(v.name), v.plate])),   // tên (tên mẫu theo ngôn ngữ) + biển số
-    modes: [tx('Thùng rời'), 'Pallet'], x: ['x'], scope: ['Admin', 'Family', tx('Riêng')], // i18n-ok — giá trị ghi trong file
+    modes: [tx('Thùng rời'), 'Pallet'], x: ['x'], scope: ['Admin', 'Family', tx('Riêng')], scope2: ['Family', tx('Riêng')], // i18n-ok — giá trị ghi trong file
   }
   const lists: string[][] = [], out: string[] = []
   s.cols.forEach((c, i) => {

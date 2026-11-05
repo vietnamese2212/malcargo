@@ -3,6 +3,8 @@
 
 -- ── Admin: ai có email trong bảng này được sửa mẫu chung trên giao diện ──
 create table if not exists public.admins (email text primary key);
+-- super = toàn quyền (giá, mã giảm giá); admin thường: mẫu chung + xem màn Quản trị
+alter table public.admins add column if not exists role text not null default 'admin' check (role in ('super', 'admin'));
 alter table public.admins enable row level security;
 -- mỗi người chỉ thấy dòng của chính mình (đủ để app biết "tôi có phải admin không")
 drop policy if exists "admins: self read" on public.admins;
@@ -48,6 +50,11 @@ grant insert, update, delete on public.catalog to authenticated;
 grant select on public.admins to authenticated;
 grant select, insert, update, delete on public.user_data to authenticated;
 grant execute on function public.is_admin() to anon, authenticated;
+create or replace function public.is_super_admin() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.admins where email = auth.jwt() ->> 'email' and role = 'super')
+$$;
+grant execute on function public.is_super_admin() to anon, authenticated;
 
 -- ── Lưu kiểu SO PHIÊN BẢN: mỗi lần ghi tăng `version`; app ghi kèm số phiên bản đã đọc — người / máy khác vừa ghi trước
 --    thì không khớp ⇒ app kéo bản mới về, gộp từng bản ghi rồi ghi lại (không ai đè mất thay đổi của ai) ──
@@ -143,11 +150,30 @@ create policy "family_data: member read" on public.family_data for select using 
 drop policy if exists "app_settings: read all" on public.app_settings;
 create policy "app_settings: read all" on public.app_settings for select using (true);
 drop policy if exists "app_settings: admin write" on public.app_settings;
-create policy "app_settings: admin write" on public.app_settings for all using (public.is_admin()) with check (public.is_admin());
+create policy "app_settings: admin write" on public.app_settings for all using (public.is_super_admin()) with check (public.is_super_admin());
 drop policy if exists "discount_codes: read featured" on public.discount_codes;
 create policy "discount_codes: read featured" on public.discount_codes for select using ((active and featured) or public.is_admin());
 drop policy if exists "discount_codes: admin write" on public.discount_codes;
-create policy "discount_codes: admin write" on public.discount_codes for all using (public.is_admin()) with check (public.is_admin());
+create policy "discount_codes: admin write" on public.discount_codes for all using (public.is_super_admin()) with check (public.is_super_admin());
+
+-- Màn Quản trị: số tổng, chỉ admin gọi được. "Đang dùng" = đăng nhập hoặc lưu dữ liệu trong 30 ngày; "trả phí" = Family còn hạn paid_until.
+create or replace function public.admin_stats() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'not_admin'; end if;
+  return jsonb_build_object(
+    'users', (select count(*) from auth.users),
+    'new30', (select count(*) from auth.users where created_at >= now() - interval '30 days'),
+    'active30', (select count(*) from auth.users u left join public.user_data d on d.user_id = u.id
+      where greatest(u.last_sign_in_at, d.updated_at) >= now() - interval '30 days'),
+    'families', (select count(*) from public.families),
+    'family_people', (select count(*) from public.family_members where status = 'active'),
+    'paying_families', (select count(*) from public.families where paid_until >= current_date),
+    'paying_people', (select count(*) from public.family_members m join public.families f on f.id = m.family_id
+      where m.status = 'active' and f.paid_until >= current_date));
+end $$;
+revoke all on function public.admin_stats() from public, anon;
+grant execute on function public.admin_stats() to authenticated;
 
 -- giá đang áp cho một Family: { price, people, code, percent, paid_until }
 create or replace function public.family_fee(p_family uuid) returns jsonb
@@ -312,7 +338,7 @@ grant execute on function public.share_create(jsonb) to authenticated;
 grant execute on function public.share_get(text) to anon, authenticated;
 
 -- ── Admin đầu tiên (email dùng để ĐĂNG NHẬP MalCargo bằng Google) ──
-insert into public.admins (email) values ('lam.tranhoang@mal.com.vn') on conflict do nothing;
+insert into public.admins (email, role) values ('lam.tranhoang@mal.com.vn', 'super') on conflict (email) do update set role = 'super';
 
 -- ── Mẫu chung ban đầu (giống bản đóng gói trong src/data/catalog.ts) ──
 -- bộ mã hàng mẫu đời đầu (đồ tiêu dùng chung) đã thay bằng cỡ thùng hàng sữa / đồ uống hộp

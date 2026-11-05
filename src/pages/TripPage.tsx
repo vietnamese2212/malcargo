@@ -41,10 +41,11 @@ import OrdersPage from './OrdersPage'
 import TripsPage from './TripsPage'
 import AccountPage, { SyncStatus } from './AccountPage'
 import FamilyPage, { InvitePrompt } from './FamilyPage'
+import AdminPage from './AdminPage'
 import { TripTour } from './TripTour'
 
 const VIEWS = [['overview', 'Tổng thể'], ['rear', 'Nhìn từ cửa sau'], ['side', 'Nhìn bên hông'], ['top', 'Nhìn từ trên']] as const // i18n-key
-type PanelName = 'items' | 'vehicles' | 'orders' | 'trips' | 'account' | 'family'
+type PanelName = 'items' | 'vehicles' | 'orders' | 'trips' | 'account' | 'family' | 'admin'
 const MENU: { p: PanelName; label: string; icon: typeof Package }[] = [
   { p: 'items', label: 'Mã hàng', icon: Package }, { p: 'vehicles', label: 'Xe', icon: Truck }, { p: 'orders', label: 'Đơn hàng', icon: ClipboardList }, // i18n-key
 ]
@@ -538,6 +539,7 @@ export default function TripPage({ id }: { id: string }) {
         {panel === 'trips' && <TripsPage />}
         {panel === 'account' && <AccountPage onFamily={() => setPanel('family')} />}
         {panel === 'family' && <FamilyPage />}
+        {panel === 'admin' && <AdminPage />}
       </Panel>
       <TripTour open={tour} onOpen={() => setTour(true)} onClose={() => setTour(false)} />
       <ShareSheet open={sharing} onClose={() => setSharing(false)} tripId={trip.id} tripName={trip.name} />
@@ -699,6 +701,11 @@ function MainMenu({ onPanel, onImport, onTour }: { onPanel: (p: PanelName) => vo
           {isAdmin && (
             <MenuItem icon={<Users size={18} strokeWidth={1.75} />} onClick={() => { close(); onPanel('vehicles') }}>
               <span className="flex-1">{t('Mẫu chung')}</span><Badge tone="blue">Admin</Badge>
+            </MenuItem>
+          )}
+          {isAdmin && (
+            <MenuItem icon={<Users size={18} strokeWidth={1.75} />} onClick={() => { close(); onPanel('admin') }}>
+              <span className="flex-1">{t('Quản trị')}</span><Badge tone="blue">Admin</Badge>
             </MenuItem>
           )}
           <a href="https://mal.com.vn" target="_blank" rel="noreferrer" className="mx-2 mb-1 mt-2 block rounded-md bg-navy-950 px-3 py-2.5 text-[12px] leading-snug text-slate-300">

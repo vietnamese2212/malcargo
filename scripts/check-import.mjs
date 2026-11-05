@@ -66,7 +66,7 @@ console.log('• Cột Nhập vào: Admin / Family / Riêng theo quyền')
     ['tiếng Anh Private', 'private', { ...me, admin: true }, 'mở/mở/0'],
   ]) ok(at(go(sc, ctx)) === want && !go(sc, ctx).errors.length, `${name}: ${at(go(sc, ctx))}, mong ${want}`)
   ok(go('Chung', me).errors.length === 2, 'giá trị ngoài 3 loại ⇒ lỗi từng dòng')
-  const own = { ownFamily: { id: 'f1', name: 'X' } }
+  const own = { family: { id: 'f1', name: 'X', role: 'owner', items: [], vehicles: [], orders: [], trips: [] } }
   ok(at(go('Family', { ...me, ...own })) === 'fam/fam/0' && !go('Family', { ...me, ...own }).errors.length, 'chủ Family đang ở bộ Của tôi ghi Family ⇒ vẫn vào Family')
   ok(at(go('Family', { ...fam('member'), ...own })) === 'fam/fam/0', 'chủ Family đang mở Family khác (thành viên) ghi Family ⇒ vào Family mình làm chủ')
   ok(at(go('Family', { ...fam('owner'), ...own })) === 'mở/mở/0', 'chủ Family đang mở chính Family đó ⇒ ghi vào bộ đang mở')
@@ -77,10 +77,42 @@ console.log('• Cột Nhập vào: Admin / Family / Riêng theo quyền')
   ok(go('Admin', { ...me, admin: true }, sample).toShared.items[0].id === 'adm-1' && go('Admin', { ...me, admin: true }, sample).toShared.items[0].owner === 'admin', 'admin ghi Admin ⇒ ghi đè đúng mã mẫu')
   const mine = { space: { id: 'f1', role: 'member' }, mine: { items: [{ id: 'my-1', owner: 'me', code: 'S1' }], vehicles: [] } }
   ok(go('', mine).toMine.items[0].id === 'my-1', 'đang mở Family, dòng Của tôi ⇒ ghi đè đúng mã trong bộ Của tôi')
+  // Cảnh báo trùng Mẫu chung (chủ dự án 05/11): liệt kê đúng dòng sẽ bị ghi đè
+  ok(go('Admin', { ...me, admin: true }, sample).sharedDup.join() === 'S1', 'admin ghi Admin trùng mã mẫu ⇒ sharedDup có S1')
+  ok(!go('Admin', { ...me, admin: true }).sharedDup.length, 'không trùng ⇒ không cảnh báo')
+  // Cột Nhập vào ở file Đơn hàng + Chuyến
+  {
+    const cat = { ...none, items: [{ id: 'adm-1', owner: 'admin', code: 'MAU1', name: 'mẫu' }], vehicles: [{ id: 'v-a', owner: 'admin', name: 'Xe A', plate: '' }] }
+    const go2 = (sc, ctx, have = cat) => I.parseImport({ orders: [head('orders'), ['Đ1', '', 'MAU1', 5, '', sc]], trips: [head('trips'), ['C1', 'Xe A', 'Đ1', sc]] }, have, ctx)
+    const at2 = x => [x.orders.length && 'mở', x.toMine.orders.length && 'tôi', x.toFamily.orders.length && 'fam'].filter(Boolean).join() + '/' + [x.trips.length && 'mở', x.toMine.trips.length && 'tôi', x.toFamily.trips.length && 'fam'].filter(Boolean).join() + '/' + x.denied
+    const fam2 = (role, extra = {}) => ({ space: { id: 'f1', role }, mine: { items: [], vehicles: [], orders: [], trips: [] }, ...extra })
+    const famT = role => ({ family: { id: 'f1', name: 'X', role, items: [], vehicles: [], orders: [], trips: [] } })
+    for (const [name, sc, ctx, want] of [
+      ['người thường, trống', '', me, 'mở/mở/0'],
+      ['người thường, Family ⇒ riêng', 'Family', me, 'mở/mở/2'],
+      ['admin, Admin ⇒ Mẫu chung không chứa đơn: riêng', 'Admin', { ...me, admin: true }, 'mở/mở/2'],
+      ['chủ Family đang ở Của tôi, Family ⇒ Family', 'Family', { ...me, ...famT('owner') }, 'fam/fam/0'],
+      ['thành viên đang ở Của tôi, Family ⇒ Family', 'Family', { ...me, ...famT('member') }, 'fam/fam/0'],
+      ['thành viên đang mở Family, Family ⇒ bộ đang mở', 'Family', fam2('member'), 'mở/mở/0'],
+      ['chủ đang mở Family, Family ⇒ bộ đang mở', 'Family', fam2('owner'), 'mở/mở/0'],
+      ['đang mở Family, trống ⇒ Của tôi', '', fam2('member'), 'tôi/tôi/0'],
+      ['đang mở Family, Riêng ⇒ Của tôi', 'Riêng', fam2('owner'), 'tôi/tôi/0'],
+    ]) { const x = go2(sc, ctx); ok(at2(x) === want && !x.errors.length, `đơn + chuyến · ${name}: ${at2(x)}, mong ${want} ${x.errors.join(';')}`) }
+    // tham chiếu đúng bộ
+    const r1 = I.parseImport({ orders: [head('orders'), ['Đ1', '', 'RIENG1', 5, '', 'Family']] }, { ...none, items: [{ id: 'my-1', owner: 'me', code: 'RIENG1', name: 'r' }] }, { ...me, ...famT('owner') })
+    ok(r1.errors.some(e => /RIENG1/.test(e)), 'đơn vào Family không dùng được mã chỉ có ở Của tôi ⇒ báo không thấy mã')
+    const r2 = I.parseImport({ orders: [head('orders'), ['Đ1', '', 'FAM1', 5, '', 'Family']] }, none, { ...me, family: { ...famT('owner').family, items: [{ id: 'f-1', owner: 'me', code: 'FAM1', name: 'f' }], orders: [{ id: 'o-old', name: 'Đ1', place: '', lines: [] }] } })
+    ok(!r2.errors.length && r2.toFamily.orders[0].lines[0].itemId === 'f-1' && r2.toFamily.orders[0].id === 'o-old' && r2.updated === 1, 'đơn vào Family dùng mã của Family, trùng tên ⇒ ghi đè đúng đơn của Family')
+    const r3 = I.parseImport({ items: [head('items'), ['NEW1', 'A', 420, 255, 100, 6, 140, 14, '', '', 'Family']], orders: [head('orders'), ['Đ1', '', 'NEW1', 5, '', 'Family']], trips: [head('trips'), ['C1', '', 'Đ1', 'Family']] }, none, { ...me, ...famT('owner') })
+    ok(!r3.errors.length && r3.toFamily.orders[0].lines[0].itemId === r3.toFamily.items[0].id && r3.toFamily.trips[0].orderIds[0] === r3.toFamily.orders[0].id, 'cả file ghi Family: đơn dùng mã vừa nhập, chuyến dùng đơn vừa nhập')
+    const r4 = I.parseImport({ orders: [head('orders'), ['Đ1', '', 'MAU1', 5, '', 'Family'], ['Đ1', '', 'MAU1', 3, '', 'Riêng']] }, cat, { ...me, ...famT('owner') })
+    ok(r4.errors.some(e => /Đ1/.test(e)), 'một đơn hai nơi nhập ⇒ lỗi')
+    ok(!parse({ orders: [['Tên đơn', 'Điểm giao', 'Mã hàng', 'Số thùng', 'Dòng xe', 'Ghi chú'], ['Đ9', '', 'MAU1', 5, '', 'gọi trước']] }, cat).errors.length, 'file Đơn cũ có cột Ghi chú ở cuối ⇒ không đọc nhầm')
+  }
   // đơn của Family không dùng được mã vừa vào bộ Của tôi (bộ không mở)
-  const ord = I.parseImport({ items: [head('items'), rowI('S1', '')], orders: [head('orders'), ['Đ1', '', 'S1', 5]] }, none, fam('owner'))
+  const ord = I.parseImport({ items: [head('items'), rowI('S1', '')], orders: [head('orders'), ['Đ1', '', 'S1', 5, '', 'Family']] }, none, fam('owner'))
   ok(ord.errors.some(e => /S1/.test(e)), 'đơn ở Family dùng mã vào Của tôi ⇒ báo không thấy mã')
-  const ord2 = I.parseImport({ items: [head('items'), rowI('S1', 'Family')], orders: [head('orders'), ['Đ1', '', 'S1', 5]] }, none, fam('owner'))
+  const ord2 = I.parseImport({ items: [head('items'), rowI('S1', 'Family')], orders: [head('orders'), ['Đ1', '', 'S1', 5, '', 'Family']] }, none, fam('owner'))
   ok(!ord2.errors.length && ord2.orders[0].lines[0].itemId === ord2.items[0].id, 'đơn ở Family dùng mã ghi Family ⇒ được')
   ok(!parse({ items: [['Mã hàng', 'Tên hàng', 'Dài (mm)', 'Rộng (mm)', 'Cao (mm)', 'Kg/thùng', 'Thùng/pallet', 'Chồng tối đa (lớp)', 'Hàng nhẹ (x)', 'Chồng xá (lớp)', 'Ghi chú'], ['S8', 'A', 420, 255, 100, 6, 140, 14, '', '', 'gọi trước khi giao']] }).errors.length, 'file cũ có cột Ghi chú tự thêm ở cuối ⇒ không đọc nhầm thành Nhập vào')
   ok(!parse({ items: [['Mã hàng', 'Tên hàng', 'Dài (mm)', 'Rộng (mm)', 'Cao (mm)', 'Kg/thùng', 'Thùng/pallet', 'Chồng tối đa (lớp)', 'Hàng nhẹ (x)', 'Chồng xá (lớp)'], ['S9', 'A', 420, 255, 100, 6, 140, 14, '', '']] }).errors.length, 'file mẫu cũ thiếu cột Nhập vào ⇒ vẫn nhận')

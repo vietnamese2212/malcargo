@@ -5,7 +5,7 @@
 // Chưa khai VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY ⇒ app chạy như bước A: chỉ lưu trên máy, mẫu chung lấy từ catalog.ts.
 import { create } from 'zustand'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Item, Vehicle } from './types'
+import type { Item, Order, Trip, Vehicle } from './types'
 import {
   catalogLocked, dropSpace, exportBackup, mergeBackup, myCatalog, openSpace, parseBackup, useCatalog, useData, useSpace, type BackupData,
 } from './store'
@@ -24,8 +24,8 @@ const sb = () => (client ??= import('@supabase/supabase-js').then(m =>
 
 export interface Account { id: string; email: string; name: string; avatar: string | null }
 export type SyncState = 'idle' | 'saving' | 'saved' | 'error'
-interface AuthState { status: 'off' | 'loading' | 'out' | 'in'; user: Account | null; isAdmin: boolean; sync: SyncState }
-export const useAuth = create<AuthState>(() => ({ status: cloudEnabled ? 'loading' : 'off', user: null, isAdmin: false, sync: 'idle' }))
+interface AuthState { status: 'off' | 'loading' | 'out' | 'in'; user: Account | null; isAdmin: boolean; isSuper: boolean; sync: SyncState }
+export const useAuth = create<AuthState>(() => ({ status: cloudEnabled ? 'loading' : 'off', user: null, isAdmin: false, isSuper: false, sync: 'idle' }))
 
 export async function signInGoogle() {
   const c = await sb()
@@ -70,9 +70,24 @@ export async function saveCatalog(kind: 'item' | 'vehicle', x: Item | Vehicle): 
   useCatalog.setState(kind === 'item' ? { items: next as Item[] } : { vehicles: next as Vehicle[] })
   return null
 }
-/** Chủ Family nhập Excel, dòng "Family" khi bộ Family không mở: ghi thẳng lên máy chủ — trùng mã / biển số ⇒ ghi đè. Không khớp
+/** Màn Quản trị: số tổng do hàm máy chủ tính, chỉ admin gọi được. Trả câu lỗi nếu không đọc được. */
+export interface AdminStats { users: number; new30: number; active30: number; families: number; family_people: number; paying_families: number; paying_people: number }
+export async function loadAdminStats(): Promise<AdminStats | string> {
+  const c = await sb()
+  const { data, error } = await c.rpc('admin_stats')
+  return error ? error.message : data as AdminStats
+}
+/** Đọc bộ Family không đang mở — nhập Excel so trùng + tra mã theo bộ này. */
+export async function readFamily(fid: string): Promise<Partial<BackupData> | null> {
+  const c = await sb()
+  const { data, error } = await c.from('family_data').select('data').eq('family_id', fid).maybeSingle()
+  if (error) return null
+  return ((data as { data: Partial<BackupData> | null } | null)?.data) ?? {}
+}
+/** Nhập Excel, dòng "Family" khi bộ Family không mở: ghi thẳng lên máy chủ — trùng mã / biển số ⇒ ghi đè. Không khớp
  *  phiên bản (ai đó vừa ghi) ⇒ đọc lại, gộp lại (≤ 4 lần). Mở bộ Family thì app kéo bản này về như thường. */
-export async function saveToFamily(fid: string, items: Item[], vehicles: Vehicle[]): Promise<string | null> {
+export async function saveToFamily(fid: string, add: { items: Item[]; vehicles: Vehicle[]; orders: Order[]; trips: Trip[] }): Promise<string | null> {
+  const { items, vehicles } = add
   const c = await sb(), now = Date.now(), same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
   for (let i = 0; i < 4; i++) {
     const { data, error } = await c.from('family_data').select('data, version').eq('family_id', fid).maybeSingle()
@@ -83,10 +98,16 @@ export async function saveToFamily(fid: string, items: Item[], vehicles: Vehicle
     const put = <T extends { id: string }>(list: T[], add: T[], at: (x: T) => T | undefined) =>
       add.reduce((l, x) => { const o = at(x); return [{ ...x, id: o?.id ?? x.id, owner: 'me', updatedAt: now } as T, ...l.filter(y => y.id !== o?.id)] }, list)
     const curI = d.items ?? [], curV = d.vehicles ?? []
+    // ai đó vừa thêm đúng mã này giữa lúc đọc và ghi ⇒ giữ id bản trên máy chủ, đơn trong file đổi theo
+    const itemId = new Map(items.map(x => [x.id, curI.find(y => same(y.code, x.code))?.id ?? x.id]))
+    const vehId = new Map(vehicles.map(x => [x.id, curV.find(y => (x.plate ? same(y.plate, x.plate) : !y.plate && same(y.name, x.name)))?.id ?? x.id]))
+    const byId = <T extends { id: string }>(list: T[], more: T[]) => [...more.map(x => ({ ...x, updatedAt: now })), ...list.filter(y => !more.some(x => x.id === y.id))]
     const next = {
-      app: 'malcargo', version: 1, orders: [], trips: [], pallet: useData.getState().pallet, ...d,
+      app: 'malcargo', version: 1, pallet: useData.getState().pallet, ...d,
       items: put(curI, items, x => curI.find(y => same(y.code, x.code))),
       vehicles: put(curV, vehicles, x => curV.find(y => (x.plate ? same(y.plate, x.plate) : !y.plate && same(y.name, x.name)))),
+      orders: byId(d.orders ?? [], add.orders.map(o => ({ ...o, lines: o.lines.map(l => ({ ...l, itemId: itemId.get(l.itemId) ?? l.itemId })) }))),
+      trips: byId(d.trips ?? [], add.trips.map(x => ({ ...x, vehicleId: x.vehicleId && (vehId.get(x.vehicleId) ?? x.vehicleId) }))),
     }
     const r = await c.rpc('family_save', { p_family: fid, p_data: next, p_version: row.version })
     if (r.error) return r.error.message
@@ -400,7 +421,8 @@ async function onSignedIn(u: { id: string; email?: string; user_metadata?: Recor
   })
   const c = await sb()
   const { data } = await c.rpc('is_admin')
-  useAuth.setState({ isAdmin: data === true })
+  const sup = data === true ? await c.rpc('is_super_admin') : null
+  useAuth.setState({ isAdmin: data === true, isSuper: sup?.data === true })
   const before = useSpace.getState().id
   await loadFamilies()   // bộ đang mở là Family không còn tham gia ⇒ đã tự về "Của tôi" (và kéo bản tài khoản về)
   if (useSpace.getState().id === before) { version = null; await pull(true) }
@@ -410,7 +432,7 @@ async function onSignedOut() {
   uid = null
   version = null
   const { families } = useFamily.getState(), open = useSpace.getState().id
-  useAuth.setState({ status: 'out', user: null, isAdmin: false, sync: 'idle' })
+  useAuth.setState({ status: 'out', user: null, isAdmin: false, isSuper: false, sync: 'idle' })
   useFamily.setState({ loaded: true, families: [], invites: [], members: {}, fees: {} })
   // dữ liệu Family cần đăng nhập ⇒ về "Của tôi", bỏ bản Family lưu trên máy (máy dùng chung)
   if (useSpace.getState().id !== 'me') {

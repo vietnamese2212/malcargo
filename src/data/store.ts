@@ -339,16 +339,25 @@ export async function openSpace(info: SpaceInfo) {
 }
 /** Thêm / ghi đè mã hàng, xe vào bộ "Của tôi" khi đang mở bộ khác (nhập Excel, dòng "Của tôi"): ghi thẳng bản lưu trên máy;
  *  lần tới mở "Của tôi" app tự gộp lên tài khoản (`pull` lúc mở bộ). */
-export function saveToMine(items: Item[], vehicles: Vehicle[]) {
+export function saveToMine(d: ImportBatch) {
   const key = dataKey('me'), now = Date.now()
   let saved: { state?: Partial<BackupData>; version?: number } | null = null
   try { saved = JSON.parse(safeStorage.getItem(key) ?? 'null') } catch { /* hỏng ⇒ bộ trống */ }
   const s = { ...EMPTY, ...saved?.state }
   const put = <T extends { id: string }>(list: T[], add: T[]) => add.reduce((l, x) => upsert(l, { ...x, owner: 'me', updatedAt: now } as T), list)
-  safeStorage.setItem(key, JSON.stringify({ state: { ...s, items: put(s.items, items), vehicles: put(s.vehicles, vehicles) }, version: saved?.version ?? 0 }))
+  const stamp = <T extends { id: string }>(list: T[], add: T[]) => add.reduce((l, x) => upsert(l, { ...x, updatedAt: now }), list)
+  safeStorage.setItem(key, JSON.stringify({ state: { ...s, items: put(s.items, d.items), vehicles: put(s.vehicles, d.vehicles), orders: stamp(s.orders, d.orders), trips: stamp(s.trips, d.trips) }, version: saved?.version ?? 0 }))
 }
 /** Bỏ bản lưu trên máy của một Family (đăng xuất / rời / bị bỏ khỏi Family). */
 export const dropSpace = (id: string) => { if (id !== 'me') safeStorage.removeItem(dataKey(id)) }
+/** Cả bộ "Của tôi" khi đang mở bộ khác (đọc bản lưu trên máy) — nhập Excel so trùng + tra mã theo bộ này. */
+export function mySet(): { items: Item[]; vehicles: Vehicle[]; orders: Order[]; trips: Trip[] } {
+  try {
+    const s = JSON.parse(safeStorage.getItem(dataKey('me')) ?? 'null')?.state
+    if (s) return { items: s.items ?? [], vehicles: s.vehicles ?? [], orders: s.orders ?? [], trips: s.trips ?? [] }
+  } catch { /* hỏng ⇒ trống */ }
+  return { items: [], vehicles: [], orders: [], trips: [] }
+}
 /** Mã hàng, xe, cỡ pallet của bộ "Của tôi" (đang mở bộ khác thì đọc bản lưu trên máy) — chép sang Family mới tạo. */
 export function myCatalog(): Pick<BackupData, 'items' | 'vehicles' | 'pallet'> {
   if (useSpace.getState().id === 'me') { const s = useData.getState(); return { items: s.items, vehicles: s.vehicles, pallet: s.pallet } }

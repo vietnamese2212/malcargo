@@ -18,7 +18,7 @@ const H2 = 'break-words text-[15px] font-semibold leading-snug text-slate-900'
 const DESC = 'mt-0.5 break-words text-[13px] leading-snug text-slate-600'
 
 export default function FamilyPage() {
-  const { status, isAdmin } = useAuth()
+  const { status, isSuper } = useAuth()
   const { loaded, families, invites } = useFamily()
   const signedIn = status === 'in'
   const owns = families.some(f => f.role === 'owner')
@@ -42,7 +42,7 @@ export default function FamilyPage() {
             {loaded && !owns && <CreateFamily />}
           </>
         )}
-        {signedIn && isAdmin && <AdminPricing />}
+        {signedIn && isSuper && <AdminPricing />}
       </Page>
     </>
   )
