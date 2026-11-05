@@ -320,7 +320,13 @@ console.log('• Hàng nhẹ một dải liền, không tháp; công tắc xếp
   ok(r.fits, '2 mã nhẹ: phải chở hết')
   const heavyTop = Math.max(...p.placed.filter(b => !p.groups[b.group].onTop).map(b => b.z + b.h))
   const top = Math.max(...p.placed.map(b => b.z + b.h))
-  ok(top - heavyTop <= 300, `2 mã nhẹ: tháp — đỉnh ${top}, thân hàng ${heavyTop}`)
+  ok(top - heavyTop <= 400, `2 mã nhẹ: tháp — đỉnh ${top}, thân hàng ${heavyTop}`)
+  // luật 17: Túi gom gọn sát cabin, gần đủ 8 lớp (cao ~1 m trên nền thạch), không trải khắp xe
+  {
+    const tui = p.groups.findIndex(g => g.onTop && g.h === 130), bs = p.placed.filter(b => b.group === tui)
+    const span = Math.max(...bs.map(b => b.x + b.l)) - Math.min(...bs.map(b => b.x)), z0 = Math.min(...bs.map(b => b.z)), z1 = Math.max(...bs.map(b => b.z + b.h))
+    ok(Math.min(...bs.map(b => b.x)) <= 50 && span <= 2400 && z1 - z0 >= 900, `Túi phải gom gọn đủ lớp: dài ${span}, cao ${z1 - z0}`)
+  }
   const spans = p.groups.map((g, gi) => [g, p.placed.filter(b => b.group === gi)]).filter(([g]) => g.onTop).map(([g, bs]) => {
     const seg = bs.map(b => [b.x, b.x + b.l]).sort((u, v) => u[0] - v[0]); let end = seg[0][1]
     for (const [s, e] of seg) { ok(s - end <= 700, `${g.label}: tách khối ở ${end}–${s}`); end = Math.max(end, e) }
