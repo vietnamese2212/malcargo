@@ -19,8 +19,8 @@ export const SHARE_PACK = {
     { id: 'o-b', name: 'Order B', place: '', lines: [{ itemId: '89e64f1f-548f-487d-aec8-74ce5c0d1580', qty: 60 }], updatedAt: 0 },
   ],
   items: [
-    { id: '17047429-4e68-4236-8d2e-1b91b8eac4be', owner: 'admin', code: 'SP002', name: 'TBA 180', l: 425, w: 260, h: 145, kg: 9.85, perPallet: 110, maxLayers: 10, light: false, updatedAt: 0 },
-    { id: '89e64f1f-548f-487d-aec8-74ce5c0d1580', owner: 'admin', code: 'SP008', name: 'ECOLEAN', l: 315, w: 140, h: 135, kg: 3.08, perPallet: 224, maxLayers: 11, light: true, updatedAt: 0 },
+    { id: '17047429-4e68-4236-8d2e-1b91b8eac4be', owner: 'admin', code: 'SP002', name: 'TBA 180', l: 425, w: 260, h: 145, kg: 10, perPallet: 110, maxLayers: 11, looseLayers: 15, light: false, updatedAt: 0 },
+    { id: '89e64f1f-548f-487d-aec8-74ce5c0d1580', owner: 'admin', code: 'SP008', name: 'ECOLEAN', l: 315, w: 140, h: 135, kg: 3.08, perPallet: 224, maxLayers: 8, looseLayers: 11, light: true, updatedAt: 0 },
     { id: 'i-test', owner: 'me', code: 'TEST-1', name: 'Test item', l: 400, w: 300, h: 250, kg: 8, perPallet: 60, maxLayers: 6, light: false, updatedAt: 0 },
   ],
   vehicles: [{ id: 'adm-v-p15t', owner: 'admin', name: 'Xe pallet 15 tấn', plate: '', kind: 'pallet', l: 9600, w: 2350, h: 2600, payloadKg: 15000, updatedAt: 0 }],

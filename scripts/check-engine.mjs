@@ -76,11 +76,11 @@ const orderOf = o => ({ id: o.id, name: o.name, place: o.place, lines: o.lines.m
 // bộ đơn thử cố định = 2 đơn mẫu đời trước (xe 5 tấn) — các ca dưới đây đã chốt số trên bộ này
 const sample = E.PREV_SAMPLES[0].orders.map(orderOf)
 
-// chuyến mẫu hiện tại (06/11): mỗi đơn 2 mã nhẹ. Xe pallet đủ 17 pallet (chẵn + gộp chung), có phần lẻ hàng nhẹ trên pallet gộp —
-// bật "Hàng nhẹ: pallet riêng" thì đứng riêng (18 pallet, công tắc phải thấy khác); container 40ft trên 90% tải, cả 2 mã nhẹ trên nóc
+// chuyến mẫu hiện tại (06/11): đơn có mã nhẹ (ECOLEAN). Xe pallet đủ 17 pallet (chẵn + gộp chung), có phần lẻ hàng nhẹ trên pallet gộp —
+// bật "Hàng nhẹ: pallet riêng" thì đứng riêng (18 pallet, công tắc phải thấy khác); container 40ft trên 90% tải, hàng nhẹ gom ở đầu xe trên nóc hàng khác
 for (const st of E.SAMPLE_TRIPS) {
   const os = st.orderIds.map(id => orderOf(E.SAMPLE_ORDERS.find(o => o.id === id)))
-  ok(os.flatMap(o => o.lines).every(l => l.item) && os[0].lines.filter(l => l.item.light).length === 2, `${st.name}: mọi mã có trong mẫu chung, đơn có 2 mã nhẹ`)
+  ok(os.flatMap(o => o.lines).every(l => l.item) && os[0].lines.some(l => l.item.light), `${st.name}: mọi mã có trong mẫu chung, đơn có mã nhẹ`)
   const run = lightOwnPallet => E.computeTrip({ truck: trucks[st.vehicleId], orders: os, pallet: E.DEFAULT_PALLET_SETTINGS, lightOwnPallet })
   const r = run(false)
   invariants(st.name, r)
@@ -108,11 +108,15 @@ for (const st of E.SAMPLE_TRIPS) {
     const lightOnly = c => c.parts.every(p => os[0].lines.some(l => l.item.light && l.item.id === p.itemId))
     ok(on.totals.pallets === 18 && lightIn(on).every(lightOnly), `${st.name}: bật hàng nhẹ pallet riêng ⇒ ${on.totals.pallets} pallet (cần 18, hàng nhẹ lẻ không chung pallet với hàng nặng)`)
   } else {
-    ok(os[0].lines.filter(l => l.item.light).every(l => r.count.some(c => c.onTopOfOthers && l.item.name === c.label)), `${st.name}: cả 2 mã nhẹ phải nằm trên nóc`)
+    ok(os[0].lines.filter(l => l.item.light).every(l => r.count.some(c => c.onTopOfOthers && l.item.name === c.label)), `${st.name}: mã nhẹ phải nằm trên nóc`)
     ok(r.payloadPct >= 90, `${st.name}: chở ${r.payloadPct?.toFixed(0)}% tải (cần ≥ 90% để thử được)`)
     // bốc xá TỚI SÁT CỬA (chủ dự án 29/10): khe ở cửa dưới 1,5 cạnh thùng — trước đó chừa ~0,7 m (khối cuối chồng 11 lớp)
     const gap = trucks[st.vehicleId].l - Math.max(...r.plan.placed.map(b => b.x + b.l))
     ok(gap < 380, `${st.name}: hàng tới sát cửa (khe ${gap} mm)`)
+    // chủ dự án 06/11 (ảnh Mẫu 40ft): hàng nhẹ lên HÀNG ĐẦU, nhiều lớp, nằm trên hàng khác, không trải mỏng dọc xe — trải tới cửa không được làm tan khối gom
+    const lt = r.plan.placed.filter(b => r.plan.groups[b.group].onTop), ltX0 = Math.min(...lt.map(b => b.x)), ltX1 = Math.max(...lt.map(b => b.x + b.l))
+    const ltCols = new Map(); for (const b of lt) { const k = b.x + '|' + b.y; ltCols.set(k, (ltCols.get(k) ?? 0) + 1) }
+    ok(ltX0 < 100 && ltX1 - ltX0 <= 3000 && Math.max(...ltCols.values()) >= 5 && Math.min(...lt.map(b => b.z)) > 0, `${st.name}: hàng nhẹ gom đầu xe — x ${ltX0}…${ltX1}, ${Math.max(...ltCols.values())} lớp, đáy ${Math.min(...lt.map(b => b.z))}`)
   }
   console.log(`• ${st.name} — ${r.plan.placedCount}/${r.plan.totalCount} · ${E.fmtKg(r.weightKg)} (${r.payloadPct?.toFixed(0)}% tải)${r.totals.pallets != null ? ` · ${r.totals.pallets} pallet` : ''}`)
 }
