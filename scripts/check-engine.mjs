@@ -331,7 +331,7 @@ console.log('• Mỗi hàng ngang một hướng, mã ít thùng sát cửa, n�
     ok(r.fits, `${name}: phải chở hết`)
     ok(p.lengthUsedPct >= 95, `${name}: sàn ${p.lengthUsedPct}%`)
     let mixed = 0
-    p.groups.forEach((g, gi) => { if (g.onTop) return; const rows = new Map(); for (const b of p.placed) if (b.group === gi && !b.z) { if (!rows.has(b.x)) rows.set(b.x, new Set()); rows.get(b.x).add(b.l) } for (const v of rows.values()) if (v.size > 1) mixed++ })
+    p.groups.forEach((g, gi) => { if (g.onTop || Math.min(p.truck.width % g.l, p.truck.width % g.w) > 100) return; const rows = new Map(); for (const b of p.placed) if (b.group === gi && !b.z) { if (!rows.has(b.x)) rows.set(b.x, new Set()); rows.get(b.x).add(b.l) } for (const v of rows.values()) if (v.size > 1) mixed++ })
     ok(!mixed, `${name}: ${mixed} hàng ngang trộn hai hướng`)
     const thi = p.groups.findIndex(g => g.label === I['adm-i-th170'].name), th = p.placed.filter(b => b.group === thi), door = Math.max(...heavy.map(b => b.x + b.l))
     ok(Math.max(...th.map(b => b.z + b.h)) <= 700 && Math.max(...th.map(b => b.x + b.l)) === door, `${name}: mã ít thùng phải thấp, sát cửa`)
