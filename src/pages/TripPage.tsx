@@ -559,7 +559,6 @@ function TripSwitch({ trip, trips, onRename, onDelete, onAll, onNew, onShare }: 
   const items = useAllItems()
   const vehicles = useAllVehicles()
   const [renaming, setRenaming] = useState(false)
-  const family = useSpace(s => s.name)   // đang mở bộ dữ liệu Family ⇒ nhãn nhỏ ghi tên Family
   const rows = useMemo(() => [...trips].sort((a, b) => b.updatedAt - a.updatedAt).map(tr => {
     const os = tr.orderIds.map(id => orders.find(o => o.id === id)).filter((o): o is Order => !!o).map(o => resolveOrder(o, items))
     return { tr, v: findVehicle(vehicles, tr.vehicleId), tot: orderTotals(os.flatMap(o => o.lines), pallet) }
@@ -576,7 +575,7 @@ function TripSwitch({ trip, trips, onRename, onDelete, onAll, onNew, onShare }: 
               open ? 'bg-white/15' : 'bg-white/[0.07]')}>
             <span className="min-w-0 flex-1 leading-tight">
               <span data-cut-ok className="block truncate text-[10px] font-semibold uppercase tracking-wide text-brand-200 sm:text-[11px]">
-                {t('Chuyến xe')}{family && <span className="text-white"> · {family}</span>}
+                {t('Chuyến xe')}
               </span>
               <span data-cut-ok className="block truncate text-[13px] font-bold text-white sm:text-[15px]">{tx(trip.name)}</span>
             </span>

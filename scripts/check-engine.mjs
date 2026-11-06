@@ -76,8 +76,8 @@ const orderOf = o => ({ id: o.id, name: o.name, place: o.place, lines: o.lines.m
 // bộ đơn thử cố định = 2 đơn mẫu đời trước (xe 5 tấn) — các ca dưới đây đã chốt số trên bộ này
 const sample = E.PREV_SAMPLES[0].orders.map(orderOf)
 
-// chuyến mẫu hiện tại (06/11): mỗi đơn 2 mã nhẹ. Xe pallet 16 pallet (chẵn + gộp chung), phần lẻ hàng nhẹ trên pallet gộp —
-// bật "Hàng nhẹ: pallet riêng" thì đứng riêng (17 pallet, công tắc phải thấy khác); container 40ft trên 90% tải, cả 2 mã nhẹ trên nóc
+// chuyến mẫu hiện tại (06/11): mỗi đơn 2 mã nhẹ. Xe pallet đủ 17 pallet (chẵn + gộp chung), có phần lẻ hàng nhẹ trên pallet gộp —
+// bật "Hàng nhẹ: pallet riêng" thì đứng riêng (18 pallet, công tắc phải thấy khác); container 40ft trên 90% tải, cả 2 mã nhẹ trên nóc
 for (const st of E.SAMPLE_TRIPS) {
   const os = st.orderIds.map(id => orderOf(E.SAMPLE_ORDERS.find(o => o.id === id)))
   ok(os.flatMap(o => o.lines).every(l => l.item) && os[0].lines.filter(l => l.item.light).length === 2, `${st.name}: mọi mã có trong mẫu chung, đơn có 2 mã nhẹ`)
@@ -88,12 +88,12 @@ for (const st of E.SAMPLE_TRIPS) {
   if (trucks[st.vehicleId].kind === 'pallet') {
     const cards = E.explainPalletCards(r)
     const lightIn = rr => E.explainPalletCards(rr).filter(c => c.parts.some(p => os[0].lines.some(l => l.item.light && l.item.id === p.itemId)) && c.kind !== 'full')
-    ok(r.totals.pallets === 16 && cards.some(c => c.kind === 'mixed') && lightIn(r).length && lightIn(r).every(c => c.kind === 'mixed'),
-      `${st.name}: ${r.totals.pallets} pallet (cần 16, có pallet gộp, hàng nhẹ lẻ nằm trên pallet gộp)`)
+    ok(r.totals.pallets === 17 && cards.some(c => c.kind === 'mixed') && lightIn(r).some(c => c.kind === 'mixed'),
+      `${st.name}: ${r.totals.pallets} pallet (cần 17, có pallet gộp, có hàng nhẹ lẻ nằm trên pallet gộp)`)
     const on = run(true)
     invariants(st.name + ' · hàng nhẹ pallet riêng', on)
     // xe pallet 15 tấn lòng 9,6 × 2,35 m xếp sát chở tối đa 17 (chủ dự án 02/11: 9 quay ngang + 8 quay dọc) ⇒ bật lên thì
-    // pallet thứ 17 không còn chỗ vì thùng chờm mép làm pallet rộng hơn (báo thiếu 1) — công tắc vẫn thấy khác
+    // pallet thứ 18 không còn chỗ (báo thiếu 1) — công tắc vẫn thấy khác
     const T15 = trucks[st.vehicleId]
     ok(r.floorSlots === 17, `${st.name}: xe ${T15.l} × ${T15.w} đếm ${r.floorSlots} chỗ pallet (cần 17)`)
     // hai làn ép sát hai vách, bề ngang thừa thành rãnh giữa (chủ dự án 02/11)
@@ -106,7 +106,7 @@ for (const st of E.SAMPLE_TRIPS) {
       || j > i && Math.min(a.y + a.w, b.y + b.w) - Math.max(a.y, b.y) > 1 && Math.max(b.x - a.x - a.l, a.x - b.x - b.l) < 4.5))
     ok(g5.floorSlots === 16 && g5.plan.placedCount <= 16 && !near.length, `${st.name} · khoảng cách 5 mm: ${g5.plan.placedCount} pallet, ${g5.floorSlots} chỗ (cần 16), ${near.length} pallet sát hơn 5 mm`)
     const lightOnly = c => c.parts.every(p => os[0].lines.some(l => l.item.light && l.item.id === p.itemId))
-    ok(on.totals.pallets === 17 && lightIn(on).every(lightOnly), `${st.name}: bật hàng nhẹ pallet riêng ⇒ ${on.totals.pallets} pallet (cần 17, hàng nhẹ lẻ không chung pallet với hàng nặng)`)
+    ok(on.totals.pallets === 18 && lightIn(on).every(lightOnly), `${st.name}: bật hàng nhẹ pallet riêng ⇒ ${on.totals.pallets} pallet (cần 18, hàng nhẹ lẻ không chung pallet với hàng nặng)`)
   } else {
     ok(os[0].lines.filter(l => l.item.light).every(l => r.count.some(c => c.onTopOfOthers && l.item.name === c.label)), `${st.name}: cả 2 mã nhẹ phải nằm trên nóc`)
     ok(r.payloadPct >= 90, `${st.name}: chở ${r.payloadPct?.toFixed(0)}% tải (cần ≥ 90% để thử được)`)

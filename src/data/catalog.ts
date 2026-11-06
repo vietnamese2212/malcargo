@@ -45,12 +45,12 @@ export const ADMIN_ITEMS: Item[] = [
 export const DEFAULT_PALLET_SETTINGS: PalletSettings = { l: 1200, w: 1000, maxH: 1650, baseH: 150, kg: 25, gap: 0 }
 
 // Hai chuyến mẫu cho lần mở đầu tiên — thấy ngay sơ đồ, không phải nhập gì. Đơn NHIỀU MÃ, mỗi đơn 2 MÃ NHẸ (chủ dự án 06/11):
-// xe pallet 16 pallet (14 chẵn + 2 gộp chung, phần lẻ hàng nhẹ trên cùng pallet gộp; bật "Hàng nhẹ: pallet riêng" ⇒ 17, thiếu 1 chỗ
-// vì thùng chờm mép làm pallet rộng hơn) · container 40ft xếp rời trên 90% tải, 2 mã nhẹ trên nóc.
+// xe pallet đủ 17 pallet (13 chẵn + 2 gộp chung + 2 lẻ riêng; ECOLEAN lẻ nằm trên pallet gộp; bật "Hàng nhẹ: pallet riêng" ⇒ 18, thiếu 1 chỗ)
+// · container 40ft xếp rời trên 90% tải, 2 mã nhẹ trên nóc.
 export const SAMPLE_ORDERS: Order[] = [
   { id: 'sample-o1', name: 'Đơn mẫu pallet', place: 'Nhà phân phối A', updatedAt: T0, lines: [
-    { itemId: 'b4e80e14-5754-425b-b656-2fe05ccf5c50', qty: 840 }, { itemId: 'b4cd3e0b-50a5-4c50-b49a-b3f07847599b', qty: 460 }, { itemId: 'bfeba6de-90ac-4375-ac88-f3ca0de4b2f2', qty: 240 },
-    { itemId: '17047429-4e68-4236-8d2e-1b91b8eac4be', qty: 240 }, { itemId: '89e64f1f-548f-487d-aec8-74ce5c0d1580', qty: 320 }, { itemId: '190e3f30-1879-4e1c-89d2-697f5b2f49ff', qty: 80 },
+    { itemId: 'b4e80e14-5754-425b-b656-2fe05ccf5c50', qty: 480 }, { itemId: 'b4cd3e0b-50a5-4c50-b49a-b3f07847599b', qty: 420 }, { itemId: 'bfeba6de-90ac-4375-ac88-f3ca0de4b2f2', qty: 600 },
+    { itemId: '17047429-4e68-4236-8d2e-1b91b8eac4be', qty: 60 }, { itemId: '89e64f1f-548f-487d-aec8-74ce5c0d1580', qty: 480 }, { itemId: '190e3f30-1879-4e1c-89d2-697f5b2f49ff', qty: 120 },
   ] },
   { id: 'sample-o2', name: 'Đơn mẫu 40ft', place: 'Kho B', updatedAt: T0, lines: [
     { itemId: '17047429-4e68-4236-8d2e-1b91b8eac4be', qty: 1450 }, { itemId: 'b4e80e14-5754-425b-b656-2fe05ccf5c50', qty: 1500 }, { itemId: '89e64f1f-548f-487d-aec8-74ce5c0d1580', qty: 600 }, { itemId: '190e3f30-1879-4e1c-89d2-697f5b2f49ff', qty: 150 },
@@ -111,6 +111,16 @@ export const PREV_SAMPLES: { trips: Trip[]; orders: Order[] }[] = [
         { itemId: 'adm-i-th170', qty: 40 }, { itemId: 'adm-i-st180', qty: 140 }, { itemId: 'adm-i-tui110', qty: 472 },
       ] },
       O2_PREV,
+    ],
+  },
+  { // 06/11/2026, vài giờ: bộ SP001–SP016, Mẫu pallet 16 pallet (chủ dự án: "sao không được 17")
+    trips: SAMPLE_TRIPS,
+    orders: [
+      { id: 'sample-o1', name: 'Đơn mẫu pallet', place: 'Nhà phân phối A', updatedAt: T0, lines: [
+        { itemId: 'b4e80e14-5754-425b-b656-2fe05ccf5c50', qty: 840 }, { itemId: 'b4cd3e0b-50a5-4c50-b49a-b3f07847599b', qty: 460 }, { itemId: 'bfeba6de-90ac-4375-ac88-f3ca0de4b2f2', qty: 240 },
+        { itemId: '17047429-4e68-4236-8d2e-1b91b8eac4be', qty: 240 }, { itemId: '89e64f1f-548f-487d-aec8-74ce5c0d1580', qty: 320 }, { itemId: '190e3f30-1879-4e1c-89d2-697f5b2f49ff', qty: 80 },
+      ] },
+      SAMPLE_ORDERS[1],
     ],
   },
 ]

@@ -68,7 +68,7 @@ D().replaceAll({ ...base, orders: [order('o-2', 'Đơn 2', [{ itemId: 'x', qty: 
 ok(!D().deleted['o-2'] && D().orders.some(o => o.id === 'o-2'), 'nạp lại file có thứ đã xoá ⇒ sống lại, bỏ dấu (lần gộp sau không mất nữa)')
 ok(!Object.keys(D().deleted).some(S.isSample), 'không bao giờ đánh dấu xoá chuyến / đơn mẫu')
 
-console.log('• Hai chuyến mẫu (06/11: xe pallet 16 pallet · container 40ft)')
+console.log('• Hai chuyến mẫu (06/11: xe pallet 17 pallet · container 40ft)')
 const samples = () => ids(D().trips.filter(t => S.isSample(t.id))) + ' / ' + ids(D().orders.filter(o => S.isSample(o.id)))
 const want = ids(S.SAMPLE_TRIPS) + ' / ' + ids(S.SAMPLE_ORDERS)
 // máy cũ còn chuyến mẫu MỌI đời trước NGUYÊN GỐC ⇒ chỉ thay mẫu, không đẻ chuyến
