@@ -8,7 +8,7 @@ import {
   acceptInvite, adminDeleteCode, adminSaveCode, adminSetPrice, applyCode, createFamily, declineInvite, deleteFamily, inviteMember,
   leaveFamily, removeMember, renameFamily, signInGoogle, switchSpace, useAuth, useFamily, type Family, type Fee,
 } from '../data/cloud'
-import { useSpace } from '../data/store'
+import { famLabel, useSpace } from '../data/store'
 import { Badge, Button, Confirm, Field, IconButton, NumInput, Switch, TextInput, cx, fmtInt } from '../ui/kit'
 import { GoogleG, ListCard, Page, PageHeader } from '../ui/Shell'
 import { numLocale, t } from '../i18n'
@@ -53,7 +53,7 @@ function SpacePicker() {
   const families = useFamily(s => s.families), members = useFamily(s => s.members)
   const cur = useSpace(s => s.id)
   const opts = [{ id: 'me', label: t('Của tôi'), sub: t('Chỉ mình bạn') },
-    ...families.map(f => ({ id: f.id, label: f.name, sub: t('Family · {n} người', { n: (members[f.id] ?? []).filter(m => m.status === 'active').length }) }))]
+    ...families.map(f => ({ id: f.id, label: famLabel(f.name), sub: t('{n} người', { n: (members[f.id] ?? []).filter(m => m.status === 'active').length }) }))]
   return (
     <ListCard>
       <section className="px-4 py-4">
@@ -85,7 +85,7 @@ function InviteCard({ id, name, owner }: { id: string; name: string; owner: stri
     <ListCard className="border-brand-200">
       <section className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center">
         <div className="min-w-0 flex-1">
-          <h2 className={H2}>{t('Lời mời vào {name}', { name })}</h2>
+          <h2 className={H2}>{t('Lời mời vào {name}', { name: famLabel(name) })}</h2>
           <p className={DESC}>{t('{owner} mời bạn dùng chung mã hàng, xe, đơn và chuyến.', { owner })}</p>
           {err && <p className="mt-1 text-[13px] text-red-700">{err}</p>}
         </div>
@@ -182,7 +182,7 @@ function FamilyCard({ f }: { f: Family }) {
             </form>
           ) : (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <h2 className={cx(H2, 'text-[17px]')}>{f.name}</h2>
+              <h2 className={cx(H2, 'text-[17px]')}>{famLabel(f.name)}</h2>
               <Badge tone="blue">{owner ? t('Chủ') : t('Thành viên')}</Badge>
               {open && <Badge tone="green">{t('Đang mở')}</Badge>}
             </div>
@@ -240,10 +240,10 @@ function FamilyCard({ f }: { f: Family }) {
           : <Button variant="ghost" className="-ml-2 text-red-700" onClick={() => setAsk('leave')}>{t('Rời Family')}</Button>}
       </section>
 
-      <Confirm open={ask === 'delete'} onClose={() => setAsk(null)} okText={t('Xoá Family')} title={t('Xoá {name}?', { name: f.name })}
+      <Confirm open={ask === 'delete'} onClose={() => setAsk(null)} okText={t('Xoá Family')} title={t('Xoá {name}?', { name: famLabel(f.name) })}
         body={t('Mọi người mất quyền vào, đơn và chuyến của Family bị xoá, không lấy lại được.')}
         onOk={() => void run(deleteFamily(f.id))} />
-      <Confirm open={ask === 'leave'} onClose={() => setAsk(null)} okText={t('Rời Family')} title={t('Rời {name}?', { name: f.name })}
+      <Confirm open={ask === 'leave'} onClose={() => setAsk(null)} okText={t('Rời Family')} title={t('Rời {name}?', { name: famLabel(f.name) })}
         body={t('Bạn không còn thấy dữ liệu của Family; dữ liệu "Của tôi" giữ nguyên.')} onOk={() => void run(leaveFamily(f.id))} />
       <Confirm open={!!ask && typeof ask === 'object'} onClose={() => setAsk(null)} okText={t('Bỏ khỏi Family')}
         title={t('Bỏ {email} khỏi Family?', { email: ask && typeof ask === 'object' ? ask.remove : '' })}
@@ -308,7 +308,7 @@ export function InvitePrompt() {
   }
   return (
     <Confirm open={!!inv} danger={false} okText={t('Tham gia')} cancelText={t('Để sau')}
-      title={t('Lời mời vào {name}', { name: inv?.name ?? '' })}
+      title={t('Lời mời vào {name}', { name: famLabel(inv?.name ?? '') })}
       body={t('{owner} mời bạn dùng chung mã hàng, xe, đơn và chuyến.', { owner: inv?.owner ?? '' })}
       onOk={() => { if (inv) void acceptInvite(inv.familyId) }} onClose={skip} />
   )

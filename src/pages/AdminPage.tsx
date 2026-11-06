@@ -6,6 +6,7 @@ import { numLocale, t } from '../i18n'
 import { loadAdminPeople, loadAdminStats, useAuth, type AdminFamily, type AdminPeople, type AdminStats, type AdminUser } from '../data/cloud'
 import { Badge, Button, SummaryBand, fmtInt } from '../ui/kit'
 import { ListCard, Page, PageHeader } from '../ui/Shell'
+import { famLabel } from '../data/store'
 
 const day = (d: string | null) => (d ? new Date(d).toLocaleDateString(numLocale()) : '—')
 const today = () => new Date().toISOString().slice(0, 10)
@@ -96,7 +97,7 @@ function UserRow({ u }: { u: AdminUser }) {
         <div className="num mt-0.5 text-[12px] text-slate-600">{t('Đăng ký {d}', { d: day(u.created_at) })} · {t('Dùng gần nhất {d}', { d: day(u.last_used) })}</div>
         {!!u.families.length && (
           <div className="mt-1 flex flex-wrap gap-1">
-            {u.families.map(f => <span key={f.name} className="min-w-0 max-w-full break-words rounded bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700">{f.name} · {f.role === 'owner' ? t('Chủ') : t('Thành viên')}</span>)}
+            {u.families.map(f => <span key={f.name} className="min-w-0 max-w-full break-words rounded bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700">{famLabel(f.name)} · {f.role === 'owner' ? t('Chủ') : t('Thành viên')}</span>)}
           </div>
         )}
       </div>

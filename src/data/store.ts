@@ -31,6 +31,8 @@ const savedSpace = (): SpaceInfo => {
 }
 export const useSpace = create<SpaceInfo>(() => savedSpace())
 useSpace.subscribe(s => safeStorage.setItem(SPACE, JSON.stringify(s)))
+/** Tên Family lúc hiện: luôn có chữ "Family" để phân biệt với "Của tôi" (tên đã bắt đầu bằng Family thì giữ nguyên). */
+export const famLabel = (name: string) => (/^\s*family\b/i.test(name) ? name : `Family ${name}`)
 /** Thành viên Family (không phải chủ): mã hàng, xe, cỡ pallet CHỈ ĐỌC — chủ giữ danh mục (máy chủ cũng chặn). */
 export const catalogLocked = () => useSpace.getState().role === 'member'
 export const useCatalogLocked = () => useSpace(s => s.role === 'member')

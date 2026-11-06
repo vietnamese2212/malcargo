@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Plus, Truck } from 'lucide-react'
-import { LOCKED, useAllVehicles, useData, useSpace } from '../data/store'
+import { LOCKED, famLabel, useAllVehicles, useData, useSpace } from '../data/store'
 import { useAuth } from '../data/cloud'
 import type { Vehicle } from '../data/types'
 import { Badge, Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SelectBar, SummaryBand, Tabs, cx, fmtDims, fmtInt, fmtKgShort, fmtM3, useSelection } from '../ui/kit'
@@ -33,7 +33,7 @@ export default function VehiclesPage() {
           ? <Button variant="primary" aria-label={t('Thêm xe mẫu')} onClick={() => setEdit({ v: null, sample: true })}><Plus size={18} /><span className="hidden sm:inline">{t('Thêm xe mẫu')}</span></Button>
           : !locked && <Button variant="primary" aria-label={t('Thêm xe')} onClick={() => setEdit({ v: null })}><Plus size={18} /><span className="hidden sm:inline">{t('Thêm xe')}</span></Button>}>
         <Tabs value={tab} onChange={setTab} flush
-          options={[{ value: 'me', label: space.name ? t('{name} · {n}', { name: space.name, n: mine.length }) : t('Xe của tôi · {n}', { n: mine.length }) }, { value: 'admin', label: t('Mẫu chung · {n}', { n: all.length - mine.length }) }]} />
+          options={[{ value: 'me', label: space.name ? t('{name} · {n}', { name: famLabel(space.name), n: mine.length }) : t('Xe của tôi · {n}', { n: mine.length }) }, { value: 'admin', label: t('Mẫu chung · {n}', { n: all.length - mine.length }) }]} />
       </PageHeader>
       <Page flush={!(tab === 'me' && !mine.length)}>
         {tab === 'me' && !mine.length && locked ? (

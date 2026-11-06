@@ -66,7 +66,7 @@ for (const dev of [DEVICES[0], { ...DEVICES[1], name: 'tablet', viewport: { widt
   await p.screenshot({ path: `${OUT}/import-trip-${dev.name}.png` })
   // cột Dòng xe: đơn đầu ghi xe 8 tấn ⇒ chuyến dùng xe đó; đơn sau ghi xe không có trong app ⇒ bỏ qua, chỉ báo
   await sheet.getByRole('textbox', { name: T('Dán bảng {name}', { name: T('Đơn hàng') }) })
-    .fill(`Đơn nhập 1\tCửa hàng X\tMAU-ST180\t50\t${TX('Xe tải 8 tấn')}\nĐơn nhập 1\tCửa hàng X\tMAU-ST110\t20\nĐơn nhập 2\t\tMAU-ST180\t30\tXe ma`)
+    .fill(`Đơn nhập 1\tCửa hàng X\tSP002\t50\t${TX('Xe tải 8 tấn')}\nĐơn nhập 1\tCửa hàng X\tSP001\t20\nĐơn nhập 2\t\tSP002\t30\tXe ma`)
   ok(await sheet.getByText(T('Dòng xe không có trong app, bỏ qua: {list}', { list: 'Xe ma' })).isVisible(), 'dòng xe không có trong app ⇒ báo bỏ qua, không chặn')
   await sheet.getByRole('button', { name: T('Nhập {n} dòng dữ liệu', { n: 2 }) }).click(); await p.waitForTimeout(800)
   let d = await data(p)
@@ -78,7 +78,7 @@ for (const dev of [DEVICES[0], { ...DEVICES[1], name: 'tablet', viewport: { widt
   // chuyến mẫu: nhập đơn ⇒ tách thành chuyến mới mang thêm đơn đó, chuyến mẫu giữ nguyên
   await p.evaluate(() => { location.hash = '#/trip/sample-t1' }); await p.waitForTimeout(2500)
   await p.getByRole('button', { name: T('Nhập đơn từ Excel') }).click(); await p.waitForTimeout(400)
-  await paste(p, 'Đơn nhập 3\tCửa hàng Y\tMAU-ST180\t10', 1)
+  await paste(p, 'Đơn nhập 3\tCửa hàng Y\tSP002\t10', 1)
   const h = await p.evaluate(() => location.hash)
   d = await data(p)
   const fork = d.trips.find(t => `#/trip/${t.id}` === h)
@@ -168,7 +168,7 @@ for (const dev of [DEVICES[1], { ...DEVICES[1], name: 'phone-ngang', viewport: {
         vehicles: ['B:custom', 'C:list', 'D:decimal', 'E:decimal', 'F:decimal', 'G:decimal', 'H:list'],
         orders: ['C:list@list', 'D:whole', 'E:list@list', 'F:list'], trips: ['B:list@list', 'C:list@list', 'D:list'],
       }[k]
-      const milk = `MAU-ST180 - ${l === 'vi' ? 'Sữa 180ml x48' : 'Milk 180ml x48'}`   // mã hàng hiện "Mã - Tên"
+      const milk = 'SP002 - TBA 180'   // mã hàng hiện "Mã - Tên"
       const listOk = k === 'orders' ? lists.includes(milk) && lists.includes(truck5) && wb[0].data[1][2] === `SP001 - ${l === 'vi' ? 'Sữa 110ml x48' : 'Milk 110ml x48'}`
         : k === 'trips' ? lists.includes(truck5) && lists.length > 2 : !lists.length
       ok(dvs.join() === want.join() && listOk && (lists.length ? /name="_lists" state="hidden"/.test(wbx) : true),
@@ -208,8 +208,8 @@ for (const dev of [DEVICES[1], { ...DEVICES[1], name: 'phone-ngang', viewport: {
     { sheet: 'Đơn hàng', data: [OLD_HEAD.orders, ['Đơn cũ', '', 'OLD1', 10]] },
     { sheet: 'Chuyến', data: [OLD_HEAD.trips, ['Chuyến cũ', 'Xe cũ', 'Đơn cũ']] },
   ])
-  const own = await xlsx('own-sheet1.xlsx', [{ sheet: 'Sheet1', data: [OLD_HEAD.orders, ['Đơn tự làm', 'Kho B', 'MAU-ST180', 12], ['Đơn tự làm', 'Kho B', 'MAU-ST110', 4]] }])
-  const noHead = await xlsx('no-head.xlsx', [{ sheet: 'Sheet1', data: [['Đơn tự làm', 'Kho B', 'MAU-ST180', 12]] }])
+  const own = await xlsx('own-sheet1.xlsx', [{ sheet: 'Sheet1', data: [OLD_HEAD.orders, ['Đơn tự làm', 'Kho B', 'SP002', 12], ['Đơn tự làm', 'Kho B', 'SP001', 4]] }])
+  const noHead = await xlsx('no-head.xlsx', [{ sheet: 'Sheet1', data: [['Đơn tự làm', 'Kho B', 'SP002', 12]] }])
   const swapped = await xlsx('swapped.xlsx', [{ sheet: 'Mã hàng', data: [['Mã hàng', 'Tên hàng', 'Rộng (mm)', 'Dài (mm)', 'Cao (mm)'], ['X1', 'A', 400, 300, 200]] }])
   const badRows = await xlsx('bad-rows.xlsx', [{ sheet: 'Mã hàng', data: [OLD_HEAD.items, ['B1', 'Đúng', 420.5, 255, 100, 9.85, 140, 14], ['B2', 'Ghi cm', 42, 25, 10, 5, 100, 10], ['B1', 'Trùng', 420, 255, 100]] }])
   const load = async f => { await sheet.locator('input[type=file]').setInputFiles(f); await p.waitForTimeout(800) }

@@ -18,7 +18,7 @@ export function tint(hex: string, kraft = 0.32): string {
 const MIXED = '#7d8794'
 // Màu quen của các mã mẫu chung (chỉ số trong PALETTE) — giữ đúng màu người dùng đã thấy trước khi màu
 // thành cố định theo mã (27/10): Sữa chua 180 xanh dương, Thạch túi cam, Sữa 180 xanh ngọc, Sữa 110 tím…
-const SAMPLE_HOME: Record<string, number> = { SCU180: 0, TUI110: 1, ST180: 2, ST110: 3, C100: 4, TH100: 4, C85: 5, TH170: 7 }
+const SAMPLE_HOME: Record<string, number> = { SCU180: 0, TUI110: 1, ST180: 2, ST110: 3, C100: 4, TH100: 4, C85: 5, TH170: 7, SP001: 3, SP002: 2, SP003: 4, SP006: 7, SP008: 1, SP012: 6 }
 const norm = (code: string) => code.trim().toUpperCase().replace(/^MAU-/, '')
 const hash = (s: string) => { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) } return h >>> 0 }
 

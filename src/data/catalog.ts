@@ -22,36 +22,45 @@ export const ADMIN_VEHICLES: Vehicle[] = [
   { id: 'adm-v-c40', owner: 'admin', name: 'Container 40ft', plate: '', kind: 'loose', l: 12032, w: 2352, h: 2393, payloadKg: 28500, container: true, updatedAt: T0 },
 ]
 
-// Cỡ thùng hàng sữa & đồ uống đóng hộp phổ biến (thùng 48 hộp / chai, thùng 24 túi) — số đo, kg, số thùng / pallet
-// và số lớp chồng lấy theo thùng thật trong kho; tên ghi chung, không nhãn hiệu.
+// Bản chép bảng `catalog` (admin thay cả bộ 06/11/2026). Mã đơn mẫu dùng: kg + số lớp đã điền; mã còn lại kg = 1 chờ admin khai.
 export const ADMIN_ITEMS: Item[] = [
-  { id: 'adm-i-st180', owner: 'admin', code: 'MAU-ST180', name: 'Sữa 180ml x48', l: 420, w: 255, h: 130, kg: 9.85, perPallet: 110, maxLayers: 11, light: false, updatedAt: T0 },
-  { id: 'adm-i-st110', owner: 'admin', code: 'MAU-ST110', name: 'Sữa 110ml x48', l: 420, w: 255, h: 100, kg: 6.2, perPallet: 140, maxLayers: 14, looseLayers: 28, light: false, updatedAt: T0 },
-  { id: 'adm-i-th170', owner: 'admin', code: 'MAU-TH170', name: 'Sữa thạch 170ml x48', l: 430, w: 250, h: 130, kg: 9.5, perPallet: 100, maxLayers: 11, light: false, updatedAt: T0 },
-  { id: '961dcd8c-92c7-4f7a-b84f-c5223ec13433', owner: 'admin', code: 'MAU-TH100', name: 'Sữa thạch 100ml x48', l: 430, w: 250, h: 100, kg: 5.7, perPallet: 140, maxLayers: 14, looseLayers: 28, light: false, updatedAt: T0 },
-  { id: '276012d0-01bb-4045-9366-0e1c90bb4905', owner: 'admin', code: 'MAU-CHAI240', name: 'Chai 240ml x24', l: 361, w: 237, h: 151, kg: 6.8, perPallet: 108, maxLayers: 9, light: false, updatedAt: T0 },
-  { id: 'adm-i-c85', owner: 'admin', code: 'MAU-C85', name: 'Sữa chai 85ml x48', l: 357, w: 276, h: 105, kg: 5.3, perPallet: 143, maxLayers: 13, light: false, updatedAt: T0 },
-  // túi nhẹ, xếp được lên mặt khối hàng khác
-  { id: 'adm-i-tui110', owner: 'admin', code: 'MAU-TUI110', name: 'Túi 110ml x24', l: 310, w: 130, h: 130, kg: 3.08, perPallet: 216, maxLayers: 8, light: true, updatedAt: T0 },
-  { id: 'f9428150-8e0d-4f6b-9de5-ec134ff530c8', owner: 'admin', code: 'MAU-XX1', name: 'Xúc xích 57g x24', l: 342, w: 259, h: 226, kg: 2.53, perPallet: 60, maxLayers: 6, light: true, updatedAt: T0 },
-  { id: 'f5b6706e-3abd-4a0c-bbdc-cf0ba56471b2', owner: 'admin', code: 'MAU-XX2', name: 'Xúc xích ly 42g x48', l: 342, w: 259, h: 226, kg: 3.4, perPallet: 60, maxLayers: 6, light: true, updatedAt: T0 },
+  { id: 'b4e80e14-5754-425b-b656-2fe05ccf5c50', owner: 'admin', code: 'SP001', name: 'TBA 110', l: 425, w: 240, h: 105, kg: 6.2, perPallet: 150, maxLayers: 14, looseLayers: 28, light: false, updatedAt: T0 },
+  { id: '17047429-4e68-4236-8d2e-1b91b8eac4be', owner: 'admin', code: 'SP002', name: 'TBA 180', l: 425, w: 260, h: 145, kg: 9.85, perPallet: 110, maxLayers: 10, light: false, updatedAt: T0 },
+  { id: 'b4cd3e0b-50a5-4c50-b49a-b3f07847599b', owner: 'admin', code: 'SP003', name: 'TBA 100', l: 430, w: 240, h: 105, kg: 5.7, perPallet: 150, maxLayers: 14, light: false, updatedAt: T0 },
+  { id: '681a1674-9181-4569-baaa-71f06618cf48', owner: 'admin', code: 'SP004', name: 'TBA 100x36', l: 370, w: 220, h: 105, kg: 1, perPallet: 182, maxLayers: 14, light: false, updatedAt: T0 },
+  { id: '9f03e562-f28e-4ee7-b959-aa0b46e0e362', owner: 'admin', code: 'SP005', name: 'TBA 100 Thạch', l: 425, w: 255, h: 110, kg: 1, perPallet: 150, maxLayers: 14, light: false, updatedAt: T0 },
+  { id: 'bfeba6de-90ac-4375-ac88-f3ca0de4b2f2', owner: 'admin', code: 'SP006', name: 'TBA 170', l: 430, w: 260, h: 135, kg: 9.5, perPallet: 110, maxLayers: 11, light: false, updatedAt: T0 },
+  { id: 'd131667b-61d1-4f65-816e-87c1b1ffe5e2', owner: 'admin', code: 'SP007', name: 'TBA 170 Thạch', l: 425, w: 285, h: 140, kg: 1, perPallet: 110, maxLayers: 14, light: false, updatedAt: T0 },
+  { id: '89e64f1f-548f-487d-aec8-74ce5c0d1580', owner: 'admin', code: 'SP008', name: 'ECOLEAN', l: 315, w: 140, h: 135, kg: 3.08, perPallet: 224, maxLayers: 11, light: true, updatedAt: T0 },
+  { id: '7f577621-125d-45e7-81eb-36a985e8996c', owner: 'admin', code: 'SP009', name: 'TBA 180 SBN', l: 280, w: 230, h: 135, kg: 1, perPallet: 209, maxLayers: 14, light: false, updatedAt: T0 },
+  { id: '632dd554-6edf-4366-b78e-689b304fa82a', owner: 'admin', code: 'SP010', name: 'HDPE', l: 360, w: 285, h: 110, kg: 1, perPallet: 156, maxLayers: 14, light: false, updatedAt: T0 },
+  { id: 'b20729b9-7bd2-436f-8f37-5e7e55d69e36', owner: 'admin', code: 'SP011', name: 'XÚC XÍCH MÌ + KẸO NỔ', l: 350, w: 260, h: 235, kg: 1, perPallet: 78, maxLayers: 14, light: false, updatedAt: T0 },
+  { id: '190e3f30-1879-4e1c-89d2-697f5b2f49ff', owner: 'admin', code: 'SP012', name: 'XÚC XÍCH LY', l: 360, w: 250, h: 265, kg: 3.4, perPallet: 65, maxLayers: 5, light: true, updatedAt: T0 },
+  { id: 'bb30813f-367f-4ace-b819-ca1baf851788', owner: 'admin', code: 'SP013', name: 'THẠCH KẸO 300G', l: 410, w: 230, h: 165, kg: 1, perPallet: 72, maxLayers: 14, light: false, updatedAt: T0 },
+  { id: 'adb606ed-9cb7-4587-8462-0bca533c4d71', owner: 'admin', code: 'SP014', name: 'THẠCH RAU CÂU 30g', l: 305, w: 215, h: 160, kg: 1, perPallet: 136, maxLayers: 14, light: false, updatedAt: T0 },
+  { id: 'b9b51ccf-1faa-41a5-927d-ad6542539efa', owner: 'admin', code: 'SP015', name: 'PET 240 ( Matcha )', l: 320, w: 215, h: 180, kg: 1, perPallet: 128, maxLayers: 14, light: false, updatedAt: T0 },
+  { id: 'f547412b-aba9-4608-901a-c4d2390d2d49', owner: 'admin', code: 'SP016', name: 'PET 430 ( Manuka )', l: 385, w: 255, h: 215, kg: 1, perPallet: 77, maxLayers: 14, light: false, updatedAt: T0 },
 ]
 
 export const DEFAULT_PALLET_SETTINGS: PalletSettings = { l: 1200, w: 1000, maxH: 1650, baseH: 150, kg: 25, gap: 0 }
 
-// Hai chuyến mẫu cho lần mở đầu tiên — thấy ngay sơ đồ, không phải nhập gì. Đơn NHIỀU MÃ để làm quen bảng
-// Diễn giải (chủ dự án 29/10): xe pallet 17 pallet (6 mã: pallet chẵn, pallet gộp chung — phần lẻ thạch túi nằm
-// trên cùng một pallet gộp, bật "Hàng nhẹ: pallet riêng" thì tách thành pallet thứ 18) · container 40ft xếp rời
-// gần đủ tải 28 tấn (2 mã nặng thành khối + thạch túi nhẹ trên nóc).
+// Hai chuyến mẫu cho lần mở đầu tiên — thấy ngay sơ đồ, không phải nhập gì. Đơn NHIỀU MÃ, mỗi đơn 2 MÃ NHẸ (chủ dự án 06/11):
+// xe pallet 16 pallet (14 chẵn + 2 gộp chung, phần lẻ hàng nhẹ trên cùng pallet gộp; bật "Hàng nhẹ: pallet riêng" ⇒ 17, thiếu 1 chỗ
+// vì thùng chờm mép làm pallet rộng hơn) · container 40ft xếp rời trên 90% tải, 2 mã nhẹ trên nóc.
 export const SAMPLE_ORDERS: Order[] = [
   { id: 'sample-o1', name: 'Đơn mẫu pallet', place: 'Nhà phân phối A', updatedAt: T0, lines: [
-    { itemId: 'adm-i-st110', qty: 740 }, { itemId: '961dcd8c-92c7-4f7a-b84f-c5223ec13433', qty: 479 }, { itemId: 'adm-i-c85', qty: 612 },
-    { itemId: 'adm-i-th170', qty: 40 }, { itemId: 'adm-i-st180', qty: 140 }, { itemId: 'adm-i-tui110', qty: 472 },
+    { itemId: 'b4e80e14-5754-425b-b656-2fe05ccf5c50', qty: 840 }, { itemId: 'b4cd3e0b-50a5-4c50-b49a-b3f07847599b', qty: 460 }, { itemId: 'bfeba6de-90ac-4375-ac88-f3ca0de4b2f2', qty: 240 },
+    { itemId: '17047429-4e68-4236-8d2e-1b91b8eac4be', qty: 240 }, { itemId: '89e64f1f-548f-487d-aec8-74ce5c0d1580', qty: 320 }, { itemId: '190e3f30-1879-4e1c-89d2-697f5b2f49ff', qty: 80 },
   ] },
   { id: 'sample-o2', name: 'Đơn mẫu 40ft', place: 'Kho B', updatedAt: T0, lines: [
-    { itemId: 'adm-i-st180', qty: 1350 }, { itemId: 'adm-i-st110', qty: 1400 }, { itemId: 'adm-i-tui110', qty: 1600 },
+    { itemId: '17047429-4e68-4236-8d2e-1b91b8eac4be', qty: 1450 }, { itemId: 'b4e80e14-5754-425b-b656-2fe05ccf5c50', qty: 1500 }, { itemId: '89e64f1f-548f-487d-aec8-74ce5c0d1580', qty: 600 }, { itemId: '190e3f30-1879-4e1c-89d2-697f5b2f49ff', qty: 150 },
   ] },
 ]
+
+// đơn 40ft đời trước (2 đời mẫu cuối trong PREV_SAMPLES dùng chung)
+const O2_PREV: Order = { id: 'sample-o2', name: 'Đơn mẫu 40ft', place: 'Kho B', updatedAt: T0, lines: [
+  { itemId: 'adm-i-st180', qty: 1350 }, { itemId: 'adm-i-st110', qty: 1400 }, { itemId: 'adm-i-tui110', qty: 1600 },
+] }
 
 export const SAMPLE_TRIPS: Trip[] = [
   { id: 'sample-t1', name: 'Mẫu pallet', vehicleId: 'adm-v-p15t', orderIds: ['sample-o1'], updatedAt: T0 },
@@ -91,7 +100,17 @@ export const PREV_SAMPLES: { trips: Trip[]; orders: Order[] }[] = [
         { itemId: 'adm-i-st110', qty: 740 }, { itemId: 'adm-i-c100', qty: 479 }, { itemId: 'adm-i-c85', qty: 612 },
         { itemId: 'adm-i-th170', qty: 40 }, { itemId: 'adm-i-st180', qty: 140 }, { itemId: 'adm-i-tui110', qty: 472 },
       ] },
-      SAMPLE_ORDERS[1],
+      O2_PREV,
+    ],
+  },
+  { // tới 06/11/2026: mã cũ, admin đã thay cả bộ mẫu chung bằng SP001–SP016
+    trips: SAMPLE_TRIPS,
+    orders: [
+      { id: 'sample-o1', name: 'Đơn mẫu pallet', place: 'Nhà phân phối A', updatedAt: T0, lines: [
+        { itemId: 'adm-i-st110', qty: 740 }, { itemId: '961dcd8c-92c7-4f7a-b84f-c5223ec13433', qty: 479 }, { itemId: 'adm-i-c85', qty: 612 },
+        { itemId: 'adm-i-th170', qty: 40 }, { itemId: 'adm-i-st180', qty: 140 }, { itemId: 'adm-i-tui110', qty: 472 },
+      ] },
+      O2_PREV,
     ],
   },
 ]

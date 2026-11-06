@@ -17,7 +17,6 @@ export const FAMILY: Record<string, string> = {
   'Tạo Family cho công ty, hoặc nhận lời mời của người khác.': 'Create a Family for your company, or accept an invitation.',
   'Dữ liệu đang mở': 'Data in use',
   'Chỉ mình bạn': 'Just you',
-  'Family · {n} người': 'Family · {n} {n:person|people}',
   'Lời mời vào {name}': 'Invitation to {name}',
   '{owner} mời bạn dùng chung mã hàng, xe, đơn và chuyến.': '{owner} invited you to share items, trucks, orders and trips.',
   'Từ chối': 'Decline',

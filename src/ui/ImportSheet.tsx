@@ -3,7 +3,7 @@
 // nhập gì (báo từng lỗi kèm số dòng), tiêu đề cột sai mẫu ⇒ từ chối cả file.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Download, FileSpreadsheet, Upload, X } from 'lucide-react'
-import { mySet, saveToMine, useAllItems, useAllVehicles, useData, useSpace } from '../data/store'
+import { famLabel, mySet, saveToMine, useAllItems, useAllVehicles, useData, useSpace } from '../data/store'
 import { readFamily, saveCatalogMany, saveToFamily, useAuth, useFamily } from '../data/cloud'
 import { SHEETS, parseImport, readWorkbook, sampleRows, saveTemplate, splitPasted, type Rows, type SheetKey } from '../data/importer'
 import { t, tx } from '../i18n'
@@ -59,7 +59,7 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
   const nMine = size(res.toMine), nShared = size(res.toShared), nFam = size(res.toFamily)
   const nOpen = total - nMine - nShared - nFam
   const dests = [
-    { label: space.id === 'me' ? t('Của tôi') : space.name ?? 'Family', n: nOpen }, { label: t('Của tôi'), n: nMine }, { label: target?.name ?? 'Family', n: nFam }, { label: t('Mẫu chung'), n: nShared },
+    { label: space.id === 'me' ? t('Của tôi') : famLabel(space.name ?? ''), n: nOpen }, { label: t('Của tôi'), n: nMine }, { label: famLabel(target?.name ?? ''), n: nFam }, { label: t('Mẫu chung'), n: nShared },
   ].filter(d => d.n)
   const sharedList = [res.toShared.items.length && t(COUNT.items, { n: fmtInt(res.toShared.items.length) }), res.toShared.vehicles.length && t(COUNT.vehicles, { n: fmtInt(res.toShared.vehicles.length) })].filter(Boolean).join(', ')
   const def = SHEETS.find(s => s.key === tab)!

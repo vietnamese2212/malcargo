@@ -68,7 +68,7 @@ D().replaceAll({ ...base, orders: [order('o-2', 'Đơn 2', [{ itemId: 'x', qty: 
 ok(!D().deleted['o-2'] && D().orders.some(o => o.id === 'o-2'), 'nạp lại file có thứ đã xoá ⇒ sống lại, bỏ dấu (lần gộp sau không mất nữa)')
 ok(!Object.keys(D().deleted).some(S.isSample), 'không bao giờ đánh dấu xoá chuyến / đơn mẫu')
 
-console.log('• Hai chuyến mẫu (29/10: xe pallet 17 pallet · container 40ft)')
+console.log('• Hai chuyến mẫu (06/11: xe pallet 16 pallet · container 40ft)')
 const samples = () => ids(D().trips.filter(t => S.isSample(t.id))) + ' / ' + ids(D().orders.filter(o => S.isSample(o.id)))
 const want = ids(S.SAMPLE_TRIPS) + ' / ' + ids(S.SAMPLE_ORDERS)
 // máy cũ còn chuyến mẫu MỌI đời trước NGUYÊN GỐC ⇒ chỉ thay mẫu, không đẻ chuyến
@@ -167,10 +167,10 @@ console.log('• Chia sẻ chuyến: bản chụp ⇒ người nhận lưu bản
   const veh = { id: 'v-me', owner: 'me', name: 'Xe của A', plate: '51C-12345', kind: 'pallet', l: 9500, w: 2400, h: 2500, payloadKg: 15000, updatedAt: now }
   // người gửi: một mã của mình + một mã mẫu chung, xe của mình, 2 đơn (một đơn tên mặc định), bật "hàng nhẹ pallet riêng"
   D().replaceAll({ ...base, items: [it('i-a', 'A1')], vehicles: [veh], deleted: {},
-    orders: [order('o-s1', 'Khách Hưng', [{ itemId: 'i-a', qty: 30 }, { itemId: 'adm-i-st180', qty: 50 }], { place: 'Q7' }), order('o-s2', 'Đơn 4', [{ itemId: 'i-a', qty: 5 }])],
+    orders: [order('o-s1', 'Khách Hưng', [{ itemId: 'i-a', qty: 30 }, { itemId: '17047429-4e68-4236-8d2e-1b91b8eac4be', qty: 50 }], { place: 'Q7' }), order('o-s2', 'Đơn 4', [{ itemId: 'i-a', qty: 5 }])],
     trips: [trip('t-s', 'Xe đi Bình Dương', ['o-s2', 'o-s1'], { vehicleId: 'v-me', lightOwnPallet: true })] })
   const pack = S.packTrip('t-s')
-  ok(pack && pack.orders.map(o => o.id).join() === 'o-s2,o-s1' && ids(pack.items) === 'adm-i-st180,i-a' && pack.vehicles[0]?.id === 'v-me',
+  ok(pack && pack.orders.map(o => o.id).join() === 'o-s2,o-s1' && ids(pack.items) === '17047429-4e68-4236-8d2e-1b91b8eac4be,i-a' && pack.vehicles[0]?.id === 'v-me',
     'bản chụp: đơn theo thứ tự giao, đủ mã hàng (cả mẫu chung) + xe')
   const wire = S.cleanPack(JSON.parse(JSON.stringify(pack)))   // qua máy chủ (JSON)
   ok(!!wire && wire.items.length === 2 && wire.trip.lightOwnPallet === true && wire.orders[1].place === 'Q7', 'đọc lại bản chụp sau khi qua máy chủ')
@@ -183,7 +183,7 @@ console.log('• Chia sẻ chuyến: bản chụp ⇒ người nhận lưu bản
   const added = D().items.find(i => i.id !== 'i-r')
   ok(nt?.name === 'Xe đi Bình Dương' && nt.code !== nt.name && nt.lightOwnPallet === true && nos.map(o => o?.name).join() === 'Đơn 5,Khách Hưng' && nos[1]?.place === 'Q7',
     `lưu bản sao ⇒ chuyến mới (giữ tên, mã chuyến mới, giữ công tắc); đơn tên mặc định ⇒ "Đơn N" kế tiếp (${nos.map(o => o?.name)})`)
-  ok(D().items.length === 2 && added?.code === 'A1-2' && added.owner === 'me' && nos[1]?.lines.some(l => l.itemId === 'adm-i-st180') && nos[1].lines.some(l => l.itemId === added.id),
+  ok(D().items.length === 2 && added?.code === 'A1-2' && added.owner === 'me' && nos[1]?.lines.some(l => l.itemId === '17047429-4e68-4236-8d2e-1b91b8eac4be') && nos[1].lines.some(l => l.itemId === added.id),
     `mã chưa có ⇒ thêm thành mã của tôi (trùng mã khác ⇒ "${added?.code}"); mã mẫu chung dùng lại`)
   const nv = D().vehicles[0]
   ok(D().vehicles.length === 1 && nv.id !== 'v-me' && nt?.vehicleId === nv.id && nv.owner === 'me', 'xe chưa có ⇒ thêm thành xe của tôi, id mới')

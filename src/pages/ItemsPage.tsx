@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { ClipboardPaste, Package, Plus } from 'lucide-react'
-import { LOCKED, useAllItems, useData, useSpace } from '../data/store'
+import { LOCKED, famLabel, useAllItems, useData, useSpace } from '../data/store'
 import { useAuth } from '../data/cloud'
 import type { Item } from '../data/types'
 import { Badge, BoxGlyph, Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SearchInput, SelectBar, SummaryBand, Tabs, cx, fmtDec, fmtDims, fmtInt, usePhone, useSelection } from '../ui/kit'
@@ -45,7 +45,7 @@ export default function ItemsPage() {
             : !locked && <Button variant="primary" aria-label={t('Thêm mã')} onClick={() => setEdit({ item: null })}><Plus size={18} /><span className="hidden sm:inline">{t('Thêm mã')}</span></Button>}
         </>}>
         <Tabs value={tab} onChange={setTab} flush
-          options={[{ value: 'me', label: space.name ? t('{name} · {n}', { name: space.name, n: mine.length }) : t('Của tôi · {n}', { n: mine.length }) }, { value: 'admin', label: t('Mẫu chung · {n}', { n: all.length - mine.length }) }]} />
+          options={[{ value: 'me', label: space.name ? t('{name} · {n}', { name: famLabel(space.name), n: mine.length }) : t('Của tôi · {n}', { n: mine.length }) }, { value: 'admin', label: t('Mẫu chung · {n}', { n: all.length - mine.length }) }]} />
       </PageHeader>
       <Page flush={!(tab === 'me' && !mine.length)}>
         {tab === 'me' && !mine.length && locked ? (

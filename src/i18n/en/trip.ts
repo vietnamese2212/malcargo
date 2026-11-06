@@ -192,7 +192,7 @@ export const TRIP: Record<string, string> = {
   '{n} mới trong 30 ngày': '{n} new in 30 days',
   'Đang sử dụng': 'Active',
   'hoạt động trong 30 ngày': 'active in 30 days',
-  '{n} người': '{n} people',
+  '{n} người': '{n} {n:person|people}',
   'Đang trả phí': 'Paying',
   '{n} Family còn hạn': '{n} paid-up Families',
   'Không đọc được số liệu: {e}': 'Could not read the figures: {e}',

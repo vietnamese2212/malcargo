@@ -69,8 +69,8 @@ const keep = [
     async p => (await data(p)).trips?.some(x => !x.id.startsWith('sample-')) ? 'Enter không sửa mà vẫn tách chuyến mẫu' : null],
   ['Sửa đơn (dải xe)', 'Pallet sample', p => p.getByRole('dialog').getByRole('button', { name: T('Lưu'), exact: true }).click(),
     async p => { const o = (await data(p)).orders?.find(x => !x.id.startsWith('sample-')); return !o ? 'không thấy bản sao đơn' : /^Đơn \d+$/.test(o.name) && o.place === 'Nhà phân phối A' ? null : `bản sao đơn lưu "${o.name}" · "${o.place}"` }],
-  ['Sửa mã', 'Milk 180ml x48', p => p.getByRole('dialog').getByRole('button', { name: T('Lưu thành mã của tôi') }).click(),
-    async p => { const n = (await data(p)).items?.[0]?.name; return n === 'Sữa 180ml x48' ? null : `mã lưu tên "${n}"` }],
+  ['Sửa mã', 'TBA 180', p => p.getByRole('dialog').getByRole('button', { name: T('Lưu thành mã của tôi') }).click(),
+    async p => { const n = (await data(p)).items?.[0]?.name; return n === 'TBA 180' ? null : `mã lưu tên "${n}"` }],
   ['Sửa xe', '15-ton pallet truck', p => p.getByRole('dialog').getByRole('button', { name: T('Lưu thành xe của tôi') }).click(),
     async p => { const n = (await data(p)).vehicles?.[0]?.name; return n === 'Xe pallet 15 tấn (của tôi)' ? null : `xe lưu tên "${n}"` }],
 ]

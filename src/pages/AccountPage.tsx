@@ -4,7 +4,7 @@
 // Google — dữ liệu tự lưu lên tài khoản).
 import { useState, type ReactNode } from 'react'
 import { Check, CloudOff, Loader2, LogOut, MessageCircle, Trash2, UserRound, UsersRound } from 'lucide-react'
-import { isSample, useData, useSpace } from '../data/store'
+import { famLabel, isSample, useData, useSpace } from '../data/store'
 import { signInGoogle, signOut, useAuth } from '../data/cloud'
 import { DEFAULT_PALLET_SETTINGS } from '../data/catalog'
 import { Badge, Button, Confirm, cx, fmtInt } from '../ui/kit'
@@ -84,14 +84,14 @@ export default function AccountPage({ onFamily }: { onFamily?: () => void }) {
           </section>
           {signErr && <p className="-mt-2 px-4 pb-3 text-[13px] text-red-700">{signErr}</p>}
           <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-slate-200 bg-slate-50 px-4 py-2.5 text-[13px] text-slate-600">
-            <span className="font-medium text-slate-700">{space.name ? t('Dữ liệu {name}', { name: space.name }) : t('Dữ liệu của bạn')}</span>
+            <span className="font-medium text-slate-700">{space.name ? t('Dữ liệu {name}', { name: famLabel(space.name) }) : t('Dữ liệu của bạn')}</span>
             {counts.map(([n, label], i) => (
               <span key={i} className="whitespace-nowrap"><b className="num text-[15px] font-semibold text-slate-900">{fmtInt(n)}</b> {label}</span>
             ))}
           </div>
 
           {onFamily && (
-            <Row title="Family" desc={space.name ? t('Đang mở dữ liệu {name}.', { name: space.name }) : t('Dùng chung mã hàng, xe, đơn, chuyến với cả nhóm.')}
+            <Row title="Family" desc={space.name ? t('Đang mở dữ liệu {name}.', { name: famLabel(space.name) }) : t('Dùng chung mã hàng, xe, đơn, chuyến với cả nhóm.')}
               side={<Button className="max-sm:flex-1" onClick={onFamily}><UsersRound size={17} />{t('Mở Family')}</Button>} />
           )}
 

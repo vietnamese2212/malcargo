@@ -66,7 +66,7 @@ ok(!errs.length, `không lỗi trình duyệt${errs.length ? ': ' + errs.join(' 
   await q.goto(srv.base + '#/trip/sample-t1', { waitUntil: 'networkidle' }); await q.waitForTimeout(1000)
   await q.getByRole('button', { name: 'Chuyến mới' }).click(); await q.waitForTimeout(800)
   await q.getByRole('button', { name: 'Thêm hàng' }).first().click(); await q.waitForTimeout(400)
-  await q.locator('[role=dialog]').getByText('Sữa 180ml x48').first().click()
+  await q.locator('[role=dialog]').getByText('TBA 180').first().click()
   await q.getByRole('button', { name: /Xong/ }).click(); await q.waitForTimeout(400)
   await q.locator('input[inputmode=numeric]').first().pressSequentially('1200', { delay: 250 }); await q.waitForTimeout(4500)
   const veh = await q.locator('text=/Xe tải [0-9,]+ tấn/').first().textContent().catch(() => '')
@@ -229,7 +229,7 @@ for (const [hash, label] of [['#/trip/sample-t1', 'chuyến mẫu'], ['#/order/s
   const st = await q.evaluate(() => history.state?.overlay ?? null)
   ok(!(await dialogs()) && !st, `đóng danh mục bằng nút ⇒ lịch sử không còn mục của tấm (${st})`)
   // tách chuyến mẫu lúc đang mở tấm (Sửa mã ở dòng hàng → Lưu thành mã của tôi) ⇒ đóng tấm vẫn ở chuyến MỚI, không về mẫu
-  await q.getByRole('button', { name: 'Sửa Sữa 180ml x48' }).first().click(); await q.waitForTimeout(400)
+  await q.getByRole('button', { name: 'Sửa TBA 180' }).first().click(); await q.waitForTimeout(400)
   await q.locator('[role=dialog]').getByPlaceholder('0', { exact: true }).fill('10')
   await q.getByRole('button', { name: 'Lưu thành mã của tôi' }).click(); await q.waitForTimeout(1200)
   const head = await q.locator('h1').innerText()
@@ -243,12 +243,12 @@ for (const [hash, label] of [['#/trip/sample-t1', 'chuyến mẫu'], ['#/order/s
   await q.goto(srv.base + '#/trip/sample-t1', { waitUntil: 'networkidle' }); await q.waitForTimeout(1200)
   await q.getByRole('button', { name: /^Sửa đơn Đơn mẫu pallet/ }).click()
   const sheet = q.locator('[data-sheet]')
-  await sheet.getByLabel('Số thùng Sữa 180ml x48').fill('99')
-  await sheet.getByRole('button', { name: 'Bỏ Túi 110ml x24 khỏi đơn' }).click()
+  await sheet.getByLabel('Số thùng TBA 180').fill('99')
+  await sheet.getByRole('button', { name: 'Bỏ ECOLEAN khỏi đơn' }).click()
   await sheet.getByRole('button', { name: 'Lưu', exact: true }).click(); await q.waitForTimeout(500)
   const st = await q.evaluate(() => JSON.parse(localStorage.getItem('malcargo-data-v1')).state)
   const o = st.orders.find(x => !x.id.startsWith('sample-') && x.name === 'Đơn 1')
-  ok(o?.lines.length === 5 && o.lines.find(l => /st180/.test(l.itemId))?.qty === 99 && !o.lines.some(l => /tui110/.test(l.itemId)),
+  ok(o?.lines.length === 5 && o.lines.find(l => l.itemId === '17047429-4e68-4236-8d2e-1b91b8eac4be')?.qty === 99 && !o.lines.some(l => l.itemId === '89e64f1f-548f-487d-aec8-74ce5c0d1580'),
     `Sửa đơn: đổi số thùng + bỏ mã ⇒ lưu vào đơn (bản tách): ${JSON.stringify(o?.lines)}`)
   // Cài đặt pallet: nút ⚙ ngay cạnh nút chọn Pallet (chuyến mẫu này đã là xe pallet)
   await q.getByRole('button', { name: 'Cài đặt pallet' }).click()

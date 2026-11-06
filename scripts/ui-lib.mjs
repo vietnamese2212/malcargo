@@ -32,7 +32,7 @@ function chromePath() {
 // `--en` (hoặc MALCARGO_LANG=en) để soát bản tiếng Anh — app mặc định tiếng Anh, chọn lưu ở localStorage 'malcargo-lang-v1'.
 export const UI_LANG = process.env.MALCARGO_LANG === 'en' || process.argv.includes('--en') ? 'en' : 'vi'
 
-// Tên nút theo ngôn ngữ đang soát — dùng đúng bảng dịch của app: T('Đổi xe'), T('Sửa {name}', { name: TX('Sữa 180ml x48') })
+// Tên nút theo ngôn ngữ đang soát — dùng đúng bảng dịch của app: T('Đổi xe'), T('Sửa {name}', { name: TX('TBA 180') })
 const i18nDir = mkdtempSync(join(tmpdir(), 'malcargo-ui-i18n-'))
 buildSync({ entryPoints: ['src/i18n/en.ts'], bundle: true, format: 'esm', platform: 'node', outfile: join(i18nDir, 'en.mjs'), logLevel: 'error' })
 const I18N = await import(pathToFileURL(join(i18nDir, 'en.mjs')).href)

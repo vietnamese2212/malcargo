@@ -8,7 +8,7 @@ import {
   FileSpreadsheet, HelpCircle, Layers, Loader2, LogOut, MapPin, Maximize2, Menu, Minimize2, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Rotate3d, Ruler,
   Settings, Share2, SlidersHorizontal, Smartphone, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, UsersRound, X,
 } from 'lucide-react'
-import { LOCKED, catalogLocked, findVehicle, isBlankOrder, isSample, newId, newTripLabel, nextName, useAllItems, useAllVehicles, useData, useSpace } from '../data/store'
+import { LOCKED, catalogLocked, famLabel, findVehicle, isBlankOrder, isSample, newId, newTripLabel, nextName, useAllItems, useAllVehicles, useData, useSpace } from '../data/store'
 import { cloudEnabled, signInGoogle, signOut, switchSpace, useAuth, useFamily } from '../data/cloud'
 import { ShareSheet } from '../ui/Share'
 import { pickPool, resolveOrder, truckOf } from '../data/resolve'
@@ -674,7 +674,7 @@ function MainMenu({ onPanel, onImport, onTour }: { onPanel: (p: PanelName) => vo
           {!!families.length && (
             <div role="radiogroup" aria-label={t('Dữ liệu đang mở')} className="border-b border-slate-200 pb-1">
               <div className="px-3 pb-0.5 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{t('Dữ liệu đang mở')}</div>
-              {[{ id: 'me', name: t('Của tôi') }, ...families].map(f => (
+              {[{ id: 'me', name: t('Của tôi') }, ...families.map(f => ({ id: f.id, name: famLabel(f.name) }))].map(f => (
                 <button key={f.id} type="button" role="radio" aria-checked={space === f.id} onClick={() => { close(); void switchSpace(f.id) }}
                   className={cx('tap flex w-full items-center gap-2.5 px-3 text-left text-sm transition-colors hover:bg-slate-100', space === f.id ? 'font-semibold text-brand-700' : 'text-slate-800')}>
                   <span className="grid w-[18px] shrink-0 place-items-center">{space === f.id && <Check size={16} strokeWidth={3} />}</span>
@@ -1158,7 +1158,7 @@ function VehicleList({ vehicle, vehicles, suggestion, fits, onShown, onPick, onE
       <div ref={scroller} className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="flex items-center gap-1.5 bg-brand-50 px-2.5 py-1 text-[12px] font-semibold text-brand-800">
           {space.name ? <UsersRound size={13} /> : <UserRound size={13} />}
-          <span className="flex-1">{space.name ? t('Xe của {name}', { name: space.name }) : t('Xe của tôi')}</span><span className="num">{mine.length}</span>
+          <span className="flex-1">{space.name ? t('Xe của {name}', { name: famLabel(space.name) }) : t('Xe của tôi')}</span><span className="num">{mine.length}</span>
         </div>
         {mine.length ? <div className="divide-y divide-slate-100">{mine.map(row)}</div>
           : <p className="px-3 py-2 text-[13px] text-slate-600">{needle || onlyFit ? t('Không có xe nào khớp.') : space.role === 'member' ? t('Chủ Family chưa thêm xe nào.') : t('Chưa có. Sửa một xe mẫu hoặc thêm xe mới, xe sẽ nằm ở đây.')}</p>}
