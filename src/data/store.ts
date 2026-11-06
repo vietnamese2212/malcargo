@@ -350,6 +350,12 @@ export function saveToMine(d: ImportBatch) {
   const stamp = <T extends { id: string }>(list: T[], add: T[]) => add.reduce((l, x) => upsert(l, { ...x, updatedAt: now }), list)
   safeStorage.setItem(key, JSON.stringify({ state: { ...s, items: put(s.items, d.items), vehicles: put(s.vehicles, d.vehicles), orders: stamp(s.orders, d.orders), trips: stamp(s.trips, d.trips) }, version: saved?.version ?? 0 }))
 }
+/** Đăng xuất / đổi tài khoản: bộ "Của tôi" trên máy về như máy mới, để người sau không gộp phải dữ liệu người trước. KHÔNG dùng
+ *  `replaceAll` — nó ghi dấu đã xoá, gộp lên tài khoản sẽ xoá thật. */
+export function resetMine() {
+  if (useSpace.getState().id === 'me') useData.setState({ ...EMPTY, fork: null })
+  else safeStorage.removeItem(dataKey('me'))
+}
 /** Bỏ bản lưu trên máy của một Family (đăng xuất / rời / bị bỏ khỏi Family). */
 export const dropSpace = (id: string) => { if (id !== 'me') safeStorage.removeItem(dataKey(id)) }
 /** Cả bộ "Của tôi" khi đang mở bộ khác (đọc bản lưu trên máy) — nhập Excel so trùng + tra mã theo bộ này. */

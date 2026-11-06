@@ -7,7 +7,7 @@ import { create } from 'zustand'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Item, Order, Trip, Vehicle } from './types'
 import {
-  catalogLocked, dropSpace, exportBackup, mergeBackup, myCatalog, openSpace, parseBackup, useCatalog, useData, useSpace, type BackupData,
+  catalogLocked, dropSpace, exportBackup, mergeBackup, myCatalog, openSpace, parseBackup, resetMine, useCatalog, useData, useSpace, type BackupData,
 } from './store'
 import { cleanPack, type SharePack } from './share'
 import { t } from '../i18n'
@@ -30,11 +30,20 @@ export const useAuth = create<AuthState>(() => ({ status: cloudEnabled ? 'loadin
 export async function signInGoogle() {
   const c = await sb()
   // về đúng trang gốc (không kèm #/…): mã đăng nhập trả về ở ?code=, không đụng định tuyến bằng dấu #
-  await c.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } })
+  // select_account: luôn hiện bảng chọn tài khoản, không thì Google tự vào lại tài khoản vừa dùng
+  await c.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname, queryParams: { prompt: 'select_account' } } })
 }
+/** Đăng xuất MÁY NÀY (máy khác giữ nguyên). Đẩy nốt thay đổi trước, rồi dọn ngay — đổi tài khoản rời trang liền sau đó. */
 export async function signOut() {
   const c = await sb()
-  await c.auth.signOut()
+  if (pushTimer) { clearTimeout(pushTimer); pushTimer = undefined; void push() }
+  await saving
+  await c.auth.signOut({ scope: 'local' })
+  await onSignedOut()
+}
+export async function switchAccount() {
+  await signOut()
+  await signInGoogle()
 }
 
 // ── Mẫu chung ────────────────────────────────────────────────────────────────
@@ -420,8 +429,16 @@ export async function fetchShare(code: string): Promise<{ pack: SharePack } | { 
 }
 
 // ── Đăng nhập / đăng xuất ─────────────────────────────────────────────────────────────────────────────────────────
+// dữ liệu "Của tôi" trên máy thuộc tài khoản nào (không có = của khách, đăng nhập thì gộp lên như thường)
+const OWNER = 'malcargo-owner-v1'
+const ownerOf = () => { try { return localStorage.getItem(OWNER) } catch { return null } }
+const setOwner = (id: string | null) => { try { if (id) localStorage.setItem(OWNER, id); else localStorage.removeItem(OWNER) } catch { /* bỏ qua */ } }
 async function onSignedIn(u: { id: string; email?: string; user_metadata?: Record<string, unknown> }) {
   if (uid === u.id) return
+  // dữ liệu trên máy là của tài khoản khác (đổi tài khoản giữa chừng, phiên cũ hết hạn) ⇒ bỏ trước khi gộp, không đưa sang người này
+  const otherOwner = !!ownerOf() && ownerOf() !== u.id
+  if (otherOwner) { uid = null; resetMine(); setDirty('me', false); jumpToLatest() }
+  setOwner(u.id)
   uid = u.id
   const md = u.user_metadata ?? {}
   useAuth.setState({
@@ -435,9 +452,11 @@ async function onSignedIn(u: { id: string; email?: string; user_metadata?: Recor
   const before = useSpace.getState().id
   await loadFamilies()   // bộ đang mở là Family không còn tham gia ⇒ đã tự về "Của tôi" (và kéo bản tài khoản về)
   if (useSpace.getState().id === before) { version = null; await pull(true) }
+  if (otherOwner) jumpToLatest()   // chuyến đang mở là của người trước, đã bỏ ⇒ sang chuyến gần nhất của tài khoản này
 }
 
 async function onSignedOut() {
+  const wasIn = uid !== null   // mở app chưa đăng nhập cũng vào đây: dữ liệu của khách phải giữ nguyên
   uid = null
   version = null
   const { families } = useFamily.getState(), open = useSpace.getState().id
@@ -450,6 +469,8 @@ async function onSignedOut() {
     jumpToLatest()
   }
   ;[open, ...families.map(f => f.id)].forEach(dropSpace)
+  // dữ liệu của tôi đã nằm trên tài khoản ⇒ rời máy. Còn thay đổi chưa đẩy (mất mạng) ⇒ giữ lại, cùng tài khoản đăng nhập lại sẽ đẩy tiếp
+  if (wasIn && !isDirty('me')) { resetMine(); setOwner(null); jumpToLatest() }
 }
 
 // Đếm khách vãng lai: thiết bị chưa từng đăng nhập gửi một mã ngẫu nhiên, mỗi ngày một lần (không tên, không dữ liệu nhập).

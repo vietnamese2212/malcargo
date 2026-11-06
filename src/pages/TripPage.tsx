@@ -5,11 +5,11 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import {
   AlertTriangle, ArrowDown, ArrowUp, Camera, Check, ChevronDown, ClipboardCopy, ClipboardList, ClipboardPen, Crosshair, ExternalLink, Eye, EyeOff,
-  FileSpreadsheet, HelpCircle, Layers, Loader2, LogOut, MapPin, Maximize2, Menu, Minimize2, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Rotate3d, Ruler,
+  ArrowLeftRight, FileSpreadsheet, HelpCircle, Layers, Loader2, LogOut, MapPin, Maximize2, Menu, Minimize2, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Rotate3d, Ruler,
   Settings, Share2, SlidersHorizontal, Smartphone, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, UsersRound, X,
 } from 'lucide-react'
 import { LOCKED, catalogLocked, famLabel, findVehicle, isBlankOrder, isSample, newId, newTripLabel, nextName, useAllItems, useAllVehicles, useData, useSpace } from '../data/store'
-import { cloudEnabled, signInGoogle, signOut, switchSpace, useAuth, useFamily } from '../data/cloud'
+import { cloudEnabled, signInGoogle, signOut, switchAccount, switchSpace, useAuth, useFamily } from '../data/cloud'
 import { ShareSheet } from '../ui/Share'
 import { pickPool, resolveOrder, truckOf } from '../data/resolve'
 import { orderTotals, type TripInput, type TripResult } from '../engine/plan'
@@ -738,6 +738,7 @@ function AccountButton({ onData }: { onData: () => void }) {
             </div>
             <div className="py-1">
               <MenuItem icon={<UserRound size={17} />} onClick={() => { close(); onData() }}>{t('Tài khoản & dữ liệu')}</MenuItem>
+              <MenuItem icon={<ArrowLeftRight size={17} />} onClick={() => { close(); void switchAccount() }}>{t('Đổi tài khoản')}</MenuItem>
               <MenuItem icon={<LogOut size={17} />} onClick={() => { close(); signOut() }}>{t('Đăng xuất')}</MenuItem>
             </div>
           </>

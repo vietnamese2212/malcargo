@@ -92,6 +92,7 @@ export const TRIP: Record<string, string> = {
   'Đang lưu lên tài khoản…': 'Saving to your account…',
   'Dữ liệu đã lưu trên tài khoản': 'Data saved to your account',
   'Đăng xuất': 'Sign out',
+  'Đổi tài khoản': 'Switch account',
   'Login': 'Login',   // giữ một chữ, cùng bề ngang bản Việt (thanh trên 360 px)
   'Đăng nhập bằng Google': 'Sign in with Google',
   'sắp có': 'coming soon',
