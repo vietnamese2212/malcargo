@@ -86,7 +86,7 @@ export default function TripPage({ id }: { id: string }) {
   const hasCargo = tripOrders.some(o => o.lines.some(l => l.qty > 0))
   const input: TripInput | null = trip && truck && hasCargo ? { truck, orders: tripOrders, pallet, lightOwnPallet: trip.lightOwnPallet, lightOwnLoose: trip.lightOwnLoose } : null
   // danh sách chọn xe đang mở ⇒ thử hàng trên MỌI xe để đánh dấu ✓ / ✗
-  const { result, suggestion, fits, busy, error } = useTripPlan(input, candidates, picking ? allTrucks : undefined)
+  const { result, suggestion, fits, busy, planning, error } = useTripPlan(input, candidates, picking ? allTrucks : undefined)
 
   // Tự chọn xe khi người dùng GÕ XONG: chọn theo kết quả của phím đầu thì gõ "1200" thành xe 1,5 tấn chở 1 thùng (thử 31/10).
   // Ô số còn đang gõ ⇒ chờ 2,5 s không có kết quả mới; rời ô ⇒ chọn ngay. Đang tính ⇒ kết quả cũ, chưa chọn.
@@ -349,7 +349,7 @@ export default function TripPage({ id }: { id: string }) {
               plan={plan} meta={result?.meta} colors={colors} prints={prints} step={step} focus={shown} focusItem={sel?.itemId ?? null} view={view} walls={walls} />
 
             <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between gap-2">
-              <TitleBlock r={r} busy={busy} error={error} hasCargo={hasCargo} vehicle={vehicle} tripName={trip.name}
+              <TitleBlock r={r} busy={planning} error={error} hasCargo={hasCargo} vehicle={vehicle} tripName={trip.name}
                 orders={orderRows}
                 sug={suggestion && vehicle && suggestion !== vehicle.id ? vehicles.find(v => v.id === suggestion) : undefined}
                 noneFits={!suggestion} onPick={vid => { pickVehicle(vid); setToast(t('Đã đổi xe')) }} />
