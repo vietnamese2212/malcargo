@@ -19,13 +19,25 @@ let bad = 0
 const ok = (c, m) => { console.log(c ? '  ✓' : '  ✗', m); if (!c) bad++ }
 const fresh = async () => {
   const ctx = await b.newContext({ viewport: { width: 1280, height: 800 } })
-  const srvData = { userA: backup('a-o1', 'a-t1'), userB: backup('b-o1', 'b-t1') }, log = { saves: [], authorize: [], logout: [] }
+  const srvData = { userA: backup('a-o1', 'a-t1'), userB: backup('b-o1', 'b-t1') }, ver = { userA: 1, userB: 1 }, log = { saves: [], authorize: [], logout: [] }
+  // như user_sync trên máy chủ: gộp phần gửi lên theo id (bản sửa sau thắng), dấu xoá cộng dồn, cỡ pallet gửi lên thì thay
+  const merge = (cur, chg) => {
+    const d = cur ?? { app: 'malcargo', version: 1, items: [], vehicles: [], orders: [], trips: [], pallet: chg.pallet, deleted: {} }
+    const list = (a = [], b = []) => [...a.map(x => { const y = b.find(z => z.id === x.id); return y && y.updatedAt > x.updatedAt ? y : x }), ...b.filter(y => !a.some(x => x.id === y.id))]
+    return { ...d, items: list(d.items, chg.items), vehicles: list(d.vehicles, chg.vehicles), orders: list(d.orders, chg.orders), trips: list(d.trips, chg.trips),
+      pallet: chg.pallet ?? d.pallet, deleted: { ...d.deleted, ...chg.deleted } }
+  }
   const who = r => { try { return JSON.parse(Buffer.from((r.headers().authorization ?? '').split('.')[1], 'base64url').toString()).sub } catch { return null } }
   await ctx.route('**/rest/v1/**', r => {
     const u = r.request().url(), me = who(r.request())
     const json = (body, status = 200) => r.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
-    if (u.includes('/rpc/user_save')) { const d = r.request().postDataJSON(); log.saves.push({ me, data: d.p_data }); srvData[me] = d.p_data; return json(log.saves.length + 1) }
-    if (u.includes('/user_data')) return srvData[me] ? json({ data: srvData[me], version: 1 }) : json(null)
+    if (u.includes('/rpc/user_sync')) {
+      const d = r.request().postDataJSON(); log.saves.push({ me, data: d.p_changes })
+      srvData[me] = merge(srvData[me], d.p_changes); ver[me] = (ver[me] ?? 0) + 1
+      return json({ version: ver[me], others: false })
+    }
+    if (u.includes('/rpc/user_since')) return srvData[me] ? json({ version: ver[me], full: true, data: srvData[me] }) : json(null)
+    if (u.includes('/user_data')) return srvData[me] ? json({ data: srvData[me], version: ver[me] }) : json(null)
     if (u.includes('/rpc/is_admin') || u.includes('/rpc/is_super_admin')) return json(false)
     return json(u.includes('/rpc/') ? null : [])
   })
@@ -44,13 +56,13 @@ const fresh = async () => {
   }
   const mine = () => p.evaluate(() => JSON.parse(localStorage.getItem('malcargo-data-v1') ?? '{"state":{}}').state)
   const menu = async (id, label) => { await p.getByRole('button', { name: new RegExp(T('Tài khoản {name}', { name: `Người ${id}` })) }).click(); await p.waitForTimeout(250); await p.getByRole('button', { name: T(label), exact: true }).last().click() }
-  return { ctx, p, log, signInAs, mine, menu, errs }
+  return { ctx, p, log, signInAs, mine, menu, errs, srvData }
 }
 const hasA = d => JSON.stringify(d).includes('a-o1') || JSON.stringify(d).includes('a-t1')
 
 console.log('— Đổi tài khoản từ menu')
 {
-  const { ctx, p, log, signInAs, mine, menu, errs } = await fresh()
+  const { ctx, p, log, signInAs, mine, menu, errs, srvData } = await fresh()
   await signInAs('userA')
   ok(hasA(await mine()), 'A đăng nhập: dữ liệu A về máy')
   await menu('userA', 'Đổi tài khoản')
@@ -66,7 +78,8 @@ console.log('— Đổi tài khoản từ menu')
   ok(toB.length && toB.every(s => !hasA(s.data)), 'B đăng nhập: không gửi dữ liệu A lên tài khoản B')
   st = await mine()
   ok(!hasA(st) && JSON.stringify(st).includes('b-o1'), 'máy có dữ liệu B, không có A')
-  ok(!log.saves.filter(s => s.me === 'userA').some(s => !hasA(s.data) || Object.keys(s.data.deleted ?? {}).some(k => k.startsWith('a-'))), 'tài khoản A không bị xoá gì')
+  // máy chủ gộp từng bản ghi (không còn ghi đè cả bộ) ⇒ chỉ dấu xoá mới làm mất được dữ liệu A
+  ok(!log.saves.filter(s => s.me === 'userA').some(s => Object.keys(s.data.deleted ?? {}).some(k => k.startsWith('a-'))) && hasA(srvData.userA), 'tài khoản A không bị xoá gì')
   ok(!errs.length, 'không lỗi trình duyệt ' + errs.join())
   await ctx.close()
 }

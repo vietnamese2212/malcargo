@@ -355,6 +355,162 @@ grant execute on function public.user_save(jsonb, bigint), public.family_fee(uui
   public.family_decline(uuid), public.family_leave(uuid), public.family_delete(uuid), public.family_apply_code(uuid, text),
   public.family_save(uuid, jsonb, bigint), public.family_role(uuid), public.family_invited(uuid), public.my_email() to authenticated;
 
+-- ── ĐỒNG BỘ THEO TỪNG BẢN GHI (chủ dự án 10/11: "xử lý phần kiến trúc dữ liệu"). Vẫn MỘT bộ JSON / người, / Family, nhưng:
+--    · app gửi lên CHỈ phần đã đổi (`user_sync` / `family_sync`), máy chủ gộp từng bản ghi ngay trong lần khoá dòng ⇒ không
+--      còn "không khớp phiên bản ⇒ kéo về ⇒ gộp ⇒ ghi lại" khi nhiều người cùng lưu (Family đông người);
+--    · app kéo về CHỈ phần mới hơn phiên bản đang cầm (`user_since` / `family_since`) nhờ `revs`: id → phiên bản lần cuối bản
+--      ghi đó (hoặc dấu xoá của nó) đổi; '_pallet' cho cỡ pallet. Trigger tự tính `revs` bằng cách so bản cũ / mới ⇒ ghi kiểu
+--      nào cũng đúng, kể cả app bản cũ còn gọi `user_save` / `family_save` (giữ nguyên hai hàm đó).
+alter table public.user_data add column if not exists revs jsonb not null default '{}';
+alter table public.family_data add column if not exists revs jsonb not null default '{}';
+
+create or replace function public.data_revs(o jsonb, n jsonb, oldr jsonb, v bigint) returns jsonb
+language sql immutable set search_path = public as $$
+  with o_r as (select x ->> 'id' id, x from jsonb_array_elements(coalesce(o -> 'items', '[]') || coalesce(o -> 'vehicles', '[]')
+                 || coalesce(o -> 'orders', '[]') || coalesce(o -> 'trips', '[]')) x where x ? 'id'),
+  n_r as (select x ->> 'id' id, x from jsonb_array_elements(coalesce(n -> 'items', '[]') || coalesce(n -> 'vehicles', '[]')
+                 || coalesce(n -> 'orders', '[]') || coalesce(n -> 'trips', '[]')) x where x ? 'id'),
+  o_d as (select k id, at from jsonb_each(coalesce(o -> 'deleted', '{}')) e(k, at)),
+  n_d as (select k id, at from jsonb_each(coalesce(n -> 'deleted', '{}')) e(k, at)),
+  ids as (select id from n_r union select id from n_d)
+  select coalesce(jsonb_object_agg(ids.id, case when nr.x is not distinct from orr.x and nd.at is not distinct from od.at
+      then coalesce(oldr -> ids.id, to_jsonb(v)) else to_jsonb(v) end), '{}')
+    || jsonb_build_object('_pallet', case when o -> 'pallet' is not distinct from n -> 'pallet'
+      then coalesce(oldr -> '_pallet', to_jsonb(v)) else to_jsonb(v) end)
+  from ids left join n_r nr on nr.id = ids.id left join o_r orr on orr.id = ids.id
+    left join n_d nd on nd.id = ids.id left join o_d od on od.id = ids.id
+$$;
+
+create or replace function public.stamp_revs() returns trigger language plpgsql set search_path = public as $$
+begin
+  new.revs := public.data_revs(case when tg_op = 'UPDATE' then old.data else '{}' end, new.data,
+    case when tg_op = 'UPDATE' then old.revs else '{}' end, new.version);
+  return new;
+end $$;
+-- tên "…_zrevs" ⇒ chạy SAU trigger tăng phiên bản (cùng thời điểm thì Postgres chạy theo thứ tự tên)
+drop trigger if exists user_data_zrevs on public.user_data;
+create trigger user_data_zrevs before insert or update on public.user_data for each row execute function public.stamp_revs();
+drop trigger if exists family_data_zrevs on public.family_data;
+create trigger family_data_zrevs before insert or update on public.family_data for each row execute function public.stamp_revs();
+
+-- Một danh sách: như mergeList ở store.ts — cùng id giữ bản updatedAt LỚN HƠN (bằng nhau giữ bản đang có), giữ thứ tự cũ,
+-- bản mới nối cuối; bản ghi bị xoá SAU lần sửa cuối (dead[id] >= updatedAt) ⇒ bỏ.
+create or replace function public.merge_list(cur jsonb, inc jsonb, dead jsonb) returns jsonb
+language sql immutable set search_path = public as $$
+  with c as (select x, ord from jsonb_array_elements(coalesce(cur, '[]')) with ordinality t(x, ord)),
+  i as (select distinct on (x ->> 'id') x, ord from jsonb_array_elements(coalesce(inc, '[]')) with ordinality t(x, ord)
+        where x ? 'id' order by x ->> 'id', coalesce((x ->> 'updatedAt')::numeric, 0) desc, ord),
+  m as (
+    select case when i.x is not null and coalesce((i.x ->> 'updatedAt')::numeric, 0) > coalesce((c.x ->> 'updatedAt')::numeric, 0)
+             then i.x else c.x end x, c.ord::numeric ord
+      from c left join i on i.x ->> 'id' = c.x ->> 'id'
+    union all
+    select i.x, 1e12 + i.ord from i where not exists (select 1 from c where c.x ->> 'id' = i.x ->> 'id'))
+  select coalesce(jsonb_agg(x order by ord), '[]') from m
+  where not coalesce((dead ->> (x ->> 'id'))::numeric >= coalesce((x ->> 'updatedAt')::numeric, 0), false)
+$$;
+
+-- Gộp phần thay đổi `chg` vào bộ `cur` — như mergeBackup ở store.ts. Dấu xoá: lấy lúc muộn nhất, bỏ dấu quá 90 ngày; chuyến
+-- bỏ đơn đã xoá. Cỡ pallet gửi lên thì thay. `p_catalog` = false (thành viên Family): bỏ qua mã hàng, xe, cỡ pallet và dấu
+-- xoá của mã hàng / xe — chủ giữ danh mục (như family_save).
+create or replace function public.merge_data(cur jsonb, chg jsonb, p_catalog boolean) returns jsonb
+language plpgsql immutable set search_path = public as $$
+declare cat jsonb; dead jsonb; orders jsonb; old numeric := extract(epoch from now()) * 1000 - 90 * 864e5;
+begin
+  cur := coalesce(cur, '{}'); chg := coalesce(chg, '{}');
+  cat := coalesce(cur -> 'items', '[]') || coalesce(cur -> 'vehicles', '[]');
+  select coalesce(jsonb_object_agg(k, at), '{}') into dead from (
+    select k, max(v::numeric) at from (
+      select k, v from jsonb_each_text(coalesce(cur -> 'deleted', '{}')) e(k, v)
+      union all
+      select k, v from jsonb_each_text(coalesce(chg -> 'deleted', '{}')) e(k, v)
+      where p_catalog or k not in (select x ->> 'id' from jsonb_array_elements(cat) x where x ? 'id')
+    ) s group by k) z where at > old;
+  orders := public.merge_list(cur -> 'orders', chg -> 'orders', dead);
+  return cur || jsonb_build_object(
+    'app', 'malcargo', 'version', 1, 'deleted', dead, 'orders', orders,
+    'items', public.merge_list(cur -> 'items', case when p_catalog then chg -> 'items' end, dead),
+    'vehicles', public.merge_list(cur -> 'vehicles', case when p_catalog then chg -> 'vehicles' end, dead),
+    'pallet', coalesce(case when p_catalog then chg -> 'pallet' end, cur -> 'pallet', '{"l":1200,"w":1000,"maxH":1650,"baseH":150,"kg":25,"gap":0}'),
+    'trips', (select coalesce(jsonb_agg(case when t ? 'orderIds' then jsonb_set(t, '{orderIds}', coalesce((
+        select jsonb_agg(o order by n) from jsonb_array_elements_text(t -> 'orderIds') with ordinality q(o, n)
+        where not (dead ? o and not exists (select 1 from jsonb_array_elements(orders) y where y ->> 'id' = o))), '[]')) else t end), '[]')
+      from jsonb_array_elements(public.merge_list(cur -> 'trips', chg -> 'trips', dead)) t));
+end $$;
+
+-- Phần mới hơn phiên bản `since` của một bộ: bản ghi + dấu xoá + cỡ pallet đổi SAU `since`. since null / lạ ⇒ cả bộ.
+create or replace function public.data_since(d jsonb, r jsonb, v bigint, since bigint) returns jsonb
+language sql immutable set search_path = public as $$
+  select case when since is null or since > v then jsonb_build_object('version', v, 'full', true, 'data', d)
+    else jsonb_build_object('version', v, 'full', false, 'data', jsonb_build_object(
+      'items', (select coalesce(jsonb_agg(x), '[]') from jsonb_array_elements(coalesce(d -> 'items', '[]')) x where coalesce((r ->> (x ->> 'id'))::bigint, v) > since),
+      'vehicles', (select coalesce(jsonb_agg(x), '[]') from jsonb_array_elements(coalesce(d -> 'vehicles', '[]')) x where coalesce((r ->> (x ->> 'id'))::bigint, v) > since),
+      'orders', (select coalesce(jsonb_agg(x), '[]') from jsonb_array_elements(coalesce(d -> 'orders', '[]')) x where coalesce((r ->> (x ->> 'id'))::bigint, v) > since),
+      'trips', (select coalesce(jsonb_agg(x), '[]') from jsonb_array_elements(coalesce(d -> 'trips', '[]')) x where coalesce((r ->> (x ->> 'id'))::bigint, v) > since),
+      'deleted', (select coalesce(jsonb_object_agg(k, at), '{}') from jsonb_each(coalesce(d -> 'deleted', '{}')) e(k, at) where coalesce((r ->> k)::bigint, v) > since))
+      -- cỡ pallet chỉ có khi đổi (không đổi ⇒ không có khoá, app giữ bản đang có)
+      || case when coalesce((r ->> '_pallet')::bigint, v) > since then jsonb_build_object('pallet', d -> 'pallet') else '{}' end) end
+$$;
+
+-- Ghi phần thay đổi của bộ "Của tôi". Trả { version, others }: others = có máy khác ghi sau `p_since` (app kéo phần đó về).
+create or replace function public.user_sync(p_changes jsonb, p_since bigint) returns jsonb
+language plpgsql security invoker set search_path = public as $$
+declare cur jsonb; v0 bigint; v bigint;
+begin
+  if auth.uid() is null then raise exception 'not_signed_in'; end if;
+  select data, version into cur, v0 from user_data where user_id = auth.uid() for update;
+  if not found then
+    insert into user_data (user_id, data) values (auth.uid(), public.merge_data('{"items":[],"vehicles":[],"orders":[],"trips":[],"deleted":{}}', p_changes, true))
+      on conflict (user_id) do nothing returning version into v;
+    if v is not null then return jsonb_build_object('version', v, 'others', false); end if;
+    select data, version into cur, v0 from user_data where user_id = auth.uid() for update;
+  end if;
+  update user_data set data = public.merge_data(cur, p_changes, true) where user_id = auth.uid() returning version into v;
+  return jsonb_build_object('version', v, 'others', v0 is distinct from p_since);
+end $$;
+
+create or replace function public.user_since(p_since bigint) returns jsonb
+language sql stable security invoker set search_path = public as $$
+  select public.data_since(data, revs, version, p_since) from user_data where user_id = auth.uid()
+$$;
+
+-- Family: chủ gộp cả bộ; thành viên chỉ đơn + chuyến (+ dấu xoá của chúng) — như family_save.
+create or replace function public.family_sync(p_family uuid, p_changes jsonb, p_since bigint) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare r text := public.family_role(p_family); cur jsonb; v0 bigint; v bigint;
+begin
+  if r is null then raise exception 'not_member'; end if;
+  select data, version into cur, v0 from family_data where family_id = p_family for update;
+  if not found then raise exception 'not_member'; end if;
+  update family_data set data = public.merge_data(cur, p_changes, r = 'owner') where family_id = p_family returning version into v;
+  return jsonb_build_object('version', v, 'others', v0 is distinct from p_since);
+end $$;
+
+create or replace function public.family_since(p_family uuid, p_since bigint) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if public.family_role(p_family) is null then raise exception 'not_member'; end if;
+  return (select public.data_since(data, revs, version, p_since) from family_data where family_id = p_family);
+end $$;
+
+revoke execute on function public.user_sync(jsonb, bigint), public.user_since(bigint), public.family_sync(uuid, jsonb, bigint),
+  public.family_since(uuid, bigint) from public, anon;
+grant execute on function public.user_sync(jsonb, bigint), public.user_since(bigint), public.family_sync(uuid, jsonb, bigint),
+  public.family_since(uuid, bigint) to authenticated;
+
+-- bộ đã có từ trước khi có `revs`: mọi bản ghi mang phiên bản hiện tại — tắt trigger để không tăng phiên bản, không đổi
+-- updated_at (màn Quản trị đọc "lần dùng gần nhất" từ đó)
+alter table public.user_data disable trigger user_data_version;
+alter table public.user_data disable trigger user_data_zrevs;
+update public.user_data set revs = public.data_revs(data, data, '{}', version) where revs = '{}';
+alter table public.user_data enable trigger user_data_version;
+alter table public.user_data enable trigger user_data_zrevs;
+alter table public.family_data disable trigger family_data_version;
+alter table public.family_data disable trigger family_data_zrevs;
+update public.family_data set revs = public.data_revs(data, data, '{}', version) where revs = '{}';
+alter table public.family_data enable trigger family_data_version;
+alter table public.family_data enable trigger family_data_zrevs;
+
 -- ── CHIA SẺ CHUYẾN: người đăng nhập đưa BẢN CHỤP chuyến (chuyến + đơn + mã hàng + xe) lên ⇒ mã link ngắn; ai có mã cũng
 --    đọc được qua share_get (không cần đăng nhập) rồi lưu bản sao về máy mình. Không ai liệt kê / đọc thẳng bảng được.
 create table if not exists public.shares (

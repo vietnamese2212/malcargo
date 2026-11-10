@@ -7,7 +7,8 @@ import { create } from 'zustand'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Item, Order, Trip, Vehicle } from './types'
 import {
-  catalogLocked, dropSpace, exportBackup, mergeBackup, myCatalog, openSpace, parseBackup, resetMine, useCatalog, useData, useSpace, type BackupData,
+  applyChanges, catalogLocked, changesSince, dropSpace, exportBackup, markSynced, mergeBackup, myCatalog, openSpace, parseBackup, resetMine,
+  syncedOf, useCatalog, useData, useSpace, type BackupData, type Synced,
 } from './store'
 import { cleanPack, type SharePack } from './share'
 import { t } from '../i18n'
@@ -102,36 +103,28 @@ export async function readFamily(fid: string): Promise<Partial<BackupData> | nul
   if (error) return null
   return ((data as { data: Partial<BackupData> | null } | null)?.data) ?? {}
 }
-/** Nhập Excel, dòng "Family" khi bộ Family không mở: ghi thẳng lên máy chủ — trùng mã / biển số ⇒ ghi đè. Không khớp
- *  phiên bản (ai đó vừa ghi) ⇒ đọc lại, gộp lại (≤ 4 lần). Mở bộ Family thì app kéo bản này về như thường. */
+/** Nhập Excel, dòng "Family" khi bộ Family không mở: gửi thẳng phần thêm lên máy chủ (`family_sync` tự gộp từng bản ghi) —
+ *  trùng mã / biển số ⇒ ghi đè đúng bản đó. Mở bộ Family thì app kéo về như thường. */
 export async function saveToFamily(fid: string, add: { items: Item[]; vehicles: Vehicle[]; orders: Order[]; trips: Trip[] }): Promise<string | null> {
   const { items, vehicles } = add
   const c = await sb(), now = Date.now(), same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
-  for (let i = 0; i < 4; i++) {
-    const { data, error } = await c.from('family_data').select('data, version').eq('family_id', fid).maybeSingle()
-    if (error) return error.message
-    const row = data as { data: Partial<BackupData> | null; version: number } | null
-    if (!row) return 'family_data'
-    const d = row.data ?? {}
-    const put = <T extends { id: string }>(list: T[], add: T[], at: (x: T) => T | undefined) =>
-      add.reduce((l, x) => { const o = at(x); return [{ ...x, id: o?.id ?? x.id, owner: 'me', updatedAt: now } as T, ...l.filter(y => y.id !== o?.id)] }, list)
-    const curI = d.items ?? [], curV = d.vehicles ?? []
-    // ai đó vừa thêm đúng mã này giữa lúc đọc và ghi ⇒ giữ id bản trên máy chủ, đơn trong file đổi theo
-    const itemId = new Map(items.map(x => [x.id, curI.find(y => same(y.code, x.code))?.id ?? x.id]))
-    const vehId = new Map(vehicles.map(x => [x.id, curV.find(y => (x.plate ? same(y.plate, x.plate) : !y.plate && same(y.name, x.name)))?.id ?? x.id]))
-    const byId = <T extends { id: string }>(list: T[], more: T[]) => [...more.map(x => ({ ...x, updatedAt: now })), ...list.filter(y => !more.some(x => x.id === y.id))]
-    const next = {
-      app: 'malcargo', version: 1, pallet: useData.getState().pallet, ...d,
-      items: put(curI, items, x => curI.find(y => same(y.code, x.code))),
-      vehicles: put(curV, vehicles, x => curV.find(y => (x.plate ? same(y.plate, x.plate) : !y.plate && same(y.name, x.name)))),
-      orders: byId(d.orders ?? [], add.orders.map(o => ({ ...o, lines: o.lines.map(l => ({ ...l, itemId: itemId.get(l.itemId) ?? l.itemId })) }))),
-      trips: byId(d.trips ?? [], add.trips.map(x => ({ ...x, vehicleId: x.vehicleId && (vehId.get(x.vehicleId) ?? x.vehicleId) }))),
-    }
-    const r = await c.rpc('family_save', { p_family: fid, p_data: next, p_version: row.version })
-    if (r.error) return r.error.message
-    if (r.data != null) return null
+  const { data, error } = await c.from('family_data').select('data').eq('family_id', fid).maybeSingle()
+  if (error) return error.message
+  const row = data as { data: Partial<BackupData> | null } | null
+  if (!row) return 'family_data'
+  const curI = row.data?.items ?? [], curV = row.data?.vehicles ?? []
+  // mã / biển số đã có trong Family ⇒ dùng id bản đó (ghi đè), đơn / chuyến trong file đổi theo
+  const itemOf = (x: Item) => curI.find(y => same(y.code, x.code))
+  const vehOf = (x: Vehicle) => curV.find(y => (x.plate ? same(y.plate, x.plate) : !y.plate && same(y.name, x.name)))
+  const itemId = new Map(items.map(x => [x.id, itemOf(x)?.id ?? x.id])), vehId = new Map(vehicles.map(x => [x.id, vehOf(x)?.id ?? x.id]))
+  const changes = {
+    items: items.map(x => ({ ...x, id: itemId.get(x.id)!, owner: 'me', updatedAt: now })),
+    vehicles: vehicles.map(x => ({ ...x, id: vehId.get(x.id)!, owner: 'me', updatedAt: now })),
+    orders: add.orders.map(o => ({ ...o, updatedAt: now, lines: o.lines.map(l => ({ ...l, itemId: itemId.get(l.itemId) ?? l.itemId })) })),
+    trips: add.trips.map(x => ({ ...x, updatedAt: now, vehicleId: x.vehicleId && (vehId.get(x.vehicleId) ?? x.vehicleId) })),
   }
-  return 'version'
+  const r = await c.rpc('family_sync', { p_family: fid, p_changes: changes, p_since: null })
+  return r.error ? r.error.message : null
 }
 /** Admin nhập Excel vào Mẫu chung: ghi một lần cả danh sách (không được quyền ⇒ máy chủ từ chối, không ghi gì). */
 export async function saveCatalogMany(kind: 'item' | 'vehicle', xs: (Item | Vehicle)[]): Promise<string | null> {
@@ -166,6 +159,7 @@ let version: number | null = null   // phiên bản trên máy chủ của bộ 
 let applying = false                // đang thay bằng bản từ máy chủ / đang đổi bộ ⇒ đừng đẩy ngược lên
 let pushTimer: ReturnType<typeof setTimeout> | undefined
 let saving: Promise<void> = Promise.resolve()
+let synced: Synced | null = null    // máy chủ đang có gì (theo bản ghi) — chỉ gửi phần khác; null = chưa biết ⇒ gửi hết, máy chủ tự gộp
 
 // bộ còn thay đổi chưa đẩy lên (mất mạng, đóng app giữa chừng) — mở lại thì gộp lên trước, không lấy bản máy chủ đè
 const DIRTY = 'malcargo-dirty-v1'
@@ -189,13 +183,39 @@ async function fetchRemote(withData = true): Promise<Remote> {
   return { ok: true, data: parsed && typeof parsed !== 'string' ? parsed : null, version: row?.version ?? null }
 }
 
-async function saveRemote(d: BackupData): Promise<number | null> {
+/** Gửi phần đã đổi; máy chủ gộp từng bản ghi. `others`: có máy / người khác ghi sau phiên bản máy này đang cầm. */
+async function sendChanges(chg: Partial<BackupData>, since: number | null): Promise<{ version: number; others: boolean }> {
   const c = await sb(), sp = useSpace.getState().id
   const { data, error } = sp === 'me'
-    ? await c.rpc('user_save', { p_data: d, p_version: version })
-    : await c.rpc('family_save', { p_family: sp, p_data: d, p_version: version })
+    ? await c.rpc('user_sync', { p_changes: chg, p_since: since })
+    : await c.rpc('family_sync', { p_family: sp, p_changes: chg, p_since: since })
   if (error) throw error
-  return data as number | null
+  return data as { version: number; others: boolean }
+}
+
+/** Phần mới hơn phiên bản `since` (full = cả bộ). null = chưa có dữ liệu trên máy chủ. */
+async function fetchSince(since: number | null): Promise<{ version: number; full: boolean; data: Partial<BackupData> } | null> {
+  const c = await sb(), sp = useSpace.getState().id
+  const { data, error } = sp === 'me'
+    ? await c.rpc('user_since', { p_since: since })
+    : await c.rpc('family_since', { p_family: sp, p_since: since })
+  if (error) throw error
+  return data as { version: number; full: boolean; data: Partial<BackupData> } | null
+}
+
+/** Kéo phần mới về, gộp vào bản trên máy (thay đổi chưa gửi của máy này giữ nguyên). */
+async function pullSince(since: number | null) {
+  const sp = useSpace.getState().id
+  const r = await fetchSince(since)
+  if (!r || useSpace.getState().id !== sp) return
+  if (r.full) {
+    const p = parseBackup(JSON.stringify(r.data))
+    if (typeof p === 'string') return
+    replaceFromRemote(withLocal(p)); synced = syncedOf(p)
+  } else {
+    replaceFromRemote(applyChanges(exportBackup(), r.data, synced)); synced = markSynced(synced, r.data)
+  }
+  version = r.version
 }
 
 /** Gộp bản trên máy chủ với bản trên máy (bản ghi: sửa sau thắng; cỡ pallet: của máy này). Thành viên Family không sửa
@@ -211,56 +231,50 @@ function replaceFromRemote(d: BackupData) {
   applying = false
 }
 
-/** Đẩy bộ đang mở lên (xếp hàng sau lần đẩy trước). Không khớp phiên bản ⇒ kéo về, gộp, ghi lại (≤ 4 lần). */
+/** Đẩy phần đã đổi của bộ đang mở (xếp hàng sau lần đẩy trước). Máy chủ gộp từng bản ghi ⇒ không còn "không khớp phiên bản
+ *  ⇒ ghi lại"; có người / máy khác vừa ghi ⇒ kéo phần của họ về sau khi gửi. */
 function push(): Promise<void> {
   saving = saving.then(async () => {
     if (!uid) return
     const sp = useSpace.getState().id
+    const chg = changesSince(exportBackup(), synced, !catalogLocked())
+    if (!chg) { if (!pushTimer) setDirty(sp, false); useAuth.setState({ sync: 'saved' }); return }
     useAuth.setState({ sync: 'saving' })
-    for (let i = 0; i < 4; i++) {
-      const v = await saveRemote(exportBackup())
-      if (useSpace.getState().id !== sp) return   // đổi sang bộ khác giữa chừng
-      if (v != null) {
-        version = v
-        if (!pushTimer) setDirty(sp, false)
-        useAuth.setState({ sync: 'saved' })
-        return
-      }
-      const r = await fetchRemote()
-      if (!r.ok || useSpace.getState().id !== sp) break
-      if (r.data) replaceFromRemote(withLocal(r.data))
-      version = r.version
-    }
-    useAuth.setState({ sync: 'error' })
+    const since = version
+    const r = await sendChanges(chg, since)
+    if (useSpace.getState().id !== sp) return   // đổi sang bộ khác giữa chừng
+    synced = markSynced(synced, chg)
+    version = r.version
+    if (r.others) await pullSince(since)
+    if (!pushTimer) setDirty(sp, false)
+    useAuth.setState({ sync: 'saved' })
   }).catch(() => { useAuth.setState({ sync: 'error' }) })
   return saving
 }
 
-/** `first`: vừa đăng nhập / vừa mở bộ này. "Của tôi" ⇒ gộp dữ liệu trên máy vào tài khoản rồi đẩy lên (như trước); Family ⇒
- *  máy này còn thay đổi chưa đẩy thì gộp + đẩy, không thì lấy bản máy chủ. Lần sau: máy chủ có bản mới thì lấy về. */
-async function pull(first: boolean) {
+/** Vừa đăng nhập / vừa mở bộ này: kéo CẢ bộ. "Của tôi" ⇒ gộp dữ liệu trên máy vào tài khoản rồi đẩy phần khác lên; Family ⇒
+ *  máy này còn thay đổi chưa đẩy thì gộp + đẩy, không thì lấy bản máy chủ. Sau đó chỉ kéo phần mới (`pullSince`). */
+async function pull() {
   if (!uid) return
   const sp = useSpace.getState().id
   const r = await fetchRemote()
   if (useSpace.getState().id !== sp) return
   if (!r.ok) { useAuth.setState({ sync: 'error' }); return }
-  if (first) {
-    version = r.version
-    if (sp !== 'me' && !r.data) return
-    if (sp !== 'me' && !isDirty(sp)) { replaceFromRemote(r.data!); return }
-    if (r.data) replaceFromRemote(sp === 'me' ? mergeBackup(exportBackup(), r.data) : withLocal(r.data))
-    await push()
-  } else if (r.data && r.version !== version && !pushTimer && !isDirty(sp)) {
-    version = r.version
-    replaceFromRemote(r.data)
-  }
+  version = r.version
+  synced = r.data ? syncedOf(r.data) : null
+  if (sp !== 'me' && !r.data) return
+  if (sp !== 'me' && !isDirty(sp)) { replaceFromRemote(r.data!); return }
+  if (r.data) replaceFromRemote(sp === 'me' ? mergeBackup(exportBackup(), r.data) : withLocal(r.data))
+  await push()
 }
 
 /** Hỏi nhẹ (chỉ số phiên bản) xem người khác vừa sửa chưa — có thì kéo bản mới về. */
 async function check() {
   if (!uid || pushTimer || document.visibilityState !== 'visible' || useAuth.getState().sync === 'saving') return
+  const sp = useSpace.getState().id
   const r = await fetchRemote(false)
-  if (r.ok && r.version !== version) await pull(false)
+  if (!r.ok || r.version === version || pushTimer || useSpace.getState().id !== sp) return
+  try { await pullSince(version) } catch { useAuth.setState({ sync: 'error' }) }
 }
 
 /** Đang ở màn một chuyến của bộ cũ ⇒ sang chuyến sửa gần nhất của bộ mới, tại chỗ (tấm / bảng đang mở vẫn giữ — App giữ
@@ -280,8 +294,8 @@ export async function switchSpace(id: string) {
   applying = true
   try { await openSpace({ id, name: f?.name ?? null, role: f?.role ?? null }) } finally { applying = false }
   jumpToLatest()
-  version = null
-  if (uid) await pull(true)
+  version = null; synced = null
+  if (uid) await pull()
 }
 
 // ── FAMILY: chủ tạo, mời bằng email; cả nhóm dùng chung một bộ dữ liệu (chủ giữ mã hàng, xe, cỡ pallet) ─────────────
@@ -451,14 +465,14 @@ async function onSignedIn(u: { id: string; email?: string; user_metadata?: Recor
   useAuth.setState({ isAdmin: data === true, isSuper: sup?.data === true })
   const before = useSpace.getState().id
   await loadFamilies()   // bộ đang mở là Family không còn tham gia ⇒ đã tự về "Của tôi" (và kéo bản tài khoản về)
-  if (useSpace.getState().id === before) { version = null; await pull(true) }
+  if (useSpace.getState().id === before) { version = null; synced = null; await pull() }
   if (otherOwner) jumpToLatest()   // chuyến đang mở là của người trước, đã bỏ ⇒ sang chuyến gần nhất của tài khoản này
 }
 
 async function onSignedOut() {
   const wasIn = uid !== null   // mở app chưa đăng nhập cũng vào đây: dữ liệu của khách phải giữ nguyên
   uid = null
-  version = null
+  version = null; synced = null
   const { families } = useFamily.getState(), open = useSpace.getState().id
   useAuth.setState({ status: 'out', user: null, isAdmin: false, isSuper: false, sync: 'idle' })
   useFamily.setState({ loaded: true, families: [], invites: [], members: {}, fees: {} })

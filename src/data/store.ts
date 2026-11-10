@@ -428,6 +428,50 @@ export function mergeBackup(a: BackupData, b: BackupData): BackupData {
   }
 }
 
+// ── ĐỒNG BỘ TỪNG BẢN GHI (chủ dự án 10/11): máy chỉ gửi phần đã đổi so với bản máy chủ đang có, kéo về chỉ phần mới.
+//    `Synced` = máy chủ đang có gì (id → updatedAt, dấu xoá, cỡ pallet) — dựng lại mỗi lần kéo cả bộ, cập nhật sau mỗi lần gửi / nhận.
+export interface Synced { recs: Record<string, number>; del: Deleted; pallet: string }
+type Rec = { id: string; updatedAt: number }
+const recsOf = (d: Partial<BackupData>): Rec[] => [...(d.items ?? []), ...(d.vehicles ?? []), ...(d.orders ?? []), ...(d.trips ?? [])]
+export const syncedOf = (d: BackupData): Synced =>
+  ({ recs: Object.fromEntries(recsOf(d).map(x => [x.id, x.updatedAt])), del: { ...(d.deleted ?? {}) }, pallet: JSON.stringify(d.pallet) })
+
+/** Phần đã đổi so với máy chủ (null = không có gì). `catalog` = false (thành viên Family): không gửi mã hàng, xe, cỡ pallet. */
+export function changesSince(d: BackupData, s: Synced | null, catalog = true): Partial<BackupData> | null {
+  const pick = <T extends Rec>(l: T[]) => l.filter(x => s?.recs[x.id] !== x.updatedAt)
+  const out: Partial<BackupData> = {}
+  const items = catalog ? pick(d.items) : [], vehicles = catalog ? pick(d.vehicles) : [], orders = pick(d.orders), trips = pick(d.trips)
+  const del = Object.fromEntries(Object.entries(d.deleted ?? {}).filter(([k, at]) => s?.del[k] !== at))
+  if (items.length) out.items = items
+  if (vehicles.length) out.vehicles = vehicles
+  if (orders.length) out.orders = orders
+  if (trips.length) out.trips = trips
+  if (Object.keys(del).length) out.deleted = del
+  if (catalog && JSON.stringify(d.pallet) !== s?.pallet) out.pallet = d.pallet
+  return Object.keys(out).length ? out : null
+}
+
+/** Máy chủ đã nhận / vừa gửi về phần `c` ⇒ ghi vào bản "máy chủ đang có". */
+export function markSynced(s: Synced | null, c: Partial<BackupData>): Synced {
+  return {
+    recs: { ...s?.recs, ...Object.fromEntries(recsOf(c).map(x => [x.id, x.updatedAt])) },
+    del: { ...s?.del, ...c.deleted },
+    pallet: c.pallet ? JSON.stringify(c.pallet) : s?.pallet ?? '',
+  }
+}
+
+/** Gộp phần mới từ máy chủ vào bộ trên máy — như mergeBackup: bản ghi sửa sau thắng, dấu xoá giữ tác dụng; thay đổi chưa
+ *  gửi của máy này (mới hơn) giữ nguyên. Cỡ pallet: máy chủ có bản mới mà máy này chưa sửa cỡ ⇒ lấy của máy chủ. */
+export function applyChanges(local: BackupData, inc: Partial<BackupData>, s: Synced | null): BackupData {
+  const remote: BackupData = {
+    app: 'malcargo', version: 1, items: inc.items ?? [], vehicles: inc.vehicles ?? [], orders: inc.orders ?? [], trips: inc.trips ?? [],
+    pallet: local.pallet, deleted: inc.deleted ?? {},
+  }
+  const m = mergeBackup(remote, local)
+  if (inc.pallet && JSON.stringify(local.pallet) === s?.pallet) m.pallet = inc.pallet
+  return m
+}
+
 /** Tên kế tiếp kiểu "Đơn 3" — đếm theo số lớn nhất đang có, không theo số lượng. */
 export function nextName(prefix: string, names: string[]): string {
   let max = 0

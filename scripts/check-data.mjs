@@ -207,5 +207,33 @@ console.log('• Chia sẻ chuyến: bản chụp ⇒ người nhận lưu bản
   S.dropSpace('fam2')
 }
 
+console.log('• Đồng bộ từng bản ghi: chỉ gửi phần đổi, kéo về không đè thay đổi chưa gửi')
+{
+  const u = n => now - day + n   // mốc giờ thật (dấu xoá quá 90 ngày tự bỏ)
+  const pal = { l: 1200, w: 1000, maxH: 1650, baseH: 150, kg: 25 }
+  const srv = { ...base, pallet: pal, items: [{ id: 'i1', code: 'A', updatedAt: u(1) }], orders: [order('s1', 'Đơn 1', [], { updatedAt: u(10) }), order('s2', 'Đơn 2', [], { updatedAt: u(10) })], trips: [trip('st', 'Chuyến', ['s1', 's2'], { updatedAt: u(10) })], deleted: {} }
+  const syn = S.syncedOf(srv)
+  ok(S.changesSince(srv, syn) === null, 'máy giống máy chủ ⇒ không gửi gì')
+  const local = { ...srv, orders: [order('s1', 'Đơn 1 sửa', [], { updatedAt: u(20) }), srv.orders[1], order('n1', 'Đơn mới', [], { updatedAt: u(21) })], deleted: { gone: u(30) } }
+  const c = S.changesSince(local, syn)
+  ok(ids(c.orders ?? []) === 'n1,s1' && !c.trips && !c.items && !c.pallet && c.deleted?.gone === u(30), 'chỉ gửi đơn sửa + đơn mới + dấu xoá mới, không gửi bản ghi không đổi')
+  ok(ids(S.changesSince({ ...local, items: [{ id: 'i1', code: 'B', updatedAt: u(2) }], pallet: { ...pal, l: 1100 } }, syn, false).orders) === 'n1,s1'
+    && !S.changesSince({ ...local, items: [{ id: 'i1', code: 'B', updatedAt: u(2) }], pallet: { ...pal, l: 1100 } }, syn, false).items, 'thành viên Family: không gửi mã hàng, cỡ pallet')
+  ok(Object.keys(S.changesSince(srv, null)).sort().join() === 'deleted,items,orders,pallet,trips'.replace('deleted,', ''), 'chưa biết máy chủ có gì ⇒ gửi hết (máy chủ tự gộp)')
+  const syn2 = S.markSynced(syn, c)
+  ok(S.changesSince(local, syn2) === null, 'gửi xong ⇒ lần sau không gửi lại')
+  // người khác sửa s2 + xoá s1; máy này đang sửa s1 (chưa gửi, MỚI hơn lúc xoá) và đổi cỡ pallet
+  const mine2 = { ...local, orders: [order('s1', 'Đơn 1 sửa tiếp', [], { updatedAt: u(50) }), local.orders[1], local.orders[2]], pallet: { ...pal, l: 1100 } }
+  const inc = { orders: [order('s2', 'Đơn 2 (người khác)', [], { updatedAt: u(40) })], deleted: { s1: u(45) }, pallet: { ...pal, l: 1300 } }
+  const m = S.applyChanges(mine2, inc, syn2)
+  ok(m.orders.find(o => o.id === 's2')?.name === 'Đơn 2 (người khác)' && m.orders.find(o => o.id === 's1')?.name === 'Đơn 1 sửa tiếp' && m.orders.some(o => o.id === 'n1'),
+    'kéo về: lấy bản người khác, giữ thay đổi chưa gửi (sửa SAU lúc xoá ⇒ còn), giữ đơn mới')
+  ok(m.pallet.l === 1100, 'máy này đã đổi cỡ pallet chưa gửi ⇒ giữ cỡ của máy')
+  ok(S.applyChanges(local, inc, syn2).pallet.l === 1300, 'máy này chưa đổi cỡ pallet ⇒ lấy cỡ mới trên máy chủ')
+  const m2 = S.applyChanges(local, { deleted: { s2: u(99) } }, syn2)
+  ok(!m2.orders.some(o => o.id === 's2') && m2.trips[0].orderIds.join() === 's1', 'kéo về dấu xoá ⇒ đơn mất, chuyến bỏ đơn đó')
+  ok(S.applyChanges(local, { orders: [order('s1', 'cũ', [], { updatedAt: u(15) })] }, syn2).orders.find(o => o.id === 's1').name === 'Đơn 1 sửa', 'bản máy chủ CŨ hơn bản trên máy ⇒ không đè')
+}
+
 console.log(fail ? `\nĐỎ — ${fail} lỗi` : '\nXANH')
 process.exit(fail ? 1 : 0)
