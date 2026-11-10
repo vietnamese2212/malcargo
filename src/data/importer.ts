@@ -113,6 +113,7 @@ export interface ImportResult extends ImportBatch {
   toShared: { items: Item[]; vehicles: Vehicle[] }   // admin ghi "Admin" ⇒ Mẫu chung
   sharedDup: string[]                                // mã / xe đã có trong Mẫu chung sẽ bị ghi đè — cảnh báo trước khi ghi
   denied: number                                     // số dòng ghi Admin / Family mà không có quyền ⇒ vào Của tôi
+  cm: number                                         // số mã cả 3 cạnh dưới 100 mm (có vẻ ghi cm) — đã đổi hay chưa
 }
 type DataSet = { items: Item[]; vehicles: Vehicle[]; orders: Order[]; trips: Trip[] }
 /** Ai đang nhập, ở bộ nào. `mine`: bộ "Của tôi" khi đang mở Family (ghi đè đúng bản cũ, đơn tra đúng mã của bộ đó).
@@ -122,6 +123,7 @@ export interface ImportCtx {
   family?: ({ id: string; name: string; role: 'owner' | 'member' } & Partial<DataSet>) | null
   space?: { id: string; role: 'owner' | 'member' | null }
   mine?: Partial<DataSet>
+  cmToMm?: boolean   // người dùng bấm "Đổi sang mm": mã cả 3 cạnh dưới 100 ⇒ nhân 10 thay vì báo lỗi
 }
 type Dest = 'open' | 'mine' | 'catalog' | 'family'
 type Scope = 'admin' | 'family' | 'mine'
@@ -203,7 +205,7 @@ const SC_MINE = /^(riêng|rieng|của tôi|cua toi|private|mine)$/i // i18n-ok �
 const scopeVal = (v: unknown): Scope | null => { const s = str(v); return !s || SC_MINE.test(s) ? 'mine' : SC_ADMIN.test(s) ? 'admin' : SC_FAMILY.test(s) ? 'family' : null }
 
 export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items: Item[]; vehicles: Vehicle[]; orders: Order[]; trips: Trip[] }, ctx: ImportCtx = {}): ImportResult {
-  const out: ImportResult = { items: [], vehicles: [], orders: [], trips: [], errors: [], updated: 0, orderTruck: {}, unknownTrucks: [], toMine: { items: [], vehicles: [], orders: [], trips: [] }, toFamily: { items: [], vehicles: [], orders: [], trips: [] }, toShared: { items: [], vehicles: [] }, sharedDup: [], denied: 0 }
+  const out: ImportResult = { items: [], vehicles: [], orders: [], trips: [], errors: [], updated: 0, orderTruck: {}, unknownTrucks: [], toMine: { items: [], vehicles: [], orders: [], trips: [] }, toFamily: { items: [], vehicles: [], orders: [], trips: [] }, toShared: { items: [], vehicles: [] }, sharedDup: [], denied: 0, cm: 0 }
   const err = (k: SheetKey, line: number, msg: string) =>
     out.errors.push(t('{sheet}, dòng {line}: {msg}', { sheet: t(SHEETS.find(s => s.key === k)!.title), line, msg }))
   // số ở cột i theo `rule` của cột: trống ⇒ null (cột bắt buộc thì báo thiếu); sai ⇒ báo lỗi, trả undefined
@@ -252,11 +254,13 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     const dup = itemAt.get(key(code))
     if (dup) { err('items', ln, t('mã "{code}" trùng dòng {line}', { code, line: dup })); continue }
     itemAt.set(key(code), ln)
-    const [l, w, h, kg, pp, ml, lx] = [2, 3, 4, 5, 6, 7, 9].map(i => cell('items', ln, r, i))
+    let [l, w, h, kg, pp, ml, lx] = [2, 3, 4, 5, 6, 7, 9].map(i => cell('items', ln, r, i))
     const light = str(r[8]), badLight = !!light && !YES.test(light) && !NO.test(light)
     if (badLight) err('items', ln, t('{col}: ghi x hoặc để trống', { col: colHead(cols('items')[8]) }))
     // gõ cm vào ô mm (cùng ngưỡng cảnh báo của form Mã hàng) — báo cùng lúc với lỗi khác của dòng
-    const cm = l != null && w != null && h != null && l < 100 && w < 100 && h < 100
+    let cm = l != null && w != null && h != null && l < 100 && w < 100 && h < 100
+    if (cm) out.cm++
+    if (cm && ctx.cmToMm) { l = l! * 10; w = w! * 10; h = h! * 10; cm = false }
     if (cm) err('items', ln, t('{code}: cả 3 cạnh dưới 100 mm — có phải đang ghi cm? (40 cm = 400 mm)', { code }))
     const sc = itemScope ? r[10] : '', dest = scope('items', ln, sc)
     if (l == null || w == null || h == null || [kg, pp, ml, lx].includes(undefined) || badLight || cm || !dest) continue

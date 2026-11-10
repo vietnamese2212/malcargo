@@ -5,7 +5,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import {
   AlertTriangle, ArrowDown, ArrowUp, Camera, Check, ChevronDown, ClipboardCopy, ClipboardList, ClipboardPen, Crosshair, ExternalLink, Eye, EyeOff,
-  ArrowLeftRight, FileSpreadsheet, HelpCircle, Layers, Loader2, LogOut, MapPin, Maximize2, Menu, Minimize2, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Rotate3d, Ruler,
+  ArrowLeftRight, FileSpreadsheet, HelpCircle, Layers, Loader2, LogOut, MapPin, Maximize2, Menu, Minimize2, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Printer, Rotate3d, Ruler,
   Settings, Share2, SlidersHorizontal, Smartphone, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, UsersRound, X,
 } from 'lucide-react'
 import { LOCKED, catalogLocked, famLabel, findVehicle, isBlankOrder, isSample, newId, newTripLabel, nextName, useAllItems, useAllVehicles, useData, useSpace } from '../data/store'
@@ -43,6 +43,7 @@ import AccountPage, { SyncStatus } from './AccountPage'
 import FamilyPage, { InvitePrompt } from './FamilyPage'
 import AdminPage from './AdminPage'
 import { TripTour } from './TripTour'
+import { TripPrint, mixText, sceneShot, stackText, tripVerdict } from './TripPrint'
 
 const VIEWS = [['overview', 'Tổng thể'], ['rear', 'Nhìn từ cửa sau'], ['side', 'Nhìn bên hông'], ['top', 'Nhìn từ trên']] as const // i18n-key
 type PanelName = 'items' | 'vehicles' | 'orders' | 'trips' | 'account' | 'family' | 'admin'
@@ -132,6 +133,7 @@ export default function TripPage({ id }: { id: string }) {
   const [tour, setTour] = useState(false)   // hướng dẫn nhanh: tự mở lần đầu, mở lại ở menu ≡
   const [sharing, setSharing] = useState(false)   // tấm "Chia sẻ chuyến" (nút trong bảng ▾ của ô chuyến)
   const [toast, setToast] = useState<string | null>(null)
+  const [printing, setPrinting] = useState<{ png: string | null } | null>(null)   // phiếu xếp xe đang in
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3200); return () => clearTimeout(t) }, [toast])
   // điện thoại gõ số thùng: bàn phím chiếm nửa dưới, khung 3D dính nửa trên ⇒ ô đang gõ bị kẹt giữa, khuất.
   // Bàn phím mở thì khung 3D thôi dính, trôi theo trang — ô đang gõ luôn thấy được.
@@ -502,7 +504,10 @@ export default function TripPage({ id }: { id: string }) {
                   return n.size ? n : null
                 })
               }}
-              onToast={setToast} />
+              onToast={setToast} onPrint={() => setPrinting({ png: sceneShot() })} />
+            {printing && r && vehicle && (
+              <TripPrint png={printing.png} tripName={trip.name} vehicle={vehicle} orders={rawOrders} resolved={tripOrders} r={r} colors={colors} onDone={() => setPrinting(null)} />
+            )}
           </Block>
         </aside>
       </div>
@@ -925,19 +930,7 @@ function TitleBlock({ r, busy, error, hasCargo, vehicle, tripName, orders, sug, 
   if (error) return <div className={cx(frame, 'px-2.5 py-1.5 text-[12px] text-red-800')}>{t('Lỗi khi tính: {error}', { error: tx(error) })}</div>
   if (!r || !vehicle) return <div className={cx(frame, 'flex items-center gap-2 px-2.5 py-1.5 text-[12px]')}><Loader2 size={14} className="animate-spin" />{t('Đang tính…')}</div>
   const p = r.plan
-  const left = p.leftover.reduce((s, x) => s + x.count, 0)
-  const pal = vehicle.kind === 'pallet'
-  const sum = (u: 'pallet' | 'thùng', k: 'placed' | 'total') => r.count.filter(c => c.unit === u).reduce((s, c) => s + c[k], 0) // i18n-ok — đơn vị của thuật toán
-  const palPlaced = sum('pallet', 'placed'), palTotal = sum('pallet', 'total')
-  const topPlaced = sum('thùng', 'placed'), topTotal = sum('thùng', 'total') // i18n-ok
-  const leftWhat = pal
-    ? [palTotal - palPlaced ? t('{n} pallet', { n: fmtInt(palTotal - palPlaced) }) : '', topTotal - topPlaced ? t('{n} thùng', { n: fmtInt(topTotal - topPlaced) }) : ''].filter(Boolean).join(' + ')
-    : t('{n} thùng', { n: fmtInt(left) })
-  const head = r.errors.length ? t('Không xếp được') : r.fits ? t('Vừa xe') : left ? t('Thiếu {what}', { what: leftWhat }) : t('Quá tải')
-  const count = pal ? `${fmtInt(palPlaced)}/${fmtInt(palTotal)}` : `${fmtInt(p.placedCount)}/${fmtInt(p.totalCount)}`
-  // có mã chưa khai kg ⇒ tải chưa rõ: đừng ghi "Tải 0%" (thử 31/10) — biết được một phần thì ghi "≥", chưa biết gì thì "?"
-  const kgPart = (s: string) => (r.totals.kgKnown ? s : r.weightKg > 0 ? `≥${s}` : '?')
-  const loadPct = r.totals.kgKnown || r.weightKg > 0 ? r.payloadPct : null
+  const { left, pal, palPlaced, palTotal, topPlaced, topTotal, head, count, kgPart, loadPct } = tripVerdict(r, vehicle)
   return (
     <div className="pointer-events-none min-w-0">
       <button onClick={() => setMore(v => !v)} aria-expanded={more} aria-label={t('Kết quả: {head}. Bấm để xem chi tiết', { head })}
@@ -1374,16 +1367,11 @@ function specParts(it: Item): string[] {
 }
 
 // ── Bảng đếm chân — cái thủ kho cầm khi xếp, bên nhận dùng đối chiếu ────────────
-function CountSheet({ r, colors, focus, onFocus, tripName, vehicle, onToast }: {
+function CountSheet({ r, colors, focus, onFocus, tripName, vehicle, onToast, onPrint }: {
   r: TripResult | null; colors: Map<string, string>; focus: Set<number> | null; onFocus: (gi: number) => void
-  tripName: string; vehicle?: Vehicle; onToast: (s: string) => void
+  tripName: string; vehicle?: Vehicle; onToast: (s: string) => void; onPrint: () => void
 }) {
   if (!r || !vehicle) return <p className="px-4 py-5 text-sm text-slate-600">{t('Thêm hàng để có bảng đếm chân.')}</p>
-  const stackText = (c: TripResult['count'][number]) => c.unit === 'pallet'
-    ? t('{n} pallet', { n: c.placed })
-    : c.stacks.map(([n, l]) => t('{n} chân × {l} lớp', { n, l })).join(' + ')
-  // ruột pallet gộp: "gồm 40 thùng Sữa 180ml x48 · 40 thùng Thạch túi 110ml x24"
-  const mixText = (c: TripResult['count'][number]) => c.mix?.map(x => t('{n} thùng {name}', { n: fmtInt(x.n), name: tx(x.label) })).join(' · ')
   const copy = async () => {
     const box = t('lòng thùng {dims} mm', { dims: fmtDims(vehicle.l, vehicle.w, vehicle.h) })
     const onTop = ' ' + t('(trên nóc hàng khác)')
@@ -1406,18 +1394,19 @@ function CountSheet({ r, colors, focus, onFocus, tripName, vehicle, onToast }: {
     catch { onToast(t('Trình duyệt chặn chép, hãy chụp màn hình')) }
   }
   const snap = async () => {
-    const c = document.querySelector<HTMLCanvasElement>('[data-scene] canvas')
-    if (!c) return
-    const png = c.toDataURL('image/png')   // chụp ngay lúc bấm, trước khi hộp "Lưu thành…" mở
+    const png = sceneShot()   // chụp ngay lúc bấm, trước khi hộp "Lưu thành…" mở
+    if (!png) return
     // tên chuyến người dùng đặt có thể dài / có "/" ":" (vd "Chuyến 30/10") — tên file Windows không nhận
     const name = t('so-do-{name}.png', { name: tx(tripName).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '-').toLowerCase().slice(0, 60) })
     if (await saveFile(name, () => fetch(png).then(r => r.blob()))) onToast(t('Đã lưu ảnh sơ đồ'))
   }
   return (
     <section className="pt-3">
-      <div className="flex gap-2 px-4">
-        <Button className="flex-1" onClick={copy}><ClipboardCopy size={17} />{t('Chép để gửi Zalo')}</Button>
-        <Button className="flex-1" onClick={snap}><Camera size={17} />{t('Lưu ảnh 3D')}</Button>
+      {/* màn hẹp: ba nút xuống hai hàng, không cắt chữ */}
+      <div className="flex flex-wrap gap-2 px-4">
+        <Button className="flex-1 basis-[150px]" onClick={copy}><ClipboardCopy size={17} />{t('Chép để gửi Zalo')}</Button>
+        <Button className="flex-1 basis-[120px]" onClick={snap}><Camera size={17} />{t('Lưu ảnh 3D')}</Button>
+        <Button className="flex-1 basis-[120px]" onClick={onPrint}><Printer size={17} />{t('In phiếu')}</Button>
       </div>
       <SectionBand title={t('Thứ tự xếp')} meta={t('· bấm một dòng để soi khối đó')} className="mt-3" />
       <div className="divide-y divide-slate-100">

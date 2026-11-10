@@ -139,6 +139,14 @@ r = parse({ items: [head('items'),
 ok(!r.items.length, `mọi dòng sai ⇒ không nhận dòng nào (${r.errors.length} lỗi)`)
 ok(has(r, 2, /Dài \(mm\) phải từ 10 đến 3\.000/), 'cạnh 4.200 mm ⇒ ngoài khoảng 10–3.000')
 ok(has(r, 3, /ghi cm/), 'cả 3 cạnh dưới 100 mm ⇒ hỏi có phải ghi cm')
+{
+  const cmRows = [head('items'), ['C1', 'Ghi cm', 42, 25.5, 10, 6.2, 140, 14, ''], ['C2', 'Ghi mm', 420, 255, 100, 6.2, 140, 14, '']]
+  const no = I.parseImport({ items: cmRows }, { items: [], vehicles: [], orders: [], trips: [] })
+  const yes = I.parseImport({ items: cmRows }, { items: [], vehicles: [], orders: [], trips: [] }, { cmToMm: true })
+  const c1 = yes.items.find(i => i.code === 'C1'), c2 = yes.items.find(i => i.code === 'C2')
+  ok(no.cm === 1 && has(no, 2, /ghi cm/) && !yes.errors.length && yes.cm === 1 && c1?.l === 420 && c1?.w === 255 && c1?.h === 100 && c2?.l === 420,
+    'bấm "Đổi sang mm (×10)": mã cả 3 cạnh dưới 100 nhân 10, hết lỗi; mã đã ghi mm giữ nguyên')
+}
 ok(has(r, 4, /Kg\/thùng phải từ 0,01/), 'kg âm ⇒ lỗi')
 ok(has(r, 5, /Thùng\/pallet phải là số nguyên/), 'thùng/pallet 12,5 ⇒ phải là số nguyên')
 ok(has(r, 6, /Chồng tối đa \(lớp\) phải là số/), 'số lớp là chữ ⇒ phải là số')

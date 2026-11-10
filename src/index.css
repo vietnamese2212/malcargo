@@ -55,3 +55,15 @@ input[type='range'].steps::-moz-range-thumb { width: 16px; height: 16px; border-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }
+
+/* Phiếu xếp xe (TripPrint): trên màn ẩn hẳn; khi in chỉ còn khối này, A4 dọc, giữ màu ô hàng */
+[data-print] { display: none; }
+@media print {
+  @page { size: A4 portrait; margin: 12mm; }
+  html, body, #root { height: auto !important; background: #fff !important; overflow: visible !important; }
+  body > *:not([data-print]) { display: none !important; }
+  [data-print] { display: block !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  [data-print] table { page-break-inside: auto; }
+  [data-print] tr, [data-print] figure { break-inside: avoid; }
+  [data-print] thead { display: table-header-group; }
+}

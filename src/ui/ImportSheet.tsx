@@ -43,12 +43,13 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
   const [text, setText] = useState<Partial<Record<SheetKey, string>>>({})
   const [files, setFiles] = useState<Partial<Record<SheetKey, { name: string; rows: Rows }>>>({})
   const [msg, setMsg] = useState<string | null>(null)
+  const [cmMm, setCmMm] = useState(false)   // bấm "Đổi sang mm (×10)" — mã cả 3 cạnh dưới 100 coi là cm
   const fileRef = useRef<HTMLInputElement>(null)
-  useEffect(() => { if (open) { setTab(first); setText({}); setFiles({}); setMsg(null) } }, [open, first])
+  useEffect(() => { if (open) { setTab(first); setText({}); setFiles({}); setMsg(null); setCmMm(false) } }, [open, first])
 
   // ô dán có chữ thì dùng ô dán, không thì lấy file đã nạp cho loại đó
   const src = useMemo(() => Object.fromEntries(SHEETS.map(s => [s.key, !sheets.includes(s) ? [] : text[s.key]?.trim() ? splitPasted(text[s.key]!) : files[s.key]?.rows ?? []])), [text, files, sheets])
-  const res = useMemo(() => parseImport(src, { items, vehicles, orders, trips }, { admin, space, mine: space.id === 'me' ? undefined : mySet(), family: target && famData ? { id: target.id, name: target.name, role: target.role, ...famData } : null }), [src, items, vehicles, orders, trips, admin, space, target?.id, target?.name, target?.role, famData])
+  const res = useMemo(() => parseImport(src, { items, vehicles, orders, trips }, { admin, space, mine: space.id === 'me' ? undefined : mySet(), family: target && famData ? { id: target.id, name: target.name, role: target.role, ...famData } : null, cmToMm: cmMm }), [src, items, vehicles, orders, trips, admin, space, target?.id, target?.name, target?.role, famData, cmMm])
   const n = {
     items: res.items.length + res.toMine.items.length + res.toFamily.items.length + res.toShared.items.length, vehicles: res.vehicles.length + res.toMine.vehicles.length + res.toFamily.vehicles.length + res.toShared.vehicles.length,
     orders: res.orders.length + res.toMine.orders.length + res.toFamily.orders.length, trips: res.trips.length + res.toMine.trips.length + res.toFamily.trips.length,
@@ -136,6 +137,17 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
         className="mt-3 w-full rounded-md border border-slate-300 p-2.5 font-mono text-base outline-none sm:text-[13px] placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
 
       {msg && <p className="mt-3 whitespace-pre-line text-sm text-red-700">{msg}</p>}
+      {/* file ghi kích thước bằng cm: một nút đổi cả loạt, không bắt mở lại Excel nhân 10 */}
+      {res.cm > 0 && (
+        <div data-cm className={cx('mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md px-3 py-2 text-[13px]', cmMm ? 'bg-emerald-50 text-emerald-900' : 'bg-amber-50 text-amber-900')}>
+          <span className="min-w-0 flex-1 basis-56 break-words">
+            {cmMm ? t('Đã đổi {n} mã từ cm sang mm (×10).', { n: fmtInt(res.cm) }) : t('{n} mã có cả 3 cạnh dưới 100 mm — có vẻ file ghi cm.', { n: fmtInt(res.cm) })}
+          </span>
+          <Button variant={cmMm ? 'secondary' : 'primary'} className="shrink-0" onClick={() => setCmMm(v => !v)}>
+            {cmMm ? t('Hoàn tác') : t('Đổi sang mm (×10)')}
+          </Button>
+        </div>
+      )}
       {famErr && <p className="mt-3 text-sm text-red-700">{t('Không đọc được dữ liệu Family — dòng ghi Family sẽ vào Của tôi. Thử lại khi có mạng.')}</p>}
       {total > 0 && (
         <div className={cx('mt-4 grid divide-x divide-slate-200 rounded-lg border border-slate-200', sheets.length === 4 ? 'grid-cols-4' : 'grid-cols-2')}>

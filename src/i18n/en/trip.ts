@@ -367,4 +367,21 @@ export const TRIP: Record<string, string> = {
   'Sẽ lưu vào dữ liệu "Của tôi" — trong Family, mã hàng và xe do chủ quản lý.': 'It will be saved to "Mine" — in the Family, items and trucks are managed by the owner.',
   'Lưu bản sao vào dữ liệu của bạn rồi mở ra xem sơ đồ xếp — sửa thoải mái, bản của người gửi không đổi.':
     'Save a copy to your data and open its loading plan — edit freely, the sender\'s trip stays the same.',
+  // phiếu xếp xe in A4
+  'In phiếu': 'Print sheet',
+  'Phiếu xếp xe': 'Loading sheet',
+  'In lúc {time}': 'Printed {time}',
+  'Kết quả': 'Result',
+  'Lòng thùng': 'Cargo box',
+  'Sơ đồ 3D (góc đang xem)': '3D plan (current view)',
+  'Đơn hàng — thứ tự giao': 'Orders — delivery order',
+  'Hàng': 'Goods',
+  'thứ tự xếp từ cabin ra cửa': 'loading order, cab to door',
+  'Cách xếp': 'Stacking',
+  '{n} thùng/pallet · {l} lớp': '{n} {n:carton|cartons}/pallet · {l} {l:layer|layers}',
+  'Số lượng': 'Quantity',
+  'Người lập phiếu': 'Prepared by',
+  'Thủ kho': 'Warehouse keeper',
+  'Tài xế': 'Driver',
+  '(ký, ghi rõ họ tên)': '(signature, full name)',
 }

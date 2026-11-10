@@ -230,6 +230,13 @@ for (const dev of [DEVICES[1], { ...DEVICES[1], name: 'phone-ngang', viewport: {
   ok(await blockBtn.count() > 0 && await blockBtn.isDisabled(), `còn lỗi ⇒ nút Nhập khoá: ${rowErrs.join(' | ')}`)
   ok(rowErrs.some(e => /dòng 3: B2: cả 3 cạnh dưới 100 mm/.test(e)) && rowErrs.some(e => /dòng 4: mã "B1" trùng dòng 2/.test(e)), 'báo đúng dòng: ghi cm, mã trùng')
   await p.screenshot({ path: `${OUT}/import-errors.png` })
+  await sheet.getByRole('button', { name: 'Đổi sang mm (×10)' }).click(); await p.waitForTimeout(150)
+  const afterMm = await sheet.locator('[data-errors] li').allInnerTexts()
+  ok(afterMm.length === 1 && !afterMm.some(e => /ghi cm/.test(e)) && await sheet.getByText(/Đã đổi 1 mã từ cm sang mm/).count() > 0,
+    `bấm "Đổi sang mm (×10)" ⇒ hết lỗi ghi cm, chỉ còn mã trùng: ${afterMm.join(' | ')}`)
+  await p.screenshot({ path: `${OUT}/import-cm-mm.png` })
+  await sheet.getByRole('button', { name: 'Hoàn tác' }).click(); await p.waitForTimeout(150)
+  ok((await sheet.locator('[data-errors] li').allInnerTexts()).some(e => /ghi cm/.test(e)), 'Hoàn tác ⇒ lỗi ghi cm quay lại')
   await p.keyboard.press('Escape'); await p.waitForTimeout(200)
   await open()
   // Huỷ ở hộp Lưu thành… ⇒ không tải gì, không báo lỗi; máy không có hộp ⇒ tải về như thường
