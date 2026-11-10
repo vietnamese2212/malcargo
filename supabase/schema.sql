@@ -497,6 +497,11 @@ revoke execute on function public.user_sync(jsonb, bigint), public.user_since(bi
   public.family_since(uuid, bigint) from public, anon;
 grant execute on function public.user_sync(jsonb, bigint), public.user_since(bigint), public.family_sync(uuid, jsonb, bigint),
   public.family_since(uuid, bigint) to authenticated;
+-- hàm phụ chỉ tính trên đầu vào; trigger + user_sync chạy dưới quyền người đăng nhập
+revoke execute on function public.data_revs(jsonb, jsonb, jsonb, bigint), public.merge_list(jsonb, jsonb, jsonb),
+  public.merge_data(jsonb, jsonb, boolean), public.data_since(jsonb, jsonb, bigint, bigint) from public, anon;
+grant execute on function public.data_revs(jsonb, jsonb, jsonb, bigint), public.merge_list(jsonb, jsonb, jsonb),
+  public.merge_data(jsonb, jsonb, boolean), public.data_since(jsonb, jsonb, bigint, bigint) to authenticated;
 
 -- bộ đã có từ trước khi có `revs`: mọi bản ghi mang phiên bản hiện tại — tắt trigger để không tăng phiên bản, không đổi
 -- updated_at (màn Quản trị đọc "lần dùng gần nhất" từ đó)
