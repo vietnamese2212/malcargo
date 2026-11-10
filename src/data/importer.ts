@@ -157,7 +157,11 @@ const letter = (i: number) => String.fromCharCode(65 + i)
 const cols = (k: SheetKey) => SHEETS.find(s => s.key === k)!.cols
 
 /** Chép từ Excel = các cột cách nhau bằng Tab (hoặc ;). */
-export const splitPasted = (text: string): Rows => text.split(/\r?\n/).filter(l => l.trim()).map(l => l.split(/\t|;/))
+// Dán từ Excel / Sheets luôn ngăn bằng Tab ⇒ chỉ tách Tab (dấu ; trong tên hàng, điểm giao giữ nguyên); không có Tab ⇒ ;
+export const splitPasted = (text: string): Rows => {
+  const sep = text.includes('\t') ? '\t' : ';'
+  return text.split(/\r?\n/).filter(l => l.trim()).map(l => l.split(sep))
+}
 
 // ── Dòng tiêu đề phải ĐÚNG mẫu: đủ cột, đúng thứ tự — cột đọc theo vị trí, đảo / chèn cột là dữ liệu vào nhầm ô.
 // Tiếng Việt hay tiếng Anh đều được, dấu * không bắt buộc, cột thừa ở CUỐI bỏ qua.

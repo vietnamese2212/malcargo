@@ -147,7 +147,7 @@ export function adoptShare(p: SharePack): string {
   // bản sao Y HỆT một chuyến mẫu (người gửi chia sẻ chuyến mẫu chưa sửa) ⇒ kho tự dọn như bản sao rác — mở luôn chuyến
   // mẫu đó bên người nhận (ai cũng có sẵn)
   const st = useData.getState().trips
-  return (st.find(t => t.id === p.trip.id) ?? st.find(t => isSample(t.id) && t.vehicleId === p.trip.vehicleId) ?? st.find(t => isSample(t.id)) ?? st[0]).id
+  return (st.find(t => t.id === p.trip.id) ?? st.find(t => isSample(t.id) && t.vehicleId === p.trip.vehicleId) ?? st.find(t => isSample(t.id)) ?? st[0])?.id ?? tripId
 }
 
 // ── Link: mở app bằng …/s/<mã> ⇒ ghi nhận mã (tấm "Chuyến được chia sẻ" mở ra), đưa địa chỉ về trang gốc ─────────────

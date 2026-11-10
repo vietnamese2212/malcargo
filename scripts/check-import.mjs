@@ -223,6 +223,12 @@ I.useLang.getState().setLang('en')
 ok(P('8,000') === 8000 && P('8.000') === 8 && P('1,234.5') === 1234.5 && P('9.85') === 9.85 && P('9,85') === 9.85, 'tiếng Anh: "8,000" = 8000, "8.000" = 8, "9,85" vẫn là 9.85')
 I.useLang.getState().setLang('vi')
 ok(Number.isNaN(P('abc')) && Number.isNaN(P('')) && P('-5') === -5, 'chữ / trống ⇒ không phải số; "-5" vẫn đọc ra (ô tự báo đỏ vì < 0)')
+{
+  const tab = I.splitPasted('SP1\tBánh; vị dâu\t300\nSP2\tSữa\t200\n')
+  ok(tab.length === 2 && tab[0].length === 3 && tab[0][1] === 'Bánh; vị dâu', 'dán từ Excel (Tab): dấu ; trong ô giữ nguyên, không lệch cột')
+  const semi = I.splitPasted('SP1;Sữa;300')
+  ok(semi[0].length === 3 && semi[0][2] === '300', 'dán chữ ngăn bằng ; (không có Tab) vẫn tách được')
+}
 
 console.log(fail ? `\nĐỎ — ${fail} lỗi` : '\nXANH')
 process.exit(fail ? 1 : 0)
