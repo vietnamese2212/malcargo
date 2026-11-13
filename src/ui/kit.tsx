@@ -259,8 +259,9 @@ export function useSelection(ids: string[]) {
 }
 
 /** Thanh dính đáy khi đang chọn: ô chọn tất cả (thẳng cột ô chọn của dòng) · số đã chọn · bỏ chọn · Xoá. */
-export function SelectBar({ n, total, all, onAll, onClear, onDelete }: {
+export function SelectBar({ n, total, all, onAll, onClear, onDelete, extra }: {
   n: number; total: number; all: boolean; onAll: () => void; onClear: () => void; onDelete: () => void
+  extra?: ReactNode   // nút thêm trước nút Xoá (vd. danh sách Đơn hàng: "Xếp lên xe")
 }) {
   if (!n) return null
   return (
@@ -268,6 +269,7 @@ export function SelectBar({ n, total, all, onAll, onClear, onDelete }: {
       <RowCheck checked={all} mixed={!all} onChange={onAll} label={t('Chọn tất cả')} />
       <span className="num flex min-w-0 flex-1 items-center text-sm font-semibold text-slate-900">{t('Đã chọn {n}/{total}', { n: fmtInt(n), total: fmtInt(total) })}</span>
       <button type="button" onClick={onClear} className="tap shrink-0 px-1 text-sm font-medium text-slate-600 hover:text-slate-900">{t('Bỏ chọn')}</button>
+      {extra}
       <Button variant="danger" className="my-2 shrink-0" onClick={onDelete}><Trash2 size={16} />{t('Xoá {n}', { n: fmtInt(n) })}</Button>
     </div>
   )

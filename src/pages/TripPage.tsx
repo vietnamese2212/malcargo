@@ -128,7 +128,8 @@ export default function TripPage({ id }: { id: string }) {
   const phone = usePhone()   // điện thoại không có phần nhập Excel
   const [unlink, setUnlink] = useState<Order | null>(null)
   const [editVehicle, setEditVehicle] = useState<{ v: Vehicle | null } | null>(null)
-  const [pickOrders, setPickOrders] = useState(false)
+  // 'add' = thêm đơn vào chuyến đang mở · 'fresh' = chọn đơn (thường là đơn chưa vào chuyến nào) xếp lên CHUYẾN MỚI
+  const [pickOrders, setPickOrders] = useState<false | 'add' | 'fresh'>(false)
   const [pickFor, setPickFor] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [editOrder, setEditOrder] = useState<string | null>(null)
@@ -219,6 +220,13 @@ export default function TripPage({ id }: { id: string }) {
     if (denyEdit()) return
     const tid = newId()
     upsertTrip({ id: tid, ...newTripLabel(trips), vehicleId: null, orderIds: [], updatedAt: 0 })
+    go({ page: 'trip', id: tid })
+  }
+  // đơn đã có sẵn (chủ Family nạp lên, chưa vào chuyến nào) ⇒ một chuyến mới chở chúng; xe app tự chọn
+  const tripOf = (ids: string[]) => {
+    if (!ids.length || denyEdit()) return
+    const tid = newId()
+    upsertTrip({ id: tid, ...newTripLabel(trips), vehicleId: null, orderIds: ids, updatedAt: 0 })
     go({ page: 'trip', id: tid })
   }
 
@@ -314,7 +322,7 @@ export default function TripPage({ id }: { id: string }) {
         <MainMenu onPanel={setPanel} onImport={() => setImporting('menu')} onTour={() => setTour(true)} />
         <Button variant="primary" onClick={newTrip} aria-label={t('Chuyến mới')} title={t('Tạo chuyến mới')} className="w-10 shrink-0 px-0 sm:w-auto sm:px-3.5"><Plus size={18} /><span className="hidden sm:inline">{t('Chuyến mới')}</span></Button>
         <TripSwitch trip={trip} trips={trips} onRename={name => upsertTrip({ ...trip, name })} onDelete={setDelTrip}
-          onAll={() => setPanel('trips')} onNew={newTrip} onShare={() => setSharing(true)} />
+          onAll={() => setPanel('trips')} onNew={newTrip} onShare={() => setSharing(true)} loose={looseN} onLoose={() => !denyEdit() && setPickOrders('fresh')} />
         <nav className="ml-3 hidden items-center gap-0.5 xl:flex">
           {MENU.map(mn => (
             <button key={mn.p} onClick={() => setPanel(mn.p)} className="flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 hover:text-white">
@@ -486,7 +494,7 @@ export default function TripPage({ id }: { id: string }) {
                     })}
                   </OrderBlock>
                 ))}
-                <button onClick={() => setPickOrders(true)} className="tap flex w-full flex-wrap items-center justify-center gap-x-2 rounded-lg border-[1.5px] border-dashed border-slate-400 px-4 py-1 text-[13px] font-semibold text-slate-700 hover:border-slate-500 hover:bg-white">
+                <button onClick={() => setPickOrders('add')} className="tap flex w-full flex-wrap items-center justify-center gap-x-2 rounded-lg border-[1.5px] border-dashed border-slate-400 px-4 py-1 text-[13px] font-semibold text-slate-700 hover:border-slate-500 hover:bg-white">
                   <Plus size={16} />{t('Thêm đơn / điểm giao khác')}
                   {!!looseN && <span className="num w-full text-center text-[12px] font-medium text-brand-700">{t('{n} đơn chưa vào chuyến nào', { n: fmtInt(looseN) })}</span>}
                 </button>
@@ -527,8 +535,8 @@ export default function TripPage({ id }: { id: string }) {
       <ItemSheet open={!!editLine} item={editLine?.it ?? null} onClose={() => setEditing(null)}
         onSaved={saved => { if (editLine) adoptItem(editLine.it, saved) }}
         onUnlink={() => { if (editLine) toggleLine(editLine.o, editLine.it.id) }} />
-      <OrderPicker open={pickOrders} onClose={() => setPickOrders(false)} inTrip={trip.orderIds}
-        onAdd={ids => upsertTrip({ ...trip, orderIds: [...trip.orderIds, ...ids] })}
+      <OrderPicker open={!!pickOrders} fresh={pickOrders === 'fresh'} onClose={() => setPickOrders(false)} inTrip={pickOrders === 'fresh' ? [] : trip.orderIds}
+        onAdd={ids => (pickOrders === 'fresh' ? tripOf(ids) : upsertTrip({ ...trip, orderIds: [...trip.orderIds, ...ids] }))}
         onNew={() => { setPickOrders(false); setPickFor(newOrderInTrip()) }} />
       {pickOrder && (
         <ItemPicker open onClose={closePicker} picked={new Set(pickOrder.lines.map(l => l.itemId))}
@@ -545,7 +553,7 @@ export default function TripPage({ id }: { id: string }) {
       <Panel open={!!panel} onClose={() => setPanel(null)}>
         {panel === 'items' && <ItemsPage />}
         {panel === 'vehicles' && <VehiclesPage />}
-        {panel === 'orders' && <OrdersPage />}
+        {panel === 'orders' && <OrdersPage onOpenTrip={() => setPanel(null)} />}
         {panel === 'trips' && <TripsPage />}
         {panel === 'account' && <AccountPage onFamily={() => setPanel('family')} />}
         {panel === 'family' && <FamilyPage />}
@@ -561,8 +569,9 @@ export default function TripPage({ id }: { id: string }) {
 // ── CHUYẾN đang mở ▾ trên thanh navy, ngay sau nút "+" (chủ dự án 31/10: "đưa chuyến xe lên trên — để ở dưới chiếm
 // không gian quá"; trước đó là dải xanh riêng dưới thanh). Bấm ⇒ đầu bảng: tên ĐẦY ĐỦ + Đổi tên; dưới: các chuyến
 // (mở / xoá), chuyến mới. Ở thanh trên tên chỉ một dòng, dài thì "…" (data-cut-ok) — đọc đủ ở đầu bảng ─────────────
-function TripSwitch({ trip, trips, onRename, onDelete, onAll, onNew, onShare }: {
+function TripSwitch({ trip, trips, onRename, onDelete, onAll, onNew, onShare, loose, onLoose }: {
   trip: Trip; trips: Trip[]; onRename: (name: string) => void; onDelete: (t: Trip) => void; onAll: () => void; onNew: () => void; onShare: () => void
+  loose: number; onLoose: () => void
 }) {
   const orders = useData(s => s.orders)
   const pallet = useData(s => s.pallet)
@@ -628,6 +637,18 @@ function TripSwitch({ trip, trips, onRename, onDelete, onAll, onNew, onShare }: 
               )
             })}
           </div>
+          {/* đơn chưa vào chuyến nào (vd. chủ Family nạp đơn từ Excel) không phải chuyến ⇒ không có trong danh sách trên;
+              chủ dự án 13/11: "các đơn chủ family đã up, tôi không thấy nó trong chọn chuyến" */}
+          {!!loose && (
+            <button onClick={() => { close(); onLoose() }} className="flex w-full items-center gap-2.5 border-t border-slate-200 bg-brand-50 px-3 py-2 text-left hover:bg-brand-100">
+              <ClipboardList size={18} className="shrink-0 text-brand-700" />
+              <span className="min-w-0 flex-1 leading-snug">
+                <span className="num block text-sm font-semibold text-brand-800">{t('{n} đơn chưa vào chuyến nào', { n: fmtInt(loose) })}</span>
+                <span className="block text-[12px] text-slate-600">{t('Chọn đơn để xếp lên chuyến mới')}</span>
+              </span>
+              <ChevronDown size={16} className="shrink-0 -rotate-90 text-brand-700" />
+            </button>
+          )}
           <div className="flex gap-2 border-t border-slate-200 p-2">
             <Button variant="primary" className="flex-1" onClick={() => { close(); onNew() }}><Plus size={17} />{t('Chuyến mới')}</Button>
             <Button onClick={() => { close(); onAll() }}><Table2 size={16} />{t('Dạng bảng')}</Button>
@@ -1527,7 +1548,7 @@ function OrderSheet({ order, items, colorOf, onClose, onSave }: {
 }
 
 // ── Thêm đơn có sẵn vào chuyến, hoặc tạo đơn mới ngay trên bàn ──────────────
-function OrderPicker({ open, onClose, inTrip, onAdd, onNew }: { open: boolean; onClose: () => void; inTrip: string[]; onAdd: (ids: string[]) => void; onNew: () => void }) {
+function OrderPicker({ open, fresh, onClose, inTrip, onAdd, onNew }: { open: boolean; fresh?: boolean; onClose: () => void; inTrip: string[]; onAdd: (ids: string[]) => void; onNew: () => void }) {
   const orders = useData(s => s.orders)
   const items = useAllItems()
   const pallet = useData(s => s.pallet)
@@ -1540,11 +1561,14 @@ function OrderPicker({ open, onClose, inTrip, onAdd, onNew }: { open: boolean; o
     const used = new Set(trips.flatMap(x => x.orderIds))
     return orders.filter(o => !inTrip.includes(o.id)).sort((a, b) => Number(used.has(a.id)) - Number(used.has(b.id)))
   }, [orders, trips, inTrip])
+  const tripName = useMemo(() => new Map(trips.flatMap(tr => tr.orderIds.map(id => [id, tr.name] as const))), [trips])
   return (
-    <Sheet open={open} onClose={onClose} title={t('Thêm đơn / điểm giao')} subtitle={t('Đơn giao trước được xếp sát cửa')}
+    <Sheet open={open} onClose={onClose} title={fresh ? t('Xếp đơn lên chuyến mới') : t('Thêm đơn / điểm giao')} subtitle={t('Đơn giao trước được xếp sát cửa')}
       footer={<div className="flex gap-2">
-        <Button className="flex-1" onClick={onNew}><Plus size={17} />{t('Đơn mới')}</Button>
-        <Button variant="primary" className="flex-[2]" disabled={!sel.length} onClick={() => { onAdd(sel); onClose() }}>{t('Thêm {n} đơn', { n: sel.length || '' })}</Button>
+        {!fresh && <Button className="flex-1" onClick={onNew}><Plus size={17} />{t('Đơn mới')}</Button>}
+        <Button variant="primary" className="flex-[2]" disabled={!sel.length} onClick={() => { onAdd(sel); onClose() }}>
+          {fresh ? t('Xếp {n} đơn lên xe', { n: sel.length || '' }) : t('Thêm {n} đơn', { n: sel.length || '' })}
+        </Button>
       </div>}>
       {!avail.length ? <p className="py-8 text-center text-sm text-slate-600">{t('Mọi đơn đã nằm trong chuyến này. Bấm “Đơn mới” để tạo.')}</p> : (
         <div className="card divide-y divide-slate-100 overflow-hidden">
@@ -1558,6 +1582,7 @@ function OrderPicker({ open, onClose, inTrip, onAdd, onNew }: { open: boolean; o
                 <span className="min-w-0 flex-1">
                   <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{tx(o.name)}{o.place && <span className="font-normal text-slate-600"> · {tx(o.place)}</span>}</span>
                   <span className="num block text-[13px] text-slate-600">{t('{n} thùng', { n: fmtInt(tot.cartons) })} · {fmtKgShort(tot.kg)} · {fmtM3(tot.m3)}</span>
+                  {tripName.has(o.id) && <span className="block break-words text-[12px] text-slate-500">{t('Đang ở chuyến {name}', { name: tx(tripName.get(o.id)!) })}</span>}
                 </span>
               </button>
             )

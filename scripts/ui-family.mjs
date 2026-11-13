@@ -13,7 +13,10 @@ const session = id => {
 }
 const PAL = { l: 1200, w: 1000, maxH: 1650, baseH: 150, kg: 25 }
 const FAM = { app: 'malcargo', version: 1, items: [], vehicles: [], pallet: PAL, deleted: {},
-  orders: [{ id: 'fo-1', name: 'Don Family', place: 'Kho Q7', lines: [], updatedAt: 1000, by: 'Nguoi A', madeBy: 'usera@thu.vn' }],
+  orders: [{ id: 'fo-1', name: 'Don Family', place: 'Kho Q7', lines: [], updatedAt: 1000, by: 'Nguoi A', madeBy: 'usera@thu.vn' },
+    // chủ nạp đơn từ Excel, chưa vào chuyến nào (chủ dự án 13/11: thành viên không thấy trong ô Chuyến xe)
+    { id: 'fo-2', name: 'Don Le 1', place: 'Kho B', lines: [{ itemId: 'adm-i-c110', qty: 12 }], updatedAt: 1001 },
+    { id: 'fo-3', name: 'Don Le 2', place: 'Kho C', lines: [{ itemId: 'adm-i-c110', qty: 8 }], updatedAt: 1002 }],
   trips: [{ id: 'ft-1', name: 'Chuyen Family', vehicleId: null, orderIds: ['fo-1'], updatedAt: 1000, by: 'Nguoi A', madeBy: 'usera@thu.vn' }] }
 const PEEK_OPEN = { id: 'fam1', name: 'Cty Thu', open: true, people: 3, me: null, orders: [
   { id: 'o1', name: 'Don HN', place: 'Ha Noi', by: 'Nguoi A', updatedAt: Date.now(), lines: [{ code: 'SP002', name: 'TBA 180', qty: 120, kg: 9.85 }, { code: 'SP008', name: 'ECOLEAN', qty: 40, kg: 3.08 }] },
@@ -169,6 +172,31 @@ for (const vw of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
   await dlg.getByRole('button', { name: T('Chuyển quyền'), exact: true }).click(); await p.waitForTimeout(900)
   ok(!!calls(log, 'family_transfer').at(-1)?.args.p_email && st.members.find(m => m.email === 'usera@thu.vn').role === 'manager', 'chuyển quyền ⇒ mình thành Quản lý')
   ok(await card.getByText(T('Quản lý'), { exact: true }).first().isVisible() && await card.getByRole('button', { name: T('Rời Family') }).isVisible(), 'sau chuyển quyền: nhãn Quản lý, có nút Rời Family')
+  ok(!errs.length, 'không lỗi trình duyệt' + (errs.length ? ': ' + errs.join(' | ') : ''))
+  await ctx.close()
+}
+
+console.log('— Thành viên: đơn chưa vào chuyến nào xếp lên chuyến mới (ô Chuyến xe ▾ + danh sách Đơn hàng)')
+{
+  const { ctx, p, errs, signIn } = await fresh({ role: 'member' })
+  await signIn()
+  await p.getByRole('button', { name: T('Danh mục'), exact: true }).click(); await p.waitForTimeout(250)
+  await p.locator('[data-popover]').getByRole('radio', { name: 'Family Cty Thu' }).click(); await p.waitForTimeout(2500)
+  await p.locator('[data-tour=trip]').click(); await p.waitForTimeout(400)
+  const row = p.locator('[data-popover]').getByText(T('{n} đơn chưa vào chuyến nào', { n: 2 }))
+  ok(await row.isVisible(), 'ô Chuyến xe ▾ có dòng "2 đơn chưa vào chuyến nào"')
+  await row.click(); await p.waitForTimeout(500)
+  const sh = p.locator('[data-sheet]').last()
+  await sh.getByRole('button', { name: /Don Le 1/ }).click(); await sh.getByRole('button', { name: /Don Le 2/ }).click()
+  const url0 = p.url()
+  await sh.getByRole('button', { name: T('Xếp {n} đơn lên xe', { n: 2 }) }).click(); await p.waitForTimeout(1500)
+  ok(p.url() !== url0 && await p.getByRole('button', { name: /Don Le 1/ }).first().isVisible() && await p.getByRole('button', { name: /Don Le 2/ }).first().isVisible(), 'chọn 2 đơn ⇒ chuyến mới chở đúng 2 đơn')
+  await p.getByRole('button', { name: T('Danh mục'), exact: true }).click(); await p.waitForTimeout(250)
+  await p.locator('[data-popover]').getByRole('button', { name: T('Đơn hàng'), exact: true }).click(); await p.waitForTimeout(800)
+  await p.getByRole('dialog').getByRole('checkbox', { name: T('Chọn {name}', { name: 'Don Family' }) }).click()
+  const url1 = p.url()
+  await p.getByRole('button', { name: T('Xếp {n} đơn lên xe', { n: 1 }) }).click(); await p.waitForTimeout(1500)
+  ok(p.url() !== url1 && !(await p.getByRole('dialog').count()) && await p.getByRole('button', { name: /Don Family/ }).first().isVisible(), 'danh sách Đơn hàng: chọn ⇒ Xếp lên xe ⇒ chuyến mới, tấm đóng')
   ok(!errs.length, 'không lỗi trình duyệt' + (errs.length ? ': ' + errs.join(' | ') : ''))
   await ctx.close()
 }

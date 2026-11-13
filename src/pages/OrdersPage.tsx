@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { ChevronRight, ClipboardList, Plus } from 'lucide-react'
-import { denyEdit, isSample, newId, nextName, useAllItems, useData } from '../data/store'
+import { ChevronRight, ClipboardList, Plus, Truck } from 'lucide-react'
+import { denyEdit, isSample, newId, newTripLabel, nextName, useAllItems, useData } from '../data/store'
 import { resolveOrder } from '../data/resolve'
 import { orderTotals } from '../engine/plan'
 import { Badge, Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SelectBar, SummaryBand, cx, fmtInt, fmtKgShort, fmtM3, useSelection } from '../ui/kit'
@@ -22,7 +22,7 @@ export function useCreateOrder() {
   }
 }
 
-export default function OrdersPage() {
+export default function OrdersPage({ onOpenTrip }: { onOpenTrip?: () => void } = {}) {
   const orders = useData(s => s.orders)
   const trips = useData(s => s.trips)
   const items = useAllItems()
@@ -40,6 +40,17 @@ export default function OrdersPage() {
   const [askDel, setAskDel] = useState(false)
   const remove = useData(s => s.removeOrder)
   const inTrip = rows.filter(r => r.trip && sel.has(r.o.id)).length
+  // đơn đã chọn ⇒ một chuyến mới chở chúng (theo thứ tự trong danh sách; xe app tự chọn) — chủ dự án 13/11: đơn chủ
+  // Family nạp lên không nằm ở chuyến nào nên không thấy trong ô Chuyến xe
+  const upsertTrip = useData(s => s.upsertTrip)
+  const toTrip = () => {
+    if (denyEdit()) return
+    const id = newId()
+    upsertTrip({ id, ...newTripLabel(trips), vehicleId: null, orderIds: rows.map(r => r.o.id).filter(x => sel.has(x)), updatedAt: 0 })
+    sel.clear()
+    go({ page: 'trip', id })
+    onOpenTrip?.()   // chuyển màn TRƯỚC rồi mới đóng tấm (đóng trước thì tấm lùi lịch sử, đè mất bước chuyển)
+  }
 
   return (
     <>
@@ -91,7 +102,9 @@ export default function OrdersPage() {
               </div>
             ))}
             <ListFooter right={rows.some(r => !r.t.kgKnown) ? t('* có mã chưa khai kg — khối lượng thiếu') : undefined}>{t('{n} đơn', { n: rows.length })}</ListFooter>
-            <SelectBar n={sel.ids.length} total={ids.length} all={sel.all} onAll={sel.toggleAll} onClear={sel.clear} onDelete={() => setAskDel(true)} />
+            <SelectBar n={sel.ids.length} total={ids.length} all={sel.all} onAll={sel.toggleAll} onClear={sel.clear} onDelete={() => setAskDel(true)}
+              extra={<Button variant="primary" className="my-2 shrink-0" aria-label={t('Xếp {n} đơn lên xe', { n: fmtInt(sel.ids.length) })} onClick={toTrip}>
+                <Truck size={16} /><span className="hidden sm:inline">{t('Xếp lên xe')}</span></Button>} />
           </ListCard>
         )}
       </Page>
