@@ -281,7 +281,9 @@ async function check() {
  *  màn chuyến khi bộ dữ liệu vừa đổi). */
 function jumpToLatest() {
   if (!location.hash.startsWith('#/trip/')) return
-  const latest = [...useData.getState().trips].sort((a, b) => b.updatedAt - a.updatedAt)[0]
+  // chuyến thật trước chuyến mẫu (Family vừa tải về có chuyến của mọi người — đừng đứng ở "Mẫu pallet")
+  const latest = [...useData.getState().trips].sort((a, b) =>
+    Number(a.id.startsWith('sample-')) - Number(b.id.startsWith('sample-')) || b.updatedAt - a.updatedAt)[0]
   if (latest) replaceRoute({ page: 'trip', id: latest.id })
 }
 
@@ -294,8 +296,11 @@ export async function switchSpace(id: string) {
   applying = true
   try { await openSpace({ id, name: f?.name ?? null, role: f?.role ?? null }) } finally { applying = false }
   jumpToLatest()
+  const at = location.hash
   version = null; synced = null
   if (uid) await pull()
+  // máy chưa từng mở bộ này: lúc nhảy chỉ có chuyến mẫu ⇒ tải về xong chọn lại (người dùng chưa tự đi chỗ khác)
+  if (location.hash === at && useSpace.getState().id === id) jumpToLatest()
 }
 
 // ── FAMILY: chủ tạo, mời bằng email; cả nhóm dùng chung một bộ dữ liệu (chủ giữ mã hàng, xe, cỡ pallet) ─────────────
