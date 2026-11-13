@@ -8,6 +8,7 @@ import { Badge, Button, SummaryBand, fmtInt } from '../ui/kit'
 import { ListCard, Page, PageHeader } from '../ui/Shell'
 import { famLabel } from '../data/store'
 
+const ROLE_NAME: Record<string, string> = { owner: 'Chủ', manager: 'Quản lý', member: 'Thành viên', viewer: 'Chỉ xem' } // i18n-key
 const day = (d: string | null) => (d ? new Date(d).toLocaleDateString(numLocale()) : '—')
 const today = () => new Date().toISOString().slice(0, 10)
 
@@ -97,7 +98,7 @@ function UserRow({ u }: { u: AdminUser }) {
         <div className="num mt-0.5 text-[12px] text-slate-600">{t('Đăng ký {d}', { d: day(u.created_at) })} · {t('Dùng gần nhất {d}', { d: day(u.last_used) })}</div>
         {!!u.families.length && (
           <div className="mt-1 flex flex-wrap gap-1">
-            {u.families.map(f => <span key={f.name} className="min-w-0 max-w-full break-words rounded bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700">{famLabel(f.name)} · {f.role === 'owner' ? t('Chủ') : t('Thành viên')}</span>)}
+            {u.families.map(f => <span key={f.name} className="min-w-0 max-w-full break-words rounded bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700">{famLabel(f.name)} · {t(ROLE_NAME[f.role] ?? ROLE_NAME.member)}</span>)}
           </div>
         )}
       </div>
@@ -127,8 +128,9 @@ function FamilyRow({ f }: { f: AdminFamily }) {
         {f.members.map(m => (
           <li key={m.email} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-slate-700">
             <span className="min-w-0 break-all">{m.email}</span>
-            {m.role === 'owner' && <Badge tone="blue">{t('Chủ')}</Badge>}
+            {m.role !== 'member' && <Badge tone={m.role === 'owner' ? 'blue' : 'slate'}>{t(ROLE_NAME[m.role] ?? m.role)}</Badge>}
             {m.status === 'invited' && <Badge tone="amber">{t('Đang chờ')}</Badge>}
+            {m.status === 'requested' && <Badge tone="amber">{t('Xin vào')}</Badge>}
           </li>
         ))}
       </ul>

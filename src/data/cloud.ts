@@ -7,10 +7,10 @@ import { create } from 'zustand'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Item, Order, Trip, Vehicle } from './types'
 import {
-  applyChanges, catalogLocked, changesSince, dropSpace, exportBackup, markSynced, mergeBackup, myCatalog, openSpace, parseBackup, resetMine,
-  syncedOf, useCatalog, useData, useSpace, type BackupData, type Synced,
+  applyChanges, catalogLocked, changesSince, dropSpace, exportBackup, markSynced, mergeBackup, myCatalog, openSpace, parseBackup, readOnly,
+  resetMine, setAuthor, syncedOf, useCatalog, useData, useSpace, type BackupData, type FamilyRole, type Synced,
 } from './store'
-import { cleanPack, type SharePack } from './share'
+import { adoptShare, cleanPack, type SharePack } from './share'
 import { t } from '../i18n'
 import { replaceRoute } from '../ui/route'
 
@@ -83,8 +83,8 @@ export async function saveCatalog(kind: 'item' | 'vehicle', x: Item | Vehicle): 
 /** Màn Quản trị: số tổng do hàm máy chủ tính, chỉ admin gọi được. Trả câu lỗi nếu không đọc được. */
 export interface AdminStats { users: number; new30: number; active30: number; guests30: number; guests_today: number; families: number; family_people: number; paying_families: number; paying_people: number }
 /** Danh sách cho super admin: máy chủ chỉ trả SỐ đơn / chuyến / mã / xe, không trả nội dung. */
-export interface AdminUser { id: string; email: string; name: string; created_at: string; last_used: string | null; orders: number; trips: number; items: number; vehicles: number; families: { name: string; role: 'owner' | 'member' }[] }
-export interface AdminFamily { id: string; name: string; created_at: string; paid_until: string | null; orders: number; trips: number; members: { email: string; name: string | null; role: 'owner' | 'member'; status: 'invited' | 'active' }[] }
+export interface AdminUser { id: string; email: string; name: string; created_at: string; last_used: string | null; orders: number; trips: number; items: number; vehicles: number; families: { name: string; role: FamilyRole }[] }
+export interface AdminFamily { id: string; name: string; created_at: string; paid_until: string | null; orders: number; trips: number; members: { email: string; name: string | null; role: FamilyRole; status: 'invited' | 'requested' | 'active' }[] }
 export interface AdminPeople { users: AdminUser[]; families: AdminFamily[] }
 export async function loadAdminPeople(): Promise<AdminPeople | string> {
   const c = await sb()
@@ -237,7 +237,8 @@ function push(): Promise<void> {
   saving = saving.then(async () => {
     if (!uid) return
     const sp = useSpace.getState().id
-    const chg = changesSince(exportBackup(), synced, !catalogLocked())
+    // chỉ xem: máy chủ không nhận ghi (store cũng chặn sửa) — không gửi gì
+    const chg = readOnly() ? null : changesSince(exportBackup(), synced, !catalogLocked())
     if (!chg) { if (!pushTimer) setDirty(sp, false); useAuth.setState({ sync: 'saved' }); return }
     useAuth.setState({ sync: 'saving' })
     const since = version
@@ -298,17 +299,28 @@ export async function switchSpace(id: string) {
   if (uid) await pull()
 }
 
-// ── FAMILY: chủ tạo, mời bằng email; cả nhóm dùng chung một bộ dữ liệu (chủ giữ mã hàng, xe, cỡ pallet) ─────────────
-export interface Family { id: string; name: string; role: 'owner' | 'member'; discountCode: string | null; paidUntil: string | null }
-export interface Member { email: string; name: string | null; role: 'owner' | 'member'; status: 'invited' | 'active' }
+// ── FAMILY: chủ tạo, mời bằng email hoặc duyệt người xin vào qua link; cả nhóm dùng chung một bộ dữ liệu. Vai trò: Chủ ·
+//    Quản lý (như chủ, trừ xoá Family / chuyển quyền / phân vai / mã giảm giá) · Thành viên (đơn + chuyến) · Chỉ xem ──────
+export interface Family {
+  id: string; name: string; role: FamilyRole; discountCode: string | null; paidUntil: string | null
+  open: boolean        // MỞ: ai có link xem được đơn hàng (chỉ xem)
+  link: string | null  // mã link xin vào / xem (chủ, quản lý tạo)
+}
+export interface Member { email: string; name: string | null; role: FamilyRole; status: 'invited' | 'requested' | 'active'; invited_at?: string }
 export interface Invite { familyId: string; name: string; owner: string }
 export interface Fee { price: number; people: number; code: string | null; percent: number; paidUntil: string | null }
 export interface Code { code: string; percent: number; active: boolean; featured: boolean }
 interface FamilyState {
   loaded: boolean; families: Family[]; invites: Invite[]; members: Record<string, Member[]>; fees: Record<string, Fee>
+  asked: { familyId: string; name: string }[]   // Family tôi đã xin vào, đang chờ duyệt
   price: number; codes: Code[]   // giá / người / tháng + mã giảm giá (người thường chỉ thấy mã công khai; admin thấy hết)
 }
-export const useFamily = create<FamilyState>(() => ({ loaded: false, families: [], invites: [], members: {}, fees: {}, price: 0, codes: [] }))
+export const useFamily = create<FamilyState>(() => ({ loaded: false, families: [], invites: [], members: {}, fees: {}, asked: [], price: 0, codes: [] }))
+/** Chủ / quản lý: duyệt người, mở / đóng, link, đổi tên, sửa danh mục. */
+export const isFamAdmin = (r: FamilyRole | null | undefined) => r === 'owner' || r === 'manager'
+/** Số người đang xin vào ở các Family tôi làm chủ / quản lý — nhãn số ở menu ≡. */
+export const useJoinRequests = () => useFamily(s => s.families.filter(f => isFamAdmin(f.role))
+  .reduce((n, f) => n + (s.members[f.id] ?? []).filter(m => m.status === 'requested').length, 0))
 
 const ERR: Record<string, string> = {
   already_owner: 'Bạn đã làm chủ một Family.', // i18n-key
@@ -318,6 +330,14 @@ const ERR: Record<string, string> = {
   already_member: 'Email này đã có trong Family.', // i18n-key
   not_owner: 'Chỉ chủ Family làm được việc này.', // i18n-key
   no_invite: 'Lời mời không còn.', // i18n-key
+  bad_name: 'Nhập tên Family', // i18n-key
+  no_request: 'Yêu cầu xin vào không còn.', // i18n-key
+  no_member: 'Người này không còn trong Family.', // i18n-key
+  other_owner: 'Người này đang làm chủ một Family khác nên chưa nhận quyền chủ được.', // i18n-key
+  read_only: 'Bạn chỉ có quyền xem dữ liệu Family này.', // i18n-key
+  not_signed_in: 'Cần đăng nhập.', // i18n-key
+  no_link: 'Link không đúng hoặc đã được đổi.', // i18n-key
+  too_many: 'Family đang có quá nhiều yêu cầu chờ duyệt, thử lại sau.', // i18n-key
 }
 /** Chạy một hàm của máy chủ; trả câu lỗi (theo ngôn ngữ) hoặc null. */
 async function call(fn: string, args: Record<string, unknown>): Promise<{ data: unknown; error: string | null }> {
@@ -338,29 +358,34 @@ export async function loadPricing() {
 /** Family đang tham gia + lời mời đang chờ + thành viên + phí. */
 export async function loadFamilies() {
   const me = useAuth.getState().user?.email.toLowerCase()
-  if (!uid || !me) { useFamily.setState({ loaded: true, families: [], invites: [], members: {}, fees: {} }); return }
+  if (!uid || !me) { useFamily.setState({ loaded: true, families: [], invites: [], members: {}, fees: {}, asked: [] }); return }
   const c = await sb()
   const [{ data: fs, error }, { data: ms }] = await Promise.all([
-    c.from('families').select('id, name, discount_code, paid_until, created_at').order('created_at'),
+    c.from('families').select('id, name, discount_code, paid_until, open, link, created_at').order('created_at'),
     c.from('family_members').select('family_id, email, name, role, status, invited_at').order('invited_at'),
   ])
   if (error) return
   const rows = (ms ?? []) as (Member & { family_id: string })[]
-  const families: Family[] = [], invites: Invite[] = [], members: Record<string, Member[]> = {}
-  for (const f of (fs ?? []) as { id: string; name: string; discount_code: string | null; paid_until: string | null }[]) {
+  const families: Family[] = [], invites: Invite[] = [], asked: FamilyState['asked'] = [], members: Record<string, Member[]> = {}
+  type Row = { id: string; name: string; discount_code: string | null; paid_until: string | null; open: boolean | null; link: string | null }
+  for (const f of (fs ?? []) as Row[]) {
     const mine = rows.find(m => m.family_id === f.id && m.email === me)
     const list = rows.filter(m => m.family_id === f.id)
-    if (mine?.status === 'active') { families.push({ id: f.id, name: f.name, role: mine.role, discountCode: f.discount_code, paidUntil: f.paid_until }); members[f.id] = list }
+    if (mine?.status === 'active') {
+      families.push({ id: f.id, name: f.name, role: mine.role, discountCode: f.discount_code, paidUntil: f.paid_until, open: !!f.open, link: f.link ?? null })
+      members[f.id] = list
+    } else if (mine?.status === 'requested') asked.push({ familyId: f.id, name: f.name })
     else if (mine) { const o = list.find(m => m.role === 'owner'); invites.push({ familyId: f.id, name: f.name, owner: o?.name || o?.email || '' }) }
   }
-  families.sort((a, b) => (a.role === 'owner' ? -1 : b.role === 'owner' ? 1 : 0))
+  const rank = { owner: 0, manager: 1, member: 2, viewer: 3 }
+  families.sort((a, b) => rank[a.role] - rank[b.role])
   const fees: Record<string, Fee> = {}
   await Promise.all(families.map(async f => {
     const { data } = await c.rpc('family_fee', { p_family: f.id })
     const x = data as { price: number; people: number; code: string | null; percent: number; paid_until: string | null } | null
     if (x) fees[f.id] = { price: Number(x.price), people: x.people, code: x.code, percent: x.percent, paidUntil: x.paid_until }
   }))
-  useFamily.setState({ loaded: true, families, invites, members, fees })
+  useFamily.setState({ loaded: true, families, invites, members, fees, asked })
   // bộ đang mở là một Family không còn tham gia (rời / bị bỏ / Family đã xoá) ⇒ về "Của tôi", bỏ bản lưu trên máy
   const sp = useSpace.getState()
   if (sp.id !== 'me') {
@@ -391,9 +416,87 @@ export async function acceptInvite(id: string): Promise<string | null> {
   await switchSpace(id)
   return null
 }
+/** Từ chối lời mời, hoặc rút yêu cầu xin vào. */
 export async function declineInvite(id: string) { const r = await call('family_decline', { p_family: id }); await loadFamilies(); return r.error }
-export async function leaveFamily(id: string) { const r = await call('family_leave', { p_family: id }); await loadFamilies(); return r.error }
 export async function deleteFamily(id: string) { const r = await call('family_delete', { p_family: id }); await loadFamilies(); return r.error }
+export async function approveMember(id: string, email: string) { const r = await call('family_approve', { p_family: id, p_email: email }); await loadFamilies(); return r.error }
+export async function setMemberRole(id: string, email: string, role: Exclude<FamilyRole, 'owner'>) { const r = await call('family_set_role', { p_family: id, p_email: email, p_role: role }); await loadFamilies(); return r.error }
+export async function transferOwner(id: string, email: string) { const r = await call('family_transfer', { p_family: id, p_email: email }); await loadFamilies(); return r.error }
+export async function setFamilyOpen(id: string, open: boolean) { const r = await call('family_set_open', { p_family: id, p_open: open }); await loadFamilies(); return r.error }
+/** Link xin vào / xem của Family (chưa có thì tạo); `renew` ⇒ đổi link, link cũ hết tác dụng. */
+export async function familyLink(id: string, renew = false): Promise<{ code: string } | { error: string }> {
+  try {
+    const r = await call('family_link', { p_family: id, p_new: renew })
+    await loadFamilies()
+    return r.error || typeof r.data !== 'string' ? { error: r.error ?? t(SHARE_NET) } : { code: r.data }
+  } catch { return { error: t(SHARE_NET) } }
+}
+
+/** Mở link Family: tên, mở / đóng, tôi đang ở đâu; Family MỞ ⇒ kèm đơn hàng (chỉ đơn). */
+export interface PeekLine { code: string; name: string; qty: number; kg: number | null }
+export interface PeekOrder { id: string; name: string; place: string; by: string | null; updatedAt: number; lines: PeekLine[] }
+export interface FamilyPeek {
+  id: string; name: string; open: boolean; people: number
+  me: { status: Member['status']; role: FamilyRole } | null
+  orders: PeekOrder[] | null
+}
+export async function peekFamily(code: string): Promise<{ peek: FamilyPeek } | { missing: true } | { error: true }> {
+  if (!cloudEnabled) return { error: true }
+  try {
+    const c = await sb()
+    const { data, error } = await c.rpc('family_peek', { p_code: code })
+    if (error) return { error: true }
+    if (!data || typeof data !== 'object') return { missing: true }
+    const d = data as Record<string, unknown>
+    const s = (v: unknown, max = 200) => (typeof v === 'string' ? v.slice(0, max) : '')
+    const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+    const orders = Array.isArray(d.orders) ? (d.orders as Record<string, unknown>[]).map(o => ({
+      id: s(o.id, 80), name: s(o.name), place: s(o.place), by: s(o.by) || null, updatedAt: n(o.updatedAt) ?? 0,
+      lines: (Array.isArray(o.lines) ? o.lines as Record<string, unknown>[] : []).map(l => ({ code: s(l.code, 60), name: s(l.name), qty: n(l.qty) ?? 0, kg: n(l.kg) })),
+    })) : null
+    const me = d.me && typeof d.me === 'object' ? d.me as FamilyPeek['me'] : null
+    return { peek: { id: s(d.id, 80), name: s(d.name, 80), open: d.open === true, people: n(d.people) ?? 0, me, orders } }
+  } catch { return { error: true } }
+}
+/** Xin vào qua link (cần đăng nhập) ⇒ trạng thái của tôi trong Family đó. */
+export async function requestJoin(code: string): Promise<{ status: Member['status'] } | { error: string }> {
+  try {
+    const r = await call('family_request', { p_code: code })
+    await loadFamilies()
+    const st = (r.data as { status?: Member['status'] } | null)?.status
+    return r.error || !st ? { error: r.error ?? t(SHARE_NET) } : { status: st }
+  } catch { return { error: t(SHARE_NET) } }
+}
+
+/** Đơn + chuyến do TÔI tạo trong Family (rời Family thì mang bản sao theo). Bộ đang mở ⇒ đọc trên máy; không ⇒ đọc máy chủ. */
+export async function myFamilyWork(id: string): Promise<SharePack[]> {
+  const me = useAuth.getState().user?.email.toLowerCase()
+  if (!me) return []
+  const d = useSpace.getState().id === id ? exportBackup() : await readFamily(id)
+  if (!d) return []
+  const cat = useCatalog.getState()
+  const items = [...(d.items ?? []), ...cat.items], vehicles = [...(d.vehicles ?? []), ...cat.vehicles]
+  const orders = d.orders ?? []
+  return (d.trips ?? []).filter(x => x.madeBy?.toLowerCase() === me && !x.id.startsWith('sample-')).map(trip => {
+    const os = trip.orderIds.map(o => orders.find(y => y.id === o)).filter((o): o is Order => !!o)
+    const used = new Set(os.flatMap(o => o.lines.map(l => l.itemId)))
+    return {
+      app: 'malcargo', kind: 'trip', version: 1, trip, orders: os, items: items.filter(i => used.has(i.id)),
+      vehicles: vehicles.filter(v => v.id === trip.vehicleId), pallet: d.pallet ?? useData.getState().pallet,
+    } as SharePack
+  })
+}
+/** Rời Family; `copy` = bản chụp các chuyến do tôi tạo (myFamilyWork) ⇒ lưu bản sao vào "Của tôi" sau khi rời. */
+export async function leaveFamily(id: string, copy: SharePack[] = []) {
+  const r = await call('family_leave', { p_family: id })
+  if (r.error) return r.error
+  await loadFamilies()   // đang mở bộ Family đó ⇒ đã tự về "Của tôi"
+  if (copy.length) {
+    if (useSpace.getState().id !== 'me') await switchSpace('me')
+    for (const p of copy) adoptShare(p)
+  }
+  return null
+}
 
 /** Admin: giá mỗi người / tháng (đồng) + mã giảm giá. */
 export async function adminSetPrice(vnd: number): Promise<string | null> {
@@ -455,6 +558,7 @@ async function onSignedIn(u: { id: string; email?: string; user_metadata?: Recor
   setOwner(u.id)
   uid = u.id
   const md = u.user_metadata ?? {}
+  setAuthor({ email: (u.email ?? '').toLowerCase(), name: String(md.full_name ?? md.name ?? u.email ?? '') })
   useAuth.setState({
     status: 'in',
     user: { id: u.id, email: u.email ?? '', name: String(md.full_name ?? md.name ?? u.email ?? ''), avatar: (md.avatar_url as string) ?? null },
@@ -474,8 +578,9 @@ async function onSignedOut() {
   uid = null
   version = null; synced = null
   const { families } = useFamily.getState(), open = useSpace.getState().id
+  setAuthor(null)
   useAuth.setState({ status: 'out', user: null, isAdmin: false, isSuper: false, sync: 'idle' })
-  useFamily.setState({ loaded: true, families: [], invites: [], members: {}, fees: {} })
+  useFamily.setState({ loaded: true, families: [], invites: [], members: {}, fees: {}, asked: [] })
   // dữ liệu Family cần đăng nhập ⇒ về "Của tôi", bỏ bản Family lưu trên máy (máy dùng chung)
   if (useSpace.getState().id !== 'me') {
     applying = true

@@ -161,6 +161,50 @@ console.log('• Bộ dữ liệu: Của tôi / Family')
   await S.openSpace({ id: 'me', name: null, role: null })
 }
 
+console.log('• Family: vai trò, ai sửa / ai tạo')
+{
+  const item = (id, code) => ({ id, owner: 'me', code, name: code, l: 400, w: 300, h: 200, kg: 5, perPallet: null, maxLayers: null, light: false, updatedAt: now })
+  S.setAuthor({ email: 'lan@example.com', name: 'Lan' })
+  // Của tôi: không ghi ai sửa
+  D().upsertOrder(order('o-mine', 'Khách riêng'))
+  ok(!D().orders.find(o => o.id === 'o-mine').by && !D().orders.find(o => o.id === 'o-mine').madeBy, '"Của tôi": đơn không ghi người sửa / người tạo')
+  // Family (thành viên): đơn / chuyến mới ghi người tạo + người sửa; người khác sửa ⇒ đổi người sửa, giữ người tạo
+  await S.openSpace({ id: 'fam2', name: 'Cty', role: 'member' })
+  D().upsertOrder(order('o-f', 'Khách F', [{ itemId: 'x', qty: 5 }]))
+  D().upsertTrip(trip('t-f', 'Xe F', ['o-f']))
+  let o = D().orders.find(x => x.id === 'o-f'), tr = D().trips.find(x => x.id === 't-f')
+  ok(o.by === 'Lan' && o.madeBy === 'lan@example.com' && tr.by === 'Lan' && tr.madeBy === 'lan@example.com', 'Family: đơn / chuyến mới ghi người tạo + người sửa')
+  S.setAuthor({ email: 'hung@example.com', name: 'Hưng' })
+  D().upsertOrder({ ...o, lines: [{ itemId: 'x', qty: 9 }] })
+  o = D().orders.find(x => x.id === 'o-f')
+  ok(o.by === 'Hưng' && o.madeBy === 'lan@example.com', 'người khác sửa ⇒ đổi người sửa, giữ người tạo')
+  // sửa chuyến mẫu trong Family ⇒ bản tách mang người tạo là người sửa
+  D().upsertTrip({ ...D().trips.find(x => x.id === 'sample-t1'), name: 'Mẫu sửa' })
+  const fk = D().trips.find(x => x.id === D().fork?.to)
+  ok(!!fk && fk.madeBy === 'hung@example.com' && D().orders.filter(x => fk.orderIds.includes(x.id)).every(x => x.madeBy === 'hung@example.com'), 'tách chuyến mẫu trong Family ⇒ bản tách + đơn của nó ghi người tạo')
+  D().markForkSeen()
+  // Quản lý: sửa được danh mục
+  await S.openSpace({ id: 'fam2', name: 'Cty', role: 'manager' })
+  D().upsertItem(item('i-mgr', 'MGR'))
+  ok(D().items.some(x => x.id === 'i-mgr') && !S.catalogLocked() && !S.readOnly(), 'quản lý: sửa được mã hàng (như chủ)')
+  // Chỉ xem: không sửa gì được, có câu báo; không dọn nháp
+  await S.openSpace({ id: 'fam2', name: 'Cty', role: 'viewer' })
+  const before = JSON.stringify({ o: D().orders, t: D().trips, i: D().items, p: D().pallet })
+  const n0 = S.useNotice.getState().n
+  D().upsertOrder({ ...o, name: 'Sửa trộm' }); D().removeOrder('o-f'); D().upsertTrip({ ...tr, name: 'X' }); D().removeTrip('t-f')
+  D().upsertTrip({ ...D().trips.find(x => x.id === 'sample-t1'), name: 'Mẫu sửa 2' })
+  D().upsertItem(item('i-v', 'V')); D().setPallet({ ...base.pallet, maxH: 900 })
+  D().importBatch({ items: [], vehicles: [], orders: [order('o-v', 'Nhập trộm')], trips: [] })
+  D().upsertOrder(order('o-blank-v', 'Đơn 9')); D().sweepBlank([])
+  ok(JSON.stringify({ o: D().orders, t: D().trips, i: D().items, p: D().pallet }) === before, 'chỉ xem: không sửa / xoá / tách mẫu / nhập / đổi danh mục được')
+  ok(S.useNotice.getState().n > n0 && S.useNotice.getState().text === S.READ_ONLY && S.denyEdit() === true, 'chỉ xem: bấm sửa ⇒ có câu báo; nút tạo mới bị chặn')
+  ok(S.catalogLocked(), 'chỉ xem: danh mục khoá')
+  await S.openSpace({ id: 'me', name: null, role: null })
+  ok(S.denyEdit() === false, '"Của tôi": không chặn')
+  S.setAuthor(null)
+  S.dropSpace('fam2')
+}
+
 console.log('• Chia sẻ chuyến: bản chụp ⇒ người nhận lưu bản sao')
 {
   const it = (id, code, extra = {}) => ({ id, owner: 'me', code, name: `Hàng ${code}`, l: 400, w: 300, h: 200, kg: 5, perPallet: 80, maxLayers: 8, light: false, updatedAt: now, ...extra })

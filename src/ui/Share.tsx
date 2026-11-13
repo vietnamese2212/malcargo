@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Check, ClipboardCopy, Loader2, Send } from 'lucide-react'
 import { createShare, fetchShare, signInGoogle, switchSpace, useAuth } from '../data/cloud'
 import { adoptShare, packTrip, shareNeedsCatalog, shareUrl, useShareInbox, type SharePack } from '../data/share'
-import { catalogLocked, findVehicle } from '../data/store'
+import { catalogLocked, findVehicle, readOnly } from '../data/store'
 import { resolveOrder } from '../data/resolve'
 import { orderTotals } from '../engine/plan'
 import { Button, Sheet, TextInput, fmtDims, fmtInt, fmtKgShort } from './kit'
@@ -104,7 +104,7 @@ export function ShareInbox() {
   }, [code, n])
   const pack = typeof st === 'object' ? st : null
   // thành viên Family không thêm được mã hàng / xe ⇒ bản sao cần thêm thì lưu vào "Của tôi"
-  const toMe = !!pack && catalogLocked() && shareNeedsCatalog(pack)
+  const toMe = !!pack && (readOnly() || (catalogLocked() && shareNeedsCatalog(pack)))
   const sum = useMemo(() => {
     if (!pack) return null
     const os = pack.trip.orderIds.map(id => pack.orders.find(o => o.id === id)).filter(o => !!o).map(o => ({ o: o!, r: resolveOrder(o!, pack.items) }))

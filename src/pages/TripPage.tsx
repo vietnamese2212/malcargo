@@ -8,8 +8,9 @@ import {
   ArrowLeftRight, FileSpreadsheet, HelpCircle, Layers, Loader2, LogOut, MapPin, Maximize2, Menu, Minimize2, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Printer, Rotate3d, Ruler,
   Settings, Share2, SlidersHorizontal, Smartphone, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, UsersRound, X,
 } from 'lucide-react'
-import { LOCKED, catalogLocked, famLabel, findVehicle, isBlankOrder, isSample, newId, newTripLabel, nextName, useAllItems, useAllVehicles, useData, useSpace } from '../data/store'
-import { cloudEnabled, signInGoogle, signOut, switchAccount, switchSpace, useAuth, useFamily } from '../data/cloud'
+import { LOCKED, catalogLocked, denyEdit, famLabel, findVehicle, isBlankOrder, isSample, newId, newTripLabel, nextName, useAllItems, useAllVehicles, useData, useSpace } from '../data/store'
+import { cloudEnabled, signInGoogle, signOut, switchAccount, switchSpace, useAuth, useFamily, useJoinRequests } from '../data/cloud'
+import { when } from '../ui/FamilyGate'
 import { ShareSheet } from '../ui/Share'
 import { pickPool, resolveOrder, truckOf } from '../data/resolve'
 import { orderTotals, type TripInput, type TripResult } from '../engine/plan'
@@ -213,6 +214,7 @@ export default function TripPage({ id }: { id: string }) {
 
   const r = vehicle && hasCargo ? result : null
   const newTrip = () => {
+    if (denyEdit()) return
     const tid = newId()
     upsertTrip({ id: tid, ...newTripLabel(trips), vehicleId: null, orderIds: [], updatedAt: 0 })
     go({ page: 'trip', id: tid })
@@ -254,7 +256,7 @@ export default function TripPage({ id }: { id: string }) {
     upsertTrip({ ...trip, orderIds: [...trip.orderIds, oid] })
     return oid
   }
-  const addCargo = () => setPickFor(rawOrders[0]?.id ?? newOrderInTrip())
+  const addCargo = () => !denyEdit() && setPickFor(rawOrders[0]?.id ?? newOrderInTrip())
   // đóng bảng chọn mã mà đơn vẫn trống (vừa bấm "Thêm hàng" / "Đơn mới" rồi thôi) ⇒ bỏ đơn đó, không để lại đơn rỗng
   const closePicker = () => {
     const o = useData.getState().orders.find(x => x.id === pickFor)
@@ -602,6 +604,7 @@ function TripSwitch({ trip, trips, onRename, onDelete, onAll, onNew, onShare }: 
             {renaming
               ? <RenameInput name={tx(trip.name)} onDone={v => { const n = v && untx(v, trip.name); if (n && n !== trip.name) onRename(n); setRenaming(false) }} />
               : <span className="block break-words pr-2 text-[15px] font-bold leading-snug text-slate-900">{tx(trip.name)}</span>}
+            {!renaming && trip.by && <span className="mt-0.5 block text-[12px] text-slate-600">{t('Sửa bởi {name} · {time}', { name: trip.by, time: when(trip.updatedAt) })}</span>}
           </div>
           <div className="border-b border-slate-200 px-3 py-2 text-[13px] font-semibold text-slate-700">{t('Các chuyến')} · {rows.length}</div>
           <div className="max-h-[55vh] divide-y divide-slate-100 overflow-y-auto">
@@ -662,7 +665,7 @@ function RenameInput({ name, onDone }: { name: string; onDone: (v: string | null
 function MainMenu({ onPanel, onImport, onTour }: { onPanel: (p: PanelName) => void; onImport: () => void; onTour: () => void }) {
   const isAdmin = useAuth(s => s.isAdmin)
   const phone = usePhone()
-  const families = useFamily(s => s.families), invites = useFamily(s => s.invites).length
+  const families = useFamily(s => s.families), invites = useFamily(s => s.invites).length, asking = useJoinRequests()
   const space = useSpace(s => s.id)
   // tải app (APK) — CHỈ máy Android (chủ dự án 31/10); đang chạy trong chính app đã cài (cửa sổ riêng) thì thôi
   const android = /Android/i.test(navigator.userAgent) && !matchMedia('(display-mode: standalone)').matches && !document.referrer.startsWith('android-app://')
@@ -700,6 +703,7 @@ function MainMenu({ onPanel, onImport, onTour }: { onPanel: (p: PanelName) => vo
           <MenuItem icon={<HelpCircle size={18} strokeWidth={1.75} />} onClick={() => { close(); onTour() }}>{t('Hướng dẫn nhanh')}</MenuItem>
           <MenuItem icon={<UsersRound size={18} strokeWidth={1.75} />} onClick={() => { close(); onPanel('family') }}>
             <span className="flex-1">Family</span>{!!invites && <Badge tone="amber">{t('{n} lời mời', { n: invites })}</Badge>}
+            {!!asking && <Badge tone="amber">{t('{n} xin vào', { n: asking })}</Badge>}
           </MenuItem>
           <MenuItem icon={<UserRound size={18} strokeWidth={1.75} />} onClick={() => { close(); onPanel('account') }}>{t('Tài khoản & dữ liệu')}</MenuItem>
           {isAdmin && (
@@ -1281,6 +1285,7 @@ function OrderBlock({ o, i, count, tot, selected, onSelect, onEdit, onMove, onOp
               <MapPin size={13} className="mt-[3px] shrink-0 text-slate-500" /><span className="min-w-0 break-words">{tx(o.place)}</span>
             </span>
           )}
+          {o.by && <span className="block text-[12px] leading-snug text-slate-500">{t('Sửa bởi {name} · {time}', { name: o.by, time: when(o.updatedAt) })}</span>}
         </button>
         <button type="button" aria-label={t('Sửa đơn {name}', { name })} aria-haspopup="dialog" onClick={onEdit}
           className="tap inline-flex shrink-0 items-center gap-1 rounded-md px-2 text-[13px] font-semibold text-slate-600 hover:bg-white">

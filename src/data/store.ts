@@ -22,7 +22,8 @@ const safeStorage = {
 
 // ── BỘ DỮ LIỆU đang mở: "Của tôi" (id 'me') hoặc một FAMILY (id Family). Mỗi bộ lưu riêng trên máy (`dataKey`) — đổi bộ
 //    không lẫn dữ liệu; cloud.ts đồng bộ bộ đang mở với tài khoản / Family. Nhớ bộ đang mở (mở lại app vẫn ở đó).
-export interface SpaceInfo { id: string; name: string | null; role: 'owner' | 'member' | null }
+export type FamilyRole = 'owner' | 'manager' | 'member' | 'viewer'
+export interface SpaceInfo { id: string; name: string | null; role: FamilyRole | null }
 const SPACE = 'malcargo-space-v1'
 export const dataKey = (space: string) => (space === 'me' ? 'malcargo-data-v1' : `malcargo-data-fam-${space}`)
 const savedSpace = (): SpaceInfo => {
@@ -33,10 +34,28 @@ export const useSpace = create<SpaceInfo>(() => savedSpace())
 useSpace.subscribe(s => safeStorage.setItem(SPACE, JSON.stringify(s)))
 /** Tên Family lúc hiện: luôn có chữ "Family" để phân biệt với "Của tôi" (tên đã bắt đầu bằng Family thì giữ nguyên). */
 export const famLabel = (name: string) => (/^\s*family\b/i.test(name) ? name : `Family ${name}`)
-/** Thành viên Family (không phải chủ): mã hàng, xe, cỡ pallet CHỈ ĐỌC — chủ giữ danh mục (máy chủ cũng chặn). */
-export const catalogLocked = () => useSpace.getState().role === 'member'
-export const useCatalogLocked = () => useSpace(s => s.role === 'member')
+/** Thành viên / người chỉ xem của Family: mã hàng, xe, cỡ pallet CHỈ ĐỌC — chủ + quản lý giữ danh mục (máy chủ cũng chặn). */
+const locks = (r: FamilyRole | null) => r === 'member' || r === 'viewer'
+export const catalogLocked = () => locks(useSpace.getState().role)
+export const useCatalogLocked = () => useSpace(s => locks(s.role))
 export const LOCKED = 'Mã hàng, xe, cỡ pallet do chủ Family quản lý.' // i18n-key — câu báo cho thành viên, gọi t(LOCKED) lúc vẽ
+/** Vai "Chỉ xem" trong Family: không sửa gì được (máy chủ cũng từ chối ghi). */
+export const readOnly = () => useSpace.getState().role === 'viewer'
+export const useReadOnly = () => useSpace(s => s.role === 'viewer')
+export const READ_ONLY = 'Bạn chỉ có quyền xem dữ liệu Family này.' // i18n-key
+/** Câu báo chung (App hiện thành dòng nổi): người chỉ xem bấm sửa ⇒ báo thay vì lặng lẽ không làm gì. */
+export const useNotice = create<{ text: string | null; n: number }>(() => ({ text: null, n: 0 }))
+export const notify = (text: string) => useNotice.setState(s => ({ text, n: s.n + 1 }))
+const blocked = () => { if (!readOnly()) return false; notify(READ_ONLY); return true }
+/** Nút tạo chuyến / đơn mới gọi trước: chỉ xem ⇒ báo + true (đừng chuyển sang chuyến không có). */
+export const denyEdit = blocked
+
+// Người đang đăng nhập (cloud.ts đặt) — trong Family, đơn / chuyến ghi tên người sửa lần cuối + email người tạo
+let author: { email: string; name: string } | null = null
+export const setAuthor = (a: { email: string; name: string } | null) => { author = a }
+const who = <T extends { by?: string; madeBy?: string }>(x: T, isNew: boolean): T =>
+  useSpace.getState().id === 'me' || !author ? x
+    : { ...x, by: author.name || author.email, ...(isNew ? { madeBy: author.email } : {}) }
 
 // Family nhiều người cùng làm ⇒ chỉ dọn nháp trống do CHÍNH MÁY NÀY tạo (nháp người khác vừa bấm "+" không bị xoá)
 const DRAFTS = 'malcargo-drafts-v1'
@@ -228,47 +247,52 @@ export const useData = create<DataState>()(
       })),
       fork: null,
       upsertOrder: o => set(s => {
+        if (blocked()) return {}
         const now = Date.now()
         if (!isSample(o.id)) {
-          if (!s.orders.some(x => x.id === o.id)) draft(o.id)
-          return { orders: upsert(s.orders, { ...o, updatedAt: now }) }
+          const isNew = !s.orders.some(x => x.id === o.id)
+          if (isNew) draft(o.id)
+          return { orders: upsert(s.orders, who({ ...o, updatedAt: now }, isNew)) }
         }
         // đơn mẫu bị sửa: vừa tách xong (cùng một thao tác sửa nhiều đơn) ⇒ ghi vào bản sao; chưa tách ⇒ tách
         const f = s.fork
         if (f && !f.seen && f.orders[o.id]) {
           // bản sao đã mang tên "Đơn N": màn còn cầm đơn mẫu (tên mẫu) thì không ghi tên mẫu đè lại
           const cur = s.orders.find(x => x.id === f.orders[o.id])
-          return { orders: upsert(s.orders, { ...o, id: f.orders[o.id], name: cur && SAMPLE_ORDER_NAMES.has(o.name) ? cur.name : o.name, updatedAt: now }) }
+          return { orders: upsert(s.orders, who({ ...o, id: f.orders[o.id], name: cur && SAMPLE_ORDER_NAMES.has(o.name) ? cur.name : o.name, updatedAt: now, madeBy: cur?.madeBy }, false)) }
         }
         const k = makeFork(s, sampleTripOf(s, o.id), o)
-        return { trips: [k.trip, ...s.trips], orders: [...k.orders, ...s.orders], fork: k.fork }
+        return { trips: [who(k.trip, true), ...s.trips], orders: [...k.orders.map(x => who(x, true)), ...s.orders], fork: k.fork }
       }),
-      removeOrder: id => set(s => (isSample(id) ? {} : {
+      removeOrder: id => set(s => (isSample(id) || blocked() ? {} : {
         orders: s.orders.filter(x => x.id !== id),
         trips: s.trips.map(t => ({ ...t, orderIds: t.orderIds.filter(o => o !== id) })),
         deleted: mark(s.deleted, [id]),
       })),
       upsertTrip: t => set(s => {
+        if (blocked()) return {}
         const now = Date.now()
         if (!isSample(t.id)) {
-          if (!s.trips.some(x => x.id === t.id)) draft(t.id)
+          const isNew = !s.trips.some(x => x.id === t.id)
+          if (isNew) draft(t.id)
           const k = detachSampleOrders(s, t)
-          return { trips: upsert(s.trips, { ...k.trip, updatedAt: now }), ...(k.added.length ? { orders: [...k.added, ...s.orders] } : {}) }
+          return { trips: upsert(s.trips, who({ ...k.trip, updatedAt: now }, isNew)), ...(k.added.length ? { orders: [...k.added.map(x => who(x, true)), ...s.orders] } : {}) }
         }
         const f = s.fork
         if (f && !f.seen && f.from === t.id) {
           const cur = s.trips.find(x => x.id === f.to)
-          return { trips: upsert(s.trips, {
+          return { trips: upsert(s.trips, who({
             ...t, id: f.to, code: cur?.code, name: SAMPLE_NAMES.has(t.name) ? cur?.name ?? t.name : t.name,
-            orderIds: t.orderIds.map(o => f.orders[o] ?? o), updatedAt: now,
-          }) }
+            orderIds: t.orderIds.map(o => f.orders[o] ?? o), updatedAt: now, madeBy: cur?.madeBy,
+          }, false)) }
         }
         const k = makeFork(s, t)
-        return { trips: [k.trip, ...s.trips], orders: [...k.orders, ...s.orders], fork: k.fork }
+        return { trips: [who(k.trip, true), ...s.trips], orders: [...k.orders.map(x => who(x, true)), ...s.orders], fork: k.fork }
       }),
-      removeTrip: id => set(s => (isSample(id) ? {} : { trips: s.trips.filter(x => x.id !== id), deleted: mark(s.deleted, [id]) })),
+      removeTrip: id => set(s => (isSample(id) || blocked() ? {} : { trips: s.trips.filter(x => x.id !== id), deleted: mark(s.deleted, [id]) })),
       // dọn đơn / chuyến nháp trống, trừ những cái đang mở (`keep`) và đơn nằm trong chuyến đang mở
       sweepBlank: keep => set(s => {
+        if (readOnly()) return s   // chỉ xem: không xoá gì (máy chủ cũng không nhận)
         const k = new Set(keep)
         s.trips.forEach(t => { if (k.has(t.id)) t.orderIds.forEach(o => k.add(o)) })
         const own = (id: string) => useSpace.getState().id === 'me' || drafts.has(id)
@@ -294,10 +318,13 @@ export const useData = create<DataState>()(
         return { items: d.items, vehicles: d.vehicles, pallet: d.pallet, trips, orders, deleted }
       }),
       importBatch: d => set(s => {
+        if (blocked()) return {}
         const now = Date.now()
         const put = <T extends { id: string }>(list: T[], add: T[], extra: Partial<T>) => add.reduce((l, x) => upsert(l, { ...x, ...extra, updatedAt: now }), list)
+        const mark2 = <T extends { id: string; by?: string; madeBy?: string }>(list: T[], add: T[]) =>
+          add.map(x => who(x, !list.some(y => y.id === x.id)))
         // file nhập có ghi đè đơn mẫu / gắn đơn mẫu vào chuyến khác ⇒ vẫn giữ chuyến mẫu nguyên gốc
-        const { trips, orders, dropped } = resetSamples({ orders: put(s.orders, d.orders, {}), trips: put(s.trips, d.trips, {}) })
+        const { trips, orders, dropped } = resetSamples({ orders: put(s.orders, mark2(s.orders, d.orders), {}), trips: put(s.trips, mark2(s.trips, d.trips), {}) })
         const lock = catalogLocked()   // thành viên Family: file có mã hàng / xe thì bỏ phần đó
         return {
           items: lock ? s.items : put(s.items, d.items, { owner: 'me' } as Partial<Item>),

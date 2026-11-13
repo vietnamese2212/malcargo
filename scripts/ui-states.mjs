@@ -33,6 +33,17 @@ export async function openShare(p, pack = SHARE_PACK, code = 'TESTSHARE1') {
   await p.goto(new URL(`/s/${code}`, p.url()).href, { waitUntil: 'networkidle' }); await p.waitForTimeout(1500)
 }
 
+// Link Family (…/f/<mã>, máy chủ giả lập chặn family_peek): Family MỞ ⇒ kèm đơn hàng — tên chữ không dấu để soát bản tiếng Anh
+export const FAMILY_PEEK = { id: 'fam1', name: 'Test Co', open: true, people: 3, me: null, orders: [
+  { id: 'o1', name: 'Order North', place: 'Ha Noi', by: 'Nguoi A', updatedAt: Date.now(), lines: [{ code: 'SP002', name: 'TBA 180', qty: 120, kg: 9.85 }, { code: 'SP008', name: 'ECOLEAN', qty: 40, kg: 3.08 }] },
+  ...Array.from({ length: 7 }, (_, i) => ({ id: `o${i + 2}`, name: `Order ${i + 2}`, place: '', by: null, updatedAt: Date.now() - 864e5 * (i + 1), lines: [{ code: 'X1', name: 'Item X', qty: 10 + i, kg: null }] })),
+] }
+export async function openFamilyLink(p, peek = FAMILY_PEEK) {
+  await p.unroute('**/rest/v1/rpc/family_peek').catch(() => {})
+  await p.route('**/rest/v1/rpc/family_peek', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(peek) }))
+  await p.goto(new URL('/f/TESTFAMLINK', p.url()).href, { waitUntil: 'networkidle' }); await p.waitForTimeout(1500)
+}
+
 // [tên, mở, phạm vi soi, đóng, chỉ trên máy]
 export const STATES = [
   ['Bàn xếp xe', null, null],
@@ -65,6 +76,8 @@ export const STATES = [
   ['Nhập từ Excel', menu('Nhập từ Excel'), '[role=dialog]', null, 'pc'],
   ['Chia sẻ chuyến (chưa đăng nhập)', async p => { await btn(p, starts('Chuyến đang mở: {name}. Bấm để xem các chuyến')).click(); await p.waitForTimeout(200); await btn(p, T('Chia sẻ chuyến này')).click() }, '[role=dialog]'],
   ['Mở link chia sẻ', openShare, '[role=dialog]'],
+  ['Mở link Family (mở)', p => openFamilyLink(p), '[role=dialog]'],
+  ['Mở link Family (đóng)', p => openFamilyLink(p, { ...FAMILY_PEEK, open: false, orders: null }), '[role=dialog]'],
 ]
 // mẫu 40ft (xe thùng rời) chỉ soi những màn khác hẳn mẫu pallet
 export const T2_STATES = ['Bàn xếp xe', 'Kết quả mở', 'Diễn giải', 'Danh sách xe']

@@ -1,7 +1,7 @@
 // Sửa đơn — tự lưu mỗi lần đổi, tổng cập nhật ngay, một nút đi thẳng sang xếp xe.
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowRight, ClipboardList, Minus, Plus, Trash2, X } from 'lucide-react'
-import { isSample, newId, newTripLabel, useAllItems, useData } from '../data/store'
+import { denyEdit, isSample, newId, newTripLabel, useAllItems, useData } from '../data/store'
 import type { Order } from '../data/types'
 import { orderTotals } from '../engine/plan'
 import { resolveOrder } from '../data/resolve'
@@ -54,6 +54,7 @@ export default function OrderPage({ id, back }: { id: string; back?: string }) {
   const trip = trips.find(t => t.orderIds.includes(order.id))
   const toTrip = () => {
     if (trip) { go({ page: 'trip', id: trip.id }); return }
+    if (denyEdit()) return
     const tid = newId()
     upsertTrip({ id: tid, ...newTripLabel(trips), vehicleId: null, orderIds: [order.id], updatedAt: 0 })
     go({ page: 'trip', id: tid })

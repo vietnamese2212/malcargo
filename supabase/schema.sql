@@ -93,14 +93,22 @@ create table if not exists public.family_members (
   email text not null check (email = lower(email) and email like '%_@_%._%'),
   user_id uuid references auth.users on delete cascade,
   name text,
-  role text not null default 'member' check (role in ('owner', 'member')),
-  status text not null default 'invited' check (status in ('invited', 'active')),
+  role text not null default 'member',      -- ràng buộc ngay bên dưới (chạy lại được)
+  status text not null default 'invited',
   invited_at timestamptz not null default now(),
   joined_at timestamptz,
   primary key (family_id, email)
 );
 create index if not exists family_members_user on public.family_members (user_id);
 create index if not exists family_members_email on public.family_members (email);
+-- chủ dự án 13/11: Family MỞ (ai có link xem được đơn hàng, chỉ xem) / ĐÓNG (mặc định); link xin vào (`link`, đổi được);
+-- vai trò Quản lý (như chủ, trừ xoá Family / chuyển quyền / phân vai / mã giảm giá) + Chỉ xem; trạng thái "xin vào" chờ duyệt
+alter table public.families add column if not exists open boolean not null default false;
+alter table public.families add column if not exists link text unique;
+alter table public.family_members drop constraint if exists family_members_role_check;
+alter table public.family_members add constraint family_members_role_check check (role in ('owner', 'manager', 'member', 'viewer'));
+alter table public.family_members drop constraint if exists family_members_status_check;
+alter table public.family_members add constraint family_members_status_check check (status in ('invited', 'requested', 'active'));
 create table if not exists public.family_data (
   family_id uuid primary key references public.families on delete cascade,
   data jsonb not null,
@@ -133,6 +141,15 @@ create or replace function public.family_invited(p_family uuid) returns boolean
 language sql stable security definer set search_path = public as $$
   select exists (select 1 from family_members where family_id = p_family and email = public.my_email() and status = 'invited')
 $$;
+create or replace function public.family_requested(p_family uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from family_members where family_id = p_family and email = public.my_email() and status = 'requested')
+$$;
+-- chủ hoặc quản lý: mời / duyệt / bỏ người, mở / đóng, link, đổi tên, sửa danh mục
+create or replace function public.family_admin(p_family uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce(public.family_role(p_family) in ('owner', 'manager'), false)
+$$;
 
 alter table public.families enable row level security;
 alter table public.family_members enable row level security;
@@ -141,7 +158,8 @@ alter table public.app_settings enable row level security;
 alter table public.discount_codes enable row level security;
 -- đọc: thành viên thấy Family của mình; người được mời thấy tên Family + chủ (để quyết tham gia). Ghi: chỉ qua các hàm bên dưới
 drop policy if exists "families: member read" on public.families;
-create policy "families: member read" on public.families for select using (public.family_role(id) is not null or public.family_invited(id));
+create policy "families: member read" on public.families for select
+  using (public.family_role(id) is not null or public.family_invited(id) or public.family_requested(id));
 drop policy if exists "family_members: read" on public.family_members;
 create policy "family_members: read" on public.family_members for select
   using (public.family_role(family_id) is not null or email = public.my_email() or (role = 'owner' and public.family_invited(family_id)));
@@ -238,7 +256,7 @@ create or replace function public.family_fee(p_family uuid) returns jsonb
 language sql stable security definer set search_path = public as $$
   select jsonb_build_object(
     'price', coalesce((select (value #>> '{}')::numeric from app_settings where key = 'family_price_vnd'), 0),
-    'people', (select count(*) from family_members where family_id = f.id),
+    'people', (select count(*) from family_members where family_id = f.id and status <> 'requested'),   -- xin vào: duyệt rồi mới tính
     'code', f.discount_code,
     'percent', coalesce((select percent from discount_codes d where d.code = f.discount_code and d.active), 0),
     'paid_until', f.paid_until)
@@ -253,6 +271,7 @@ declare fid uuid; me text := public.my_email(); c text := nullif(upper(trim(p_co
 begin
   if auth.uid() is null or me is null then raise exception 'not_signed_in'; end if;
   if exists (select 1 from families where owner_id = auth.uid()) then raise exception 'already_owner'; end if;
+  if coalesce(char_length(trim(p_name)), 0) not between 1 and 80 then raise exception 'bad_name'; end if;
   if c is not null and not exists (select 1 from discount_codes where code = c and active) then raise exception 'bad_code'; end if;
   insert into families (owner_id, name, discount_code) values (auth.uid(), trim(p_name), c) returning id into fid;
   insert into family_members (family_id, email, user_id, name, role, status, joined_at)
@@ -264,28 +283,157 @@ end $$;
 create or replace function public.family_rename(p_family uuid, p_name text) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if public.family_role(p_family) is distinct from 'owner' then raise exception 'not_owner'; end if;
+  if not public.family_admin(p_family) then raise exception 'not_owner'; end if;
+  if coalesce(char_length(trim(p_name)), 0) not between 1 and 80 then raise exception 'bad_name'; end if;
   update families set name = trim(p_name) where id = p_family;
 end $$;
 
--- thêm người: còn phải trả phí (giá sau giảm > 0) mà chưa trả ⇒ chưa thêm được
+-- còn phải trả phí (giá sau giảm > 0) mà chưa trả ⇒ chưa thêm người được (mời hay duyệt người xin vào đều vậy)
+create or replace function public.family_paid(p_family uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select not ((fee ->> 'price')::numeric * (100 - (fee ->> 'percent')::int) > 0
+    and coalesce((fee ->> 'paid_until')::date < current_date, true))
+  from (select public.family_fee(p_family) fee) x
+$$;
+
+-- mời bằng email; email đó đang xin vào ⇒ coi như duyệt luôn
 create or replace function public.family_invite(p_family uuid, p_email text) returns void
 language plpgsql security definer set search_path = public as $$
-declare fee jsonb := public.family_fee(p_family); e text := lower(trim(p_email));
+declare e text := lower(trim(p_email)); st text;
 begin
-  if public.family_role(p_family) is distinct from 'owner' then raise exception 'not_owner'; end if;
+  if not public.family_admin(p_family) then raise exception 'not_owner'; end if;
   if e !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'bad_email'; end if;
-  if exists (select 1 from family_members where family_id = p_family and email = e) then raise exception 'already_member'; end if;
-  if (fee ->> 'price')::numeric * (100 - (fee ->> 'percent')::int) > 0
-     and coalesce((fee ->> 'paid_until')::date < current_date, true) then raise exception 'payment_required'; end if;
-  insert into family_members (family_id, email) values (p_family, e);
+  select status into st from family_members where family_id = p_family and email = e;
+  if st is not null and st <> 'requested' then raise exception 'already_member'; end if;
+  if not public.family_paid(p_family) then raise exception 'payment_required'; end if;
+  if st = 'requested' then
+    update family_members set status = 'active', joined_at = now() where family_id = p_family and email = e;
+  else
+    insert into family_members (family_id, email) values (p_family, e);
+  end if;
 end $$;
 
+-- duyệt người xin vào qua link
+create or replace function public.family_approve(p_family uuid, p_email text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.family_admin(p_family) then raise exception 'not_owner'; end if;
+  if not public.family_paid(p_family) then raise exception 'payment_required'; end if;
+  update family_members set status = 'active', joined_at = now()
+    where family_id = p_family and email = lower(trim(p_email)) and status = 'requested';
+  if not found then raise exception 'no_request'; end if;
+end $$;
+
+-- bỏ người / huỷ lời mời / từ chối người xin vào. Không bỏ được chủ; quản lý chỉ chủ bỏ được
 create or replace function public.family_remove(p_family uuid, p_email text) returns void
 language plpgsql security definer set search_path = public as $$
 begin
+  if not public.family_admin(p_family) then raise exception 'not_owner'; end if;
+  delete from family_members where family_id = p_family and email = lower(trim(p_email))
+    and role <> 'owner' and (role <> 'manager' or public.family_role(p_family) = 'owner');
+end $$;
+
+-- chủ phân vai: Quản lý / Thành viên / Chỉ xem
+create or replace function public.family_set_role(p_family uuid, p_email text, p_role text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
   if public.family_role(p_family) is distinct from 'owner' then raise exception 'not_owner'; end if;
-  delete from family_members where family_id = p_family and email = lower(trim(p_email)) and role = 'member';
+  if p_role not in ('manager', 'member', 'viewer') then raise exception 'bad_role'; end if;
+  update family_members set role = p_role
+    where family_id = p_family and email = lower(trim(p_email)) and role <> 'owner' and status <> 'requested';
+  if not found then raise exception 'no_member'; end if;
+end $$;
+
+-- chuyển quyền chủ cho một người đã vào Family (người đó chưa làm chủ Family nào); chủ cũ thành Quản lý
+create or replace function public.family_transfer(p_family uuid, p_email text) returns void
+language plpgsql security definer set search_path = public as $$
+declare u uuid;
+begin
+  if public.family_role(p_family) is distinct from 'owner' then raise exception 'not_owner'; end if;
+  select user_id into u from family_members
+    where family_id = p_family and email = lower(trim(p_email)) and status = 'active' and role <> 'owner';
+  if u is null then raise exception 'no_member'; end if;
+  if exists (select 1 from families where owner_id = u) then raise exception 'other_owner'; end if;
+  update family_members set role = 'manager' where family_id = p_family and user_id = auth.uid();
+  update family_members set role = 'owner' where family_id = p_family and user_id = u;
+  update families set owner_id = u where id = p_family;
+end $$;
+
+-- mở (người ngoài có link xem được đơn hàng) / đóng
+create or replace function public.family_set_open(p_family uuid, p_open boolean) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.family_admin(p_family) then raise exception 'not_owner'; end if;
+  update families set open = coalesce(p_open, false) where id = p_family;
+end $$;
+
+-- link xin vào / xem: chưa có thì tạo; p_new ⇒ đổi link (link cũ hết tác dụng ngay)
+create or replace function public.family_link(p_family uuid, p_new boolean default false) returns text
+language plpgsql security definer set search_path = public as $$
+declare c text;
+begin
+  if not public.family_admin(p_family) then raise exception 'not_owner'; end if;
+  select link into c from families where id = p_family;
+  if c is not null and not coalesce(p_new, false) then return c; end if;
+  loop
+    -- 10 ký tự base64url từ uuid ngẫu nhiên (~56 bit) — không đoán / dò được
+    c := translate(left(encode(decode(replace(gen_random_uuid()::text, '-', ''), 'hex'), 'base64'), 10), '+/', '-_');
+    begin
+      update families set link = c where id = p_family;
+      return c;
+    exception when unique_violation then null;
+    end;
+  end loop;
+end $$;
+
+-- mở link (không cần đăng nhập): tên Family, mở / đóng, số người, tôi đang ở đâu; Family MỞ ⇒ kèm đơn hàng (CHỈ đơn:
+-- tên, điểm giao, mã · tên · số thùng · kg/thùng — không chuyến, xe, danh mục). Không có link đúng thì không đọc được gì.
+create or replace function public.family_peek(p_code text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare f families; me jsonb; d jsonb; orders jsonb;
+begin
+  if p_code is null or p_code !~ '^[A-Za-z0-9_-]{6,40}$' then return null; end if;
+  select * into f from families where link = p_code;
+  if not found then return null; end if;
+  delete from family_members where family_id = f.id and status = 'requested' and invited_at < now() - interval '30 days';
+  if auth.uid() is not null then
+    select jsonb_build_object('status', status, 'role', role) into me from family_members
+      where family_id = f.id and (user_id = auth.uid() or email = public.my_email()) limit 1;
+  end if;
+  if f.open then
+    select data into d from family_data where family_id = f.id;
+    select coalesce(jsonb_agg(jsonb_build_object('id', o ->> 'id', 'name', o ->> 'name', 'place', o ->> 'place',
+        'updatedAt', o -> 'updatedAt', 'by', o ->> 'by',
+        'lines', (select coalesce(jsonb_agg(jsonb_build_object('qty', l -> 'qty', 'code', i ->> 'code', 'name', i ->> 'name', 'kg', i -> 'kg')
+            order by n), '[]')
+          from jsonb_array_elements(coalesce(o -> 'lines', '[]')) with ordinality q(l, n)
+          left join lateral (select x from jsonb_array_elements(coalesce(d -> 'items', '[]')) x where x ->> 'id' = l ->> 'itemId'
+            union all select c.data || jsonb_build_object('id', c.id) from catalog c where c.id = l ->> 'itemId' and c.kind = 'item'
+            limit 1) it(i) on true))
+      order by coalesce((o ->> 'updatedAt')::numeric, 0) desc), '[]')
+      into orders
+      from (select o from jsonb_array_elements(coalesce(d -> 'orders', '[]')) o
+            where coalesce(o ->> 'id', '') not like 'sample-%' limit 500) z;
+  end if;
+  return jsonb_build_object('id', f.id, 'name', f.name, 'open', f.open,
+    'people', (select count(*) from family_members where family_id = f.id and status = 'active'),
+    'me', me, 'orders', orders);
+end $$;
+
+-- xin vào qua link (cần đăng nhập). Đã có mặt (đã vào / được mời / đang xin) ⇒ trả trạng thái, không thêm gì
+create or replace function public.family_request(p_code text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare f uuid; st text; me text := public.my_email();
+begin
+  if auth.uid() is null or me is null then raise exception 'not_signed_in'; end if;
+  select id into f from families where link = p_code;
+  if f is null then raise exception 'no_link'; end if;
+  select status into st from family_members where family_id = f and (user_id = auth.uid() or email = me) limit 1;
+  if st is not null then return jsonb_build_object('id', f, 'status', st); end if;
+  if (select count(*) from family_members where family_id = f and status = 'requested') >= 100 then raise exception 'too_many'; end if;
+  insert into family_members (family_id, email, user_id, name, role, status, invited_at)
+    values (f, me, auth.uid(), auth.jwt() -> 'user_metadata' ->> 'full_name', 'member', 'requested', now());
+  return jsonb_build_object('id', f, 'status', 'requested');
 end $$;
 
 create or replace function public.family_accept(p_family uuid) returns void
@@ -298,12 +446,13 @@ end $$;
 
 create or replace function public.family_decline(p_family uuid) returns void
 language sql security definer set search_path = public as $$
-  delete from family_members where family_id = p_family and email = public.my_email() and status = 'invited'
+  -- từ chối lời mời, hoặc rút yêu cầu xin vào
+  delete from family_members where family_id = p_family and email = public.my_email() and status in ('invited', 'requested')
 $$;
 
 create or replace function public.family_leave(p_family uuid) returns void
 language sql security definer set search_path = public as $$
-  delete from family_members where family_id = p_family and user_id = auth.uid() and role = 'member'
+  delete from family_members where family_id = p_family and user_id = auth.uid() and role <> 'owner'
 $$;
 
 create or replace function public.family_delete(p_family uuid) returns void
@@ -334,6 +483,7 @@ language plpgsql security definer set search_path = public as $$
 declare r text := public.family_role(p_family); v bigint; cur jsonb; dead jsonb;
 begin
   if r is null then raise exception 'not_member'; end if;
+  if r = 'viewer' then raise exception 'read_only'; end if;
   if r = 'owner' then
     update family_data set data = p_data where family_id = p_family and version = p_version returning version into v;
     return v;
@@ -354,6 +504,14 @@ grant execute on function public.user_save(jsonb, bigint), public.family_fee(uui
   public.family_rename(uuid, text), public.family_invite(uuid, text), public.family_remove(uuid, text), public.family_accept(uuid),
   public.family_decline(uuid), public.family_leave(uuid), public.family_delete(uuid), public.family_apply_code(uuid, text),
   public.family_save(uuid, jsonb, bigint), public.family_role(uuid), public.family_invited(uuid), public.my_email() to authenticated;
+revoke execute on function public.family_paid(uuid), public.family_approve(uuid, text), public.family_set_role(uuid, text, text),
+  public.family_transfer(uuid, text), public.family_set_open(uuid, boolean), public.family_link(uuid, boolean),
+  public.family_request(text) from public, anon;   -- family_requested / family_admin giữ mặc định: chính sách RLS gọi cả khi khách đọc
+grant execute on function public.family_paid(uuid), public.family_approve(uuid, text), public.family_set_role(uuid, text, text),
+  public.family_transfer(uuid, text), public.family_set_open(uuid, boolean), public.family_link(uuid, boolean),
+  public.family_request(text) to authenticated;
+-- mở link Family: khách chưa đăng nhập cũng xem được (chỉ Family MỞ mới kèm đơn hàng)
+grant execute on function public.family_peek(text) to anon, authenticated;
 
 -- ── ĐỒNG BỘ THEO TỪNG BẢN GHI (chủ dự án 10/11: "xử lý phần kiến trúc dữ liệu"). Vẫn MỘT bộ JSON / người, / Family, nhưng:
 --    · app gửi lên CHỈ phần đã đổi (`user_sync` / `family_sync`), máy chủ gộp từng bản ghi ngay trong lần khoá dòng ⇒ không
@@ -474,15 +632,16 @@ language sql stable security invoker set search_path = public as $$
   select public.data_since(data, revs, version, p_since) from user_data where user_id = auth.uid()
 $$;
 
--- Family: chủ gộp cả bộ; thành viên chỉ đơn + chuyến (+ dấu xoá của chúng) — như family_save.
+-- Family: chủ / quản lý gộp cả bộ; thành viên chỉ đơn + chuyến (+ dấu xoá của chúng) — như family_save; chỉ xem ⇒ từ chối.
 create or replace function public.family_sync(p_family uuid, p_changes jsonb, p_since bigint) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare r text := public.family_role(p_family); cur jsonb; v0 bigint; v bigint;
 begin
   if r is null then raise exception 'not_member'; end if;
+  if r = 'viewer' then raise exception 'read_only'; end if;
   select data, version into cur, v0 from family_data where family_id = p_family for update;
   if not found then raise exception 'not_member'; end if;
-  update family_data set data = public.merge_data(cur, p_changes, r = 'owner') where family_id = p_family returning version into v;
+  update family_data set data = public.merge_data(cur, p_changes, r in ('owner', 'manager')) where family_id = p_family returning version into v;
   return jsonb_build_object('version', v, 'others', v0 is distinct from p_since);
 end $$;
 

@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Lock } from 'lucide-react'
 import { Shell } from './ui/Shell'
 import { useRoute } from './ui/route'
-import { newId, newTripLabel, useData, useSpace } from './data/store'
+import { newId, newTripLabel, useData, useNotice, useSpace } from './data/store'
 import TripPage from './pages/TripPage'
 import OrdersPage from './pages/OrdersPage'
 import OrderPage from './pages/OrderPage'
@@ -9,7 +10,8 @@ import ItemsPage from './pages/ItemsPage'
 import VehiclesPage from './pages/VehiclesPage'
 import AccountPage from './pages/AccountPage'
 import { ShareInbox } from './ui/Share'
-import { useLang } from './i18n'
+import { FamilyGate } from './ui/FamilyGate'
+import { t, useLang } from './i18n'
 
 /** Mở app = vào thẳng bàn xếp xe của chuyến sửa gần nhất; chưa có chuyến nào thì tạo sẵn một chuyến trống. */
 function Home() {
@@ -26,6 +28,21 @@ function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return null
+}
+
+/** Dòng báo nổi chung (store gọi `notify`): người chỉ xem của Family bấm sửa ⇒ báo, không lặng lẽ bỏ qua. */
+function Notice() {
+  const { text, n } = useNotice()
+  const [show, setShow] = useState(false)
+  useEffect(() => { if (!n) return; setShow(true); const h = setTimeout(() => setShow(false), 3200); return () => clearTimeout(h) }, [n])
+  if (!show || !text) return null
+  return (
+    <div role="status" className="pointer-events-none fixed inset-x-0 bottom-6 z-[80] flex justify-center px-4">
+      <div className="flex max-w-full items-center gap-2 rounded-md bg-navy-950 px-4 py-2 text-[13px] font-medium text-white shadow-pop" style={{ animation: 'sheet-up .2s' }}>
+        <Lock size={16} className="shrink-0 text-amber-300" />{t(text)}
+      </div>
+    </div>
+  )
 }
 
 export default function App() {
@@ -70,6 +87,8 @@ export default function App() {
       {route.page === 'vehicles' && <VehiclesPage />}
       {route.page === 'account' && <AccountPage />}
       <ShareInbox />
+      <FamilyGate />
+      <Notice />
     </Shell>
   )
 }

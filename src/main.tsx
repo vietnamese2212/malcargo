@@ -8,8 +8,10 @@ import './index.css'
 import App from './App'
 import { initCloud } from './data/cloud'
 import { catchShareLink } from './data/share'
+import { catchFamilyLink } from './data/famlink'
 
 catchShareLink()   // mở bằng link chia sẻ …/s/<mã> ⇒ ghi nhận mã, địa chỉ về trang gốc (trước khi đăng nhập đọc địa chỉ)
+catchFamilyLink()  // link Family …/f/<mã> (xem / xin vào)
 initCloud()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

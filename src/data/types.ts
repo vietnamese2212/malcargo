@@ -39,6 +39,8 @@ export interface Order {
   place: string        // điểm giao / khách — không bắt buộc
   lines: OrderLine[]
   updatedAt: number
+  by?: string          // Family: tên người sửa lần cuối
+  madeBy?: string      // Family: email người tạo (rời Family thì mang bản sao theo)
 }
 
 export interface Trip {
@@ -50,6 +52,8 @@ export interface Trip {
   lightOwnLoose?: boolean    // xe xá: hàng nhẹ đứng khối riêng dưới sàn (mặc định xếp phía trên hàng khác)
   lightOwnPallet?: boolean   // xe pallet: phần lẻ hàng nhẹ đứng pallet riêng (mặc định dồn lên trên cùng pallet gộp)
   updatedAt: number
+  by?: string          // Family: tên người sửa lần cuối
+  madeBy?: string      // Family: email người tạo
 }
 
 export interface PalletSettings {

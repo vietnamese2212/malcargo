@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Boxes, ChevronRight, Plus } from 'lucide-react'
-import { findVehicle, isSample, newId, newTripLabel, useAllItems, useAllVehicles, useData } from '../data/store'
+import { denyEdit, findVehicle, isSample, newId, newTripLabel, useAllItems, useAllVehicles, useData } from '../data/store'
 import { resolveOrder } from '../data/resolve'
 import { orderTotals } from '../engine/plan'
 import { Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SelectBar, SummaryBand, cx, fmtInt, fmtKgShort, fmtM3, useSelection } from '../ui/kit'
@@ -47,6 +47,7 @@ export default function TripsPage() {
   }
 
   const create = () => {
+    if (denyEdit()) return
     const id = newId()
     upsertTrip({ id, ...newTripLabel(trips), vehicleId: null, orderIds: [], updatedAt: 0 })
     go({ page: 'trip', id })

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { ChevronRight, ClipboardList, Plus } from 'lucide-react'
-import { isSample, newId, nextName, useAllItems, useData } from '../data/store'
+import { denyEdit, isSample, newId, nextName, useAllItems, useData } from '../data/store'
 import { resolveOrder } from '../data/resolve'
 import { orderTotals } from '../engine/plan'
 import { Badge, Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SelectBar, SummaryBand, cx, fmtInt, fmtKgShort, fmtM3, useSelection } from '../ui/kit'
@@ -14,6 +14,7 @@ export function useCreateOrder() {
   const orders = useData(s => s.orders)
   const upsert = useData(s => s.upsertOrder)
   return (back?: string) => {
+    if (denyEdit()) return null
     const id = newId()
     upsert({ id, name: nextName('Đơn', orders.map(o => o.name)), place: '', lines: [], updatedAt: 0 }) // i18n-ok tên mặc định lưu vào dữ liệu
     go({ page: 'order', id, back })

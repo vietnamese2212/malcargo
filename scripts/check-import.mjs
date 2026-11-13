@@ -64,6 +64,8 @@ console.log('• Cột Nhập vào: Admin / Family / Riêng theo quyền')
     ['thành viên, Admin ⇒ bộ Của tôi', 'Admin', fam('member'), 'tôi/tôi/2'],
     ['chữ thường admin', 'admin', { ...me, admin: true }, 'mẫu/mẫu/0'],
     ['tiếng Anh Private', 'private', { ...me, admin: true }, 'mở/mở/0'],
+    ['quản lý đang mở Family, Family ⇒ bộ Family (như chủ)', 'Family', fam('manager'), 'mở/mở/0'],
+    ['chỉ xem đang mở Family, Family ⇒ bộ Của tôi', 'Family', fam('viewer'), 'tôi/tôi/2'],
   ]) ok(at(go(sc, ctx)) === want && !go(sc, ctx).errors.length, `${name}: ${at(go(sc, ctx))}, mong ${want}`)
   ok(go('Chung', me).errors.length === 2, 'giá trị ngoài 3 loại ⇒ lỗi từng dòng')
   const own = { family: { id: 'f1', name: 'X', role: 'owner', items: [], vehicles: [], orders: [], trips: [] } }
@@ -97,6 +99,9 @@ console.log('• Cột Nhập vào: Admin / Family / Riêng theo quyền')
       ['chủ đang mở Family, Family ⇒ bộ đang mở', 'Family', fam2('owner'), 'mở/mở/0'],
       ['đang mở Family, trống ⇒ Của tôi', '', fam2('member'), 'tôi/tôi/0'],
       ['đang mở Family, Riêng ⇒ Của tôi', 'Riêng', fam2('owner'), 'tôi/tôi/0'],
+      ['chỉ xem đang mở Family, Family ⇒ Của tôi', 'Family', fam2('viewer'), 'tôi/tôi/2'],
+      ['chỉ xem đang ở Của tôi, Family ⇒ riêng', 'Family', { ...me, ...famT('viewer') }, 'mở/mở/2'],
+      ['quản lý đang ở Của tôi, Family ⇒ Family', 'Family', { ...me, ...famT('manager') }, 'fam/fam/0'],
     ]) { const x = go2(sc, ctx); ok(at2(x) === want && !x.errors.length, `đơn + chuyến · ${name}: ${at2(x)}, mong ${want} ${x.errors.join(';')}`) }
     // tham chiếu đúng bộ
     const r1 = I.parseImport({ orders: [head('orders'), ['Đ1', '', 'RIENG1', 5, '', 'Family']] }, { ...none, items: [{ id: 'my-1', owner: 'me', code: 'RIENG1', name: 'r' }] }, { ...me, ...famT('owner') })

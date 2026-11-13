@@ -2,7 +2,7 @@
 // file, hoặc chép bảng dán vào. Trùng tên / mã với cái đã có ⇒ GHI ĐÈ (giữ id cũ), chưa có ⇒ thêm mới.
 // Kiểm chặt (chủ dự án 29/10): tiêu đề cột đúng mẫu, số trong khoảng hợp lý, không trùng trong file — có lỗi là không nhập gì.
 import type { Item, Order, Trip, Vehicle } from './types'
-import { newId, type ImportBatch } from './store'
+import { newId, type FamilyRole, type ImportBatch } from './store'
 import { getLang, numLocale, t, tx, txEn } from '../i18n'
 import { EN } from '../i18n/en'
 import { saveFile } from '../ui/saveFile'
@@ -120,27 +120,28 @@ type DataSet = { items: Item[]; vehicles: Vehicle[]; orders: Order[]; trips: Tri
  *  `family`: Family ghi "Family" sẽ vào khi bộ đó không mở — Family người này làm chủ, không thì Family duy nhất đang ở. */
 export interface ImportCtx {
   admin?: boolean
-  family?: ({ id: string; name: string; role: 'owner' | 'member' } & Partial<DataSet>) | null
-  space?: { id: string; role: 'owner' | 'member' | null }
+  family?: ({ id: string; name: string; role: FamilyRole } & Partial<DataSet>) | null
+  space?: { id: string; role: FamilyRole | null }
   mine?: Partial<DataSet>
   cmToMm?: boolean   // người dùng bấm "Đổi sang mm": mã cả 3 cạnh dưới 100 ⇒ nhân 10 thay vì báo lỗi
 }
 type Dest = 'open' | 'mine' | 'catalog' | 'family'
 type Scope = 'admin' | 'family' | 'mine'
-/** Admin: admin app ⇒ Mẫu chung. Family: chủ Family ⇒ bộ Family (chủ dự án 05/11: "điền Family thì vào Family"). Đang mở
+const catRole = (r?: FamilyRole | null) => r === 'owner' || r === 'manager'   // chủ / quản lý giữ danh mục
+/** Admin: admin app ⇒ Mẫu chung. Family: chủ / quản lý Family ⇒ bộ Family (chủ dự án 05/11: "điền Family thì vào Family"). Đang mở
  *  bộ nào cũng vậy. Không có quyền, trống, Riêng ⇒ bộ Của tôi. */
 function destOf(v: Scope, ctx: ImportCtx): { dest: Dest; denied: boolean } {
   const fam = !!ctx.space && ctx.space.id !== 'me', mine: Dest = fam ? 'mine' : 'open'
   if (v === 'admin' && ctx.admin) return { dest: 'catalog', denied: false }
-  if (v === 'family' && fam && ctx.space!.role === 'owner') return { dest: 'open', denied: false }
-  if (v === 'family' && ctx.family?.role === 'owner') return { dest: 'family', denied: false }
+  if (v === 'family' && fam && catRole(ctx.space!.role)) return { dest: 'open', denied: false }
+  if (v === 'family' && catRole(ctx.family?.role)) return { dest: 'family', denied: false }
   return { dest: mine, denied: v !== 'mine' }
 }
-/** Đơn, chuyến: thành viên Family cũng thêm được. Mẫu chung không chứa đơn ⇒ ghi Admin là không có quyền. */
+/** Đơn, chuyến: thành viên Family cũng thêm được (người chỉ xem thì không). Mẫu chung không chứa đơn ⇒ ghi Admin là không có quyền. */
 function destOfOrder(v: Scope, ctx: ImportCtx): { dest: Dest; denied: boolean } {
   const fam = !!ctx.space && ctx.space.id !== 'me', mine: Dest = fam ? 'mine' : 'open'
-  if (v === 'family' && fam) return { dest: 'open', denied: false }
-  if (v === 'family' && ctx.family) return { dest: 'family', denied: false }
+  if (v === 'family' && fam && ctx.space!.role !== 'viewer') return { dest: 'open', denied: false }
+  if (v === 'family' && ctx.family && ctx.family.role !== 'viewer') return { dest: 'family', denied: false }
   return { dest: mine, denied: v !== 'mine' }
 }
 

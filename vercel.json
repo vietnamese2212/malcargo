@@ -1,5 +1,5 @@
 {
-  "rewrites": [{ "source": "/s/:code", "destination": "/index.html" }],
+  "rewrites": [{ "source": "/s/:code", "destination": "/index.html" }, { "source": "/f/:code", "destination": "/index.html" }],
   "headers": [
     {
       "source": "/(.*)",
