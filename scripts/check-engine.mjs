@@ -121,6 +121,36 @@ for (const st of E.SAMPLE_TRIPS) {
   console.log(`• ${st.name} — ${r.plan.placedCount}/${r.plan.totalCount} · ${E.fmtKg(r.weightKg)} (${r.payloadPct?.toFixed(0)}% tải)${r.totals.pallets != null ? ` · ${r.totals.pallets} pallet` : ''}`)
 }
 
+// Luật 23 (chủ dự án 13/11, đơn 4.924 thùng container 40ft 98% tải): "hàng nhẹ trải mỏng khắp nóc xe" — cả mã nền đứng q lớp dưới
+// khối nhẹ thì quá dài, bỏ thùng ⇒ lõi từng lùi về dải mỏng dài 11,9 m. Nền hai bậc: khối nhẹ gom đầu xe, vẫn chở đủ
+{
+  const code = c => E.ADMIN_ITEMS.find(i => i.code === c)
+  const o = { id: 'o78', name: 'Đơn 4.924 thùng', place: '', lines: [['SP002', 880], ['SP008', 1944], ['SP001', 2100]].map(([c, qty]) => ({ item: code(c), qty })) }
+  const r = E.computeTrip({ truck: trucks['adm-v-c40'], orders: [o], pallet: E.DEFAULT_PALLET_SETTINGS })
+  invariants('luật 23', r)
+  const lt = r.plan.placed.filter(b => r.plan.groups[b.group].onTop), x0 = Math.min(...lt.map(b => b.x)), x1 = Math.max(...lt.map(b => b.x + b.l))
+  const cols = new Map(); for (const b of lt) { const k = b.x + '|' + b.y; cols.set(k, (cols.get(k) ?? 0) + 1) }
+  ok(r.plan.placedCount === r.plan.totalCount, `luật 23: chở ${r.plan.placedCount}/${r.plan.totalCount}`)
+  ok(x0 < 100 && x1 - x0 <= 4500 && Math.min(...cols.values()) >= 8 && Math.min(...lt.map(b => b.z)) > 0,
+    `luật 23: hàng nhẹ một khối đầu xe đủ lớp — x ${x0}…${x1}, cột ${Math.min(...cols.values())}–${Math.max(...cols.values())} lớp`)
+  console.log(`• Luật 23 (đơn 4.924 thùng, container 40ft) — ${r.plan.placedCount}/${r.plan.totalCount} · hàng nhẹ x ${x0}…${x1}`)
+}
+
+// Luật 24 (đơn thật 13/11: 85 thùng, 7 mã, mỗi mã vài chục thùng): pallet gộp xếp thật từng cao 4,47 m (lõi ước 1,64 m) ⇒ xe pallet
+// chở 0/1. Pallet gộp chia theo chiều cao XẾP THẬT: mọi pallet ≤ trần, xe chở hết
+{
+  const code = c => E.ADMIN_ITEMS.find(i => i.code === c)
+  const o = { id: 'o85', name: 'Đơn 85 thùng', place: '', lines: [['SP001', 9], ['SP009', 12], ['SP008', 18], ['SP002', 12], ['SP016', 19], ['SP015', 7], ['SP007', 8]].map(([c, qty]) => ({ item: code(c), qty })) }
+  const r = E.computeTrip({ truck: trucks['adm-v-p15t'], orders: [o], pallet: E.DEFAULT_PALLET_SETTINGS })
+  invariants('luật 24', r)
+  const hs = r.plan.groups.map(g => g.h)
+  ok(r.plan.placedCount === r.plan.totalCount && Math.max(...hs) <= E.DEFAULT_PALLET_SETTINGS.maxH && !r.warnings.length,
+    `luật 24: ${r.plan.placedCount}/${r.plan.totalCount} pallet, cao ${hs.join(' / ')} (trần ${E.DEFAULT_PALLET_SETTINGS.maxH}) ${r.warnings.join(' | ')}`)
+  const n = r.meta.reduce((a, m) => a + (m.cartons?.length ?? 0), 0)
+  ok(n === 85, `luật 24: đủ 85 thùng trên pallet (${n})`)
+  console.log(`• Luật 24 (đơn 85 thùng 7 mã, xe pallet) — ${r.plan.placedCount}/${r.plan.totalCount} pallet, cao ${hs.join(' / ')} mm`)
+}
+
 // Hàng xá trải dài theo % TẢI (chủ dự án 29/10): sàn cần dùng = % tải ÷ 85%, từ 85% tải ⇒ tới sát cửa;
 // chưa biết tải ⇒ đã ≥ 75% sàn thì tới cửa
 {

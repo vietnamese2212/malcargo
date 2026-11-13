@@ -373,7 +373,8 @@ export default function TripPage({ id }: { id: string }) {
             <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between gap-2">
               <TitleBlock r={r} busy={planning} error={error} hasCargo={hasCargo} vehicle={vehicle} tripName={trip.name}
                 orders={orderRows}
-                sug={suggestion && vehicle && suggestion !== vehicle.id ? vehicles.find(v => v.id === suggestion) : undefined}
+                // chỉ gợi ý xe NHỎ HƠN thật — bản "(của tôi)" cùng cỡ xe đang dùng từng hiện "Xe nhỏ hơn vẫn vừa" (đơn thật 13/11)
+                sug={suggestion && vehicle && suggestion !== vehicle.id ? vehicles.find(v => v.id === suggestion && v.l * v.w * v.h < vehicle.l * vehicle.w * vehicle.h) : undefined}
                 noneFits={!suggestion} onPick={vid => { pickVehicle(vid); setToast(t('Đã đổi xe')) }} />
               {/* điện thoại: nút diễn giải chỉ biểu tượng, xếp dưới nút góc nhìn — dải số liệu bên trái cần đủ bề ngang */}
               <div className="flex shrink-0 flex-col-reverse items-end gap-2 sm:flex-row">
