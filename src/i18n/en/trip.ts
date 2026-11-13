@@ -184,6 +184,7 @@ export const TRIP: Record<string, string> = {
   'bạn là admin, sửa được mẫu': 'you are admin and can edit them',
   'sửa sẽ thành xe của bạn': 'editing makes your own copy',
   'Của tôi': 'Mine',
+  '{n} đơn chưa vào chuyến nào': '{n} {n:order|orders} not on any trip',
   'Riêng': 'Private',
   'Nhập vào (Admin / Family / Riêng)': 'Import to (Admin / Family / Private)',
   '{col}: ghi Admin, Family hoặc {c}': '{col}: enter Admin, Family or {c}',

@@ -81,6 +81,8 @@ export default function TripPage({ id }: { id: string }) {
   const candidates = useMemo(() => pickPool(vehicles, vehicle).map(truckOf), [vehicles, vehicle])
   const allTrucks = useMemo(() => vehicles.map(truckOf), [vehicles])
   const rawOrders = useMemo(() => (trip?.orderIds ?? []).map(oid => orders.find(o => o.id === oid)).filter((o): o is Order => !!o), [trip?.orderIds, orders])
+  // đơn chưa nằm trong chuyến nào (vd. nhập Excel từ menu, người khác trong Family làm) ⇒ ghi trên nút thêm đơn để biết mà chọn
+  const looseN = useMemo(() => { const used = new Set(trips.flatMap(x => x.orderIds)); return orders.filter(o => !isSample(o.id) && !used.has(o.id)).length }, [orders, trips])
   const tripOrders = useMemo(() => rawOrders.map(o => resolveOrder(o, items)), [rawOrders, items])
   // Chưa chọn xe: tạm tính trên xe lớn nhất cùng kiểu để lấy gợi ý, rồi tự gán xe gợi ý
   const fallback = useMemo(() => [...candidates].sort((a, b) => b.l * b.w * b.h - a.l * a.w * a.h)[0], [candidates])
@@ -484,8 +486,9 @@ export default function TripPage({ id }: { id: string }) {
                     })}
                   </OrderBlock>
                 ))}
-                <button onClick={() => setPickOrders(true)} className="tap flex w-full items-center justify-center gap-2 rounded-lg border-[1.5px] border-dashed border-slate-400 px-4 text-[13px] font-semibold text-slate-700 hover:border-slate-500 hover:bg-white">
+                <button onClick={() => setPickOrders(true)} className="tap flex w-full flex-wrap items-center justify-center gap-x-2 rounded-lg border-[1.5px] border-dashed border-slate-400 px-4 py-1 text-[13px] font-semibold text-slate-700 hover:border-slate-500 hover:bg-white">
                   <Plus size={16} />{t('Thêm đơn / điểm giao khác')}
+                  {!!looseN && <span className="num w-full text-center text-[12px] font-medium text-brand-700">{t('{n} đơn chưa vào chuyến nào', { n: fmtInt(looseN) })}</span>}
                 </button>
                 {!phone && (
                   <button onClick={() => setImporting('trip')} className="tap flex w-full items-center justify-center gap-2 rounded-lg border-[1.5px] border-dashed border-slate-400 px-4 text-[13px] font-semibold text-slate-700 hover:border-slate-500 hover:bg-white">
@@ -1531,7 +1534,12 @@ function OrderPicker({ open, onClose, inTrip, onAdd, onNew }: { open: boolean; o
   const [sel, setSel] = useState<string[]>([])
   const wasOpen = useRef(false)
   useEffect(() => { if (open && !wasOpen.current) setSel([]); wasOpen.current = open }, [open])
-  const avail = orders.filter(o => !inTrip.includes(o.id))
+  const trips = useData(s => s.trips)
+  // đơn chưa vào chuyến nào lên trước (đơn đang ở chuyến khác xuống dưới)
+  const avail = useMemo(() => {
+    const used = new Set(trips.flatMap(x => x.orderIds))
+    return orders.filter(o => !inTrip.includes(o.id)).sort((a, b) => Number(used.has(a.id)) - Number(used.has(b.id)))
+  }, [orders, trips, inTrip])
   return (
     <Sheet open={open} onClose={onClose} title={t('Thêm đơn / điểm giao')} subtitle={t('Đơn giao trước được xếp sát cửa')}
       footer={<div className="flex gap-2">
