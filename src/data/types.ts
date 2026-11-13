@@ -51,6 +51,9 @@ export interface Trip {
   orderIds: string[]   // THỨ TỰ GIAO: đơn đầu giao trước ⇒ xếp sau cùng, sát cửa
   lightOwnLoose?: boolean    // xe xá: hàng nhẹ đứng khối riêng dưới sàn (mặc định xếp phía trên hàng khác)
   lightOwnPallet?: boolean   // xe pallet: phần lẻ hàng nhẹ đứng pallet riêng (mặc định dồn lên trên cùng pallet gộp)
+  // cách chở RIÊNG chuyến này, khác cách chở của xe (thành viên Family đổi Thùng rời ↔ Pallet — xe do chủ giữ, chủ dự án 13/11);
+  // trống = theo xe. Chọn xe khác ⇒ bỏ.
+  kind?: VehicleKind
   updatedAt: number
   by?: string          // Family: tên người sửa lần cuối
   madeBy?: string      // Family: email người tạo

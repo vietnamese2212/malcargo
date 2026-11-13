@@ -124,6 +124,7 @@ export interface ImportCtx {
   space?: { id: string; role: FamilyRole | null }
   mine?: Partial<DataSet>
   cmToMm?: boolean   // người dùng bấm "Đổi sang mm": mã cả 3 cạnh dưới 100 ⇒ nhân 10 thay vì báo lỗi
+  solo?: boolean     // nạp từ menu (không có chuyến đang mở): đơn chưa thuộc chuyến nào ⇒ mỗi đơn một chuyến riêng
 }
 type Dest = 'open' | 'mine' | 'catalog' | 'family'
 type Scope = 'admin' | 'family' | 'mine'
@@ -379,6 +380,18 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     if (v) trip.vehicleId = v
   }
   for (const [k, trip] of tripMap) listOf(tripDest.get(k)!).trips.push(trip)
+
+  // File Đơn hàng không có cột chuyến (chủ dự án 13/11: "trong template làm gì có chuyến, nó là tên đơn mà") ⇒ đơn chưa thuộc
+  // chuyến nào (file Chuyến cùng lượt hay chuyến đã có) thành MỘT CHUYẾN RIÊNG: tên = tên đơn, xe = cột Dòng xe (trống ⇒ app tự
+  // chọn). Nhiều đơn chung xe ⇒ file Chuyến. Nạp từ Bàn xếp xe ⇒ không làm (đơn vào chuyến đang mở).
+  if (ctx.solo) {
+    const held = new Set([...tripMap.values()].flatMap(tr => tr.orderIds))
+    for (const [k, o] of orderMap) {
+      const dest = orderDest.get(k)!
+      if (held.has(o.id) || oldTrips(dest).some(tr => tr.orderIds.includes(o.id))) continue
+      listOf(dest).trips.push({ id: newId(), name: o.name, vehicleId: out.orderTruck[o.id] ?? null, orderIds: [o.id], updatedAt: 0 })
+    }
+  }
   return out
 }
 

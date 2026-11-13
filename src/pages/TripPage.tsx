@@ -77,7 +77,9 @@ export default function TripPage({ id }: { id: string }) {
   // danh sách chọn xe (thả dưới ô tên xe) đang mở ⇒ thử hàng chuyến này trên MỌI xe để đánh dấu ✓ / ✗
   const [picking, setPicking] = useState(false)
 
-  const vehicle = findVehicle(vehicles, trip?.vehicleId ?? null)
+  const baseVehicle = findVehicle(vehicles, trip?.vehicleId ?? null)
+  // chuyến có cách chở riêng (`Trip.kind`) ⇒ xe y nguyên, chỉ đổi Thùng rời ↔ Pallet cho chuyến này
+  const vehicle = useMemo(() => (baseVehicle && trip?.kind && trip.kind !== baseVehicle.kind ? { ...baseVehicle, kind: trip.kind } : baseVehicle), [baseVehicle, trip?.kind])
   const candidates = useMemo(() => pickPool(vehicles, vehicle).map(truckOf), [vehicles, vehicle])
   const allTrucks = useMemo(() => vehicles.map(truckOf), [vehicles])
   const rawOrders = useMemo(() => (trip?.orderIds ?? []).map(oid => orders.find(o => o.id === oid)).filter((o): o is Order => !!o), [trip?.orderIds, orders])
@@ -232,7 +234,13 @@ export default function TripPage({ id }: { id: string }) {
 
   // ── sửa XE ngay tại chỗ (xe mẫu ⇒ thành xe của tôi) ──
   const patchVehicle = (patch: Partial<Vehicle>) => {
-    if (!vehicle) return
+    if (!vehicle || !baseVehicle) return
+    // đổi Thùng rời ↔ Pallet mà không sửa được xe (thành viên Family) hay chuyến đã có cách chở riêng ⇒ ghi theo CHUYẾN
+    if (patch.kind && Object.keys(patch).length === 1 && (catalogLocked() || trip.kind)) {
+      const { kind: _old, ...rest } = trip
+      upsertTrip(patch.kind === baseVehicle.kind ? rest : { ...rest, kind: patch.kind })
+      return
+    }
     if (catalogLocked()) { setToast(t(LOCKED)); return }   // thành viên Family: xe do chủ quản lý
     if (vehicle.owner === 'admin') {
       const v: Vehicle = { ...vehicle, ...patch, id: newId(), owner: 'me', name: `${vehicle.name} (của tôi)` } // i18n-ok — dữ liệu lưu; tx() dịch lúc hiện
@@ -244,7 +252,7 @@ export default function TripPage({ id }: { id: string }) {
       setToast(t('Đã tạo xe của bạn từ xe mẫu'))
     } else upsertVehicle({ ...vehicle, ...patch })
   }
-  const pickVehicle = (vid: string) => upsertTrip({ ...trip, vehicleId: vid })
+  const pickVehicle = (vid: string) => { const { kind: _k, ...rest } = trip; upsertTrip({ ...rest, vehicleId: vid }) }   // xe khác ⇒ theo cách chở của xe đó
   const vehicleSharedWith = vehicle ? trips.filter(t => t.id !== trip.id && t.vehicleId === vehicle.id).length : 0
 
   // ── sửa MÃ HÀNG từ dòng hàng (popup `ItemSheet`): mã mẫu lưu thành mã của tôi (id mới) ⇒ thay vào các đơn của chuyến này ──

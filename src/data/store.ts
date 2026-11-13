@@ -212,7 +212,7 @@ function resetSamples(d: TO): TO & { dropped: string[] } {
   }
   // chuyến rác: bản sao y hệt một chuyến mẫu (mọi đời) — đơn của nó không nằm ở chuyến nào khác
   const byId = new Map(orders.map(o => [o.id, o]))
-  const isClone = (t: Trip) => !isSample(t.id) && t.name === t.code && !t.lightOwnPallet && !t.lightOwnLoose && SAMPLE_SETS.some(v => v.trips.some(s =>
+  const isClone = (t: Trip) => !isSample(t.id) && t.name === t.code && !t.lightOwnPallet && !t.lightOwnLoose && !t.kind && SAMPLE_SETS.some(v => v.trips.some(s =>
     s.vehicleId === t.vehicleId && s.orderIds.length === t.orderIds.length && s.orderIds.every((sid, i) => {
       const p = v.orders.find(x => x.id === sid), o = byId.get(t.orderIds[i])
       return !!p && !!o && (o.place ?? '') === p.place && (o.name === p.name || DEFAULT_ORDER.test(o.name)) && linesKey(o.lines) === linesKey(p.lines)

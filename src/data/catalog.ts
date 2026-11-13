@@ -24,7 +24,7 @@ export const ADMIN_VEHICLES: Vehicle[] = [
 
 // Bản chép bảng `catalog` (admin thay cả bộ 06/11/2026). Mã đơn mẫu dùng: kg + số lớp đã điền; mã còn lại kg = 1 chờ admin khai.
 export const ADMIN_ITEMS: Item[] = [
-  { id: 'b4e80e14-5754-425b-b656-2fe05ccf5c50', owner: 'admin', code: 'SP001', name: 'TBA 110', l: 425, w: 240, h: 105, kg: 6.2, perPallet: 150, maxLayers: 15, looseLayers: 20, light: false, updatedAt: T0 },
+  { id: 'b4e80e14-5754-425b-b656-2fe05ccf5c50', owner: 'admin', code: 'SP001', name: 'TBA 110', l: 425, w: 240, h: 105, kg: 6.2, perPallet: 150, maxLayers: 14, looseLayers: 20, light: false, updatedAt: T0 },
   { id: '17047429-4e68-4236-8d2e-1b91b8eac4be', owner: 'admin', code: 'SP002', name: 'TBA 180', l: 425, w: 260, h: 145, kg: 10, perPallet: 110, maxLayers: 11, looseLayers: 15, light: false, updatedAt: T0 },
   { id: 'b4cd3e0b-50a5-4c50-b49a-b3f07847599b', owner: 'admin', code: 'SP003', name: 'TBA 100', l: 430, w: 240, h: 105, kg: 5.7, perPallet: 150, maxLayers: 14, looseLayers: 20, light: false, updatedAt: T0 },
   { id: '681a1674-9181-4569-baaa-71f06618cf48', owner: 'admin', code: 'SP004', name: 'TBA 100x36', l: 370, w: 220, h: 105, kg: 4.32, perPallet: 182, maxLayers: 14, looseLayers: 20, light: false, updatedAt: T0 },
@@ -48,8 +48,10 @@ export const DEFAULT_PALLET_SETTINGS: PalletSettings = { l: 1200, w: 1000, maxH:
 // xe pallet đủ 17 pallet (13 chẵn + 2 gộp chung + 2 lẻ riêng; ECOLEAN lẻ nằm trên pallet gộp; bật "Hàng nhẹ: pallet riêng" ⇒ 18, thiếu 1 chỗ)
 // · container 40ft xếp rời trên 90% tải, ECOLEAN gom đầu xe trên nóc Xúc xích ly.
 export const SAMPLE_ORDERS: Order[] = [
+  // 13/11: admin lưu lại Mẫu chung, TBA 110 chồng 14 lớp (trước 15) ⇒ pallet TBA 110 chờm mép 1,275 m; làn 8 chỗ chỉ nhận pallet ≤ 1,2 m
+  // (TBA 170) ⇒ thêm TBA 170 cho đủ 8 pallet ngắn, bớt TBA 110 / TBA 100 ⇒ vẫn 17 pallet
   { id: 'sample-o1', name: 'Đơn mẫu pallet', place: 'Nhà phân phối A', updatedAt: T0, lines: [
-    { itemId: 'b4e80e14-5754-425b-b656-2fe05ccf5c50', qty: 480 }, { itemId: 'b4cd3e0b-50a5-4c50-b49a-b3f07847599b', qty: 420 }, { itemId: 'bfeba6de-90ac-4375-ac88-f3ca0de4b2f2', qty: 600 },
+    { itemId: 'b4e80e14-5754-425b-b656-2fe05ccf5c50', qty: 330 }, { itemId: 'b4cd3e0b-50a5-4c50-b49a-b3f07847599b', qty: 300 }, { itemId: 'bfeba6de-90ac-4375-ac88-f3ca0de4b2f2', qty: 800 },
     { itemId: '17047429-4e68-4236-8d2e-1b91b8eac4be', qty: 60 }, { itemId: '89e64f1f-548f-487d-aec8-74ce5c0d1580', qty: 480 }, { itemId: '190e3f30-1879-4e1c-89d2-697f5b2f49ff', qty: 120 },
   ] },
   { id: 'sample-o2', name: 'Đơn mẫu 40ft', place: 'Kho B', updatedAt: T0, lines: [
@@ -119,6 +121,16 @@ export const PREV_SAMPLES: { trips: Trip[]; orders: Order[] }[] = [
       { id: 'sample-o1', name: 'Đơn mẫu pallet', place: 'Nhà phân phối A', updatedAt: T0, lines: [
         { itemId: 'b4e80e14-5754-425b-b656-2fe05ccf5c50', qty: 840 }, { itemId: 'b4cd3e0b-50a5-4c50-b49a-b3f07847599b', qty: 460 }, { itemId: 'bfeba6de-90ac-4375-ac88-f3ca0de4b2f2', qty: 240 },
         { itemId: '17047429-4e68-4236-8d2e-1b91b8eac4be', qty: 240 }, { itemId: '89e64f1f-548f-487d-aec8-74ce5c0d1580', qty: 320 }, { itemId: '190e3f30-1879-4e1c-89d2-697f5b2f49ff', qty: 80 },
+      ] },
+      SAMPLE_ORDERS[1],
+    ],
+  },
+  { // 06/11 – 13/11/2026: TBA 110 còn chồng 15 lớp
+    trips: SAMPLE_TRIPS,
+    orders: [
+      { id: 'sample-o1', name: 'Đơn mẫu pallet', place: 'Nhà phân phối A', updatedAt: T0, lines: [
+        { itemId: 'b4e80e14-5754-425b-b656-2fe05ccf5c50', qty: 480 }, { itemId: 'b4cd3e0b-50a5-4c50-b49a-b3f07847599b', qty: 420 }, { itemId: 'bfeba6de-90ac-4375-ac88-f3ca0de4b2f2', qty: 600 },
+        { itemId: '17047429-4e68-4236-8d2e-1b91b8eac4be', qty: 60 }, { itemId: '89e64f1f-548f-487d-aec8-74ce5c0d1580', qty: 480 }, { itemId: '190e3f30-1879-4e1c-89d2-697f5b2f49ff', qty: 120 },
       ] },
       SAMPLE_ORDERS[1],
     ],

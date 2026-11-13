@@ -216,6 +216,21 @@ r = parse({
 ok(!r.errors.length && r.trips.find(x => x.name === 'C7')?.vehicleId === 'v2', 'chuyến không ghi xe ⇒ lấy dòng xe của đơn ĐẦU có ghi (Đ8)')
 ok(r.trips.find(x => x.name === 'C8')?.vehicleId === 'v1', 'chuyến có ghi xe ⇒ giữ xe của chuyến')
 
+console.log('• Nạp file Đơn hàng từ menu: đơn chưa thuộc chuyến nào ⇒ mỗi đơn một chuyến riêng (chủ dự án 13/11)')
+{
+  const src = { orders: [head('orders'), ['Đ1', '', 'SP1', 10, 'Xe tải 5 tấn'], ['Đ1', '', 'SP2', 5], ['Đ2', 'Kho B', 'SP1', 4], ['Đ3', '', 'SP1', 2]], trips: [head('trips'), ['C1', '', 'Đ3']] }
+  const have = { ...none, items, vehicles: fleet }
+  const s = I.parseImport(src, have, { solo: true })
+  const id = n => s.orders.find(o => o.name === n)?.id, tr = n => s.trips.filter(x => x.orderIds.includes(id(n)))
+  ok(!s.errors.length && s.trips.length === 3, `3 đơn, 1 đơn đã ghi ở file Chuyến ⇒ thêm 2 chuyến (có ${s.trips.length})`)
+  ok(tr('Đ1').length === 1 && tr('Đ1')[0].name === 'Đ1' && tr('Đ1')[0].orderIds.length === 1 && tr('Đ1')[0].vehicleId === 'adm-v-5t', 'chuyến riêng: tên = tên đơn, chỉ đơn đó, xe = cột Dòng xe')
+  ok(tr('Đ2').length === 1 && tr('Đ2')[0].vehicleId === null, 'không ghi Dòng xe ⇒ chuyến chưa có xe (app tự chọn)')
+  ok(tr('Đ3').length === 1 && tr('Đ3')[0].name === 'C1', 'đơn đã có trong file Chuyến ⇒ không đẻ thêm chuyến riêng')
+  ok(I.parseImport(src, have).trips.length === 1, 'nạp từ Bàn xếp xe (không solo) ⇒ không đẻ chuyến (đơn vào chuyến đang mở)')
+  const again = I.parseImport({ orders: [head('orders'), ['Đ1', '', 'SP1', 3]] }, { ...have, orders: [{ id: 'o1', name: 'Đ1', place: '', lines: [], updatedAt: 1 }], trips: [{ id: 't1', name: 'X', vehicleId: null, orderIds: ['o1'], updatedAt: 1 }] }, { solo: true })
+  ok(again.orders[0]?.id === 'o1' && !again.trips.length, 'nạp lại đơn đã nằm trong chuyến ⇒ ghi đè đơn, không đẻ chuyến trùng')
+}
+
 console.log('• Mã hàng ghi "Mã - Tên" như danh sách chọn của file mẫu')
 const named = [...items, { ...items[0], id: 'i3', code: 'MAU-ST180', name: 'Sữa 180ml x48', owner: 'admin' }, { ...items[0], id: 'i4', code: 'A - 1', name: 'Gạch' }]
 r = parse({ orders: [head('orders'), ['Đ1', '', 'SP1 - A', 1], ['Đ2', '', 'MAU-ST180 - Milk 180ml x48', 1], ['Đ3', '', 'SP2 - Tên đã đổi', 1], ['Đ4', '', 'SP2', 1], ['Đ5', '', 'A - 1 - Gạch', 1], ['Đ6', '', 'SP9 - Không có', 1]] }, { ...none, items: named })

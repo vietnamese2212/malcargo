@@ -734,7 +734,7 @@ insert into public.catalog (id, kind, sort, data) values
   ('adm-v-p15t', 'vehicle', 7, '{"name":"Xe pallet 15 tấn","plate":"","kind":"pallet","l":9600,"w":2350,"h":2600,"payloadKg":15000}'),
   ('adm-v-c20', 'vehicle', 8, '{"name":"Container 20ft","plate":"","kind":"loose","l":5898,"w":2352,"h":2393,"payloadKg":28000,"container":true}'),
   ('adm-v-c40', 'vehicle', 9, '{"name":"Container 40ft","plate":"","kind":"loose","l":12032,"w":2352,"h":2393,"payloadKg":28500,"container":true}'),
-  ('b4e80e14-5754-425b-b656-2fe05ccf5c50', 'item', 9, '{"code":"SP001","name":"TBA 110","l":425,"w":240,"h":105,"kg":6.2,"perPallet":150,"maxLayers":15,"looseLayers":20,"light":false}'),
+  ('b4e80e14-5754-425b-b656-2fe05ccf5c50', 'item', 9, '{"code":"SP001","name":"TBA 110","l":425,"w":240,"h":105,"kg":6.2,"perPallet":150,"maxLayers":14,"looseLayers":20,"light":false}'),
   ('17047429-4e68-4236-8d2e-1b91b8eac4be', 'item', 10, '{"code":"SP002","name":"TBA 180","l":425,"w":260,"h":145,"kg":10,"perPallet":110,"maxLayers":11,"looseLayers":15,"light":false}'),
   ('b4cd3e0b-50a5-4c50-b49a-b3f07847599b', 'item', 11, '{"code":"SP003","name":"TBA 100","l":430,"w":240,"h":105,"kg":5.7,"perPallet":150,"maxLayers":14,"looseLayers":20,"light":false}'),
   ('681a1674-9181-4569-baaa-71f06618cf48', 'item', 12, '{"code":"SP004","name":"TBA 100x36","l":370,"w":220,"h":105,"kg":4.32,"perPallet":182,"maxLayers":14,"looseLayers":20,"light":false}'),

@@ -49,7 +49,7 @@ export function ImportSheet({ open, onClose, start = 'items', trip, onDone }: {
 
   // ô dán có chữ thì dùng ô dán, không thì lấy file đã nạp cho loại đó
   const src = useMemo(() => Object.fromEntries(SHEETS.map(s => [s.key, !sheets.includes(s) ? [] : text[s.key]?.trim() ? splitPasted(text[s.key]!) : files[s.key]?.rows ?? []])), [text, files, sheets])
-  const res = useMemo(() => parseImport(src, { items, vehicles, orders, trips }, { admin, space, mine: space.id === 'me' ? undefined : mySet(), family: target && famData ? { id: target.id, name: target.name, role: target.role, ...famData } : null, cmToMm: cmMm }), [src, items, vehicles, orders, trips, admin, space, target?.id, target?.name, target?.role, famData, cmMm])
+  const res = useMemo(() => parseImport(src, { items, vehicles, orders, trips }, { admin, space, mine: space.id === 'me' ? undefined : mySet(), family: target && famData ? { id: target.id, name: target.name, role: target.role, ...famData } : null, cmToMm: cmMm, solo: !trip }), [src, items, vehicles, orders, trips, admin, space, target?.id, target?.name, target?.role, famData, cmMm, !trip])
   const n = {
     items: res.items.length + res.toMine.items.length + res.toFamily.items.length + res.toShared.items.length, vehicles: res.vehicles.length + res.toMine.vehicles.length + res.toFamily.vehicles.length + res.toShared.vehicles.length,
     orders: res.orders.length + res.toMine.orders.length + res.toFamily.orders.length, trips: res.trips.length + res.toMine.trips.length + res.toFamily.trips.length,

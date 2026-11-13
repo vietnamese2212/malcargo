@@ -12,11 +12,13 @@ const session = id => {
   return { access_token: `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: id, exp, aud: 'authenticated', role: 'authenticated' })}.x`, refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: exp, user: { id, aud: 'authenticated', email: `${id}@thu.vn`, app_metadata: {}, user_metadata: { full_name: `Người ${id}` } } }
 }
 const PAL = { l: 1200, w: 1000, maxH: 1650, baseH: 150, kg: 25 }
-const FAM = { app: 'malcargo', version: 1, items: [], vehicles: [], pallet: PAL, deleted: {},
+const FAM = { app: 'malcargo', version: 1, pallet: PAL, deleted: {},
+  items: [{ id: 'fi-1', owner: 'me', code: 'FI1', name: 'Hang Family', l: 400, w: 300, h: 250, kg: 10, perPallet: 60, maxLayers: 5, light: false, updatedAt: 1 }],
+  vehicles: [{ id: 'fv-1', owner: 'me', name: 'Xe Family', plate: '', kind: 'pallet', l: 7400, w: 2350, h: 2300, payloadKg: 8000, updatedAt: 1 }],
   orders: [{ id: 'fo-1', name: 'Don Family', place: 'Kho Q7', lines: [], updatedAt: 1000, by: 'Nguoi A', madeBy: 'usera@thu.vn' },
     // chủ nạp đơn từ Excel, chưa vào chuyến nào (chủ dự án 13/11: thành viên không thấy trong ô Chuyến xe)
-    { id: 'fo-2', name: 'Don Le 1', place: 'Kho B', lines: [{ itemId: 'adm-i-c110', qty: 12 }], updatedAt: 1001 },
-    { id: 'fo-3', name: 'Don Le 2', place: 'Kho C', lines: [{ itemId: 'adm-i-c110', qty: 8 }], updatedAt: 1002 }],
+    { id: 'fo-2', name: 'Don Le 1', place: 'Kho B', lines: [{ itemId: 'fi-1', qty: 12 }], updatedAt: 1001 },
+    { id: 'fo-3', name: 'Don Le 2', place: 'Kho C', lines: [{ itemId: 'fi-1', qty: 8 }], updatedAt: 1002 }],
   trips: [{ id: 'ft-1', name: 'Chuyen Family', vehicleId: null, orderIds: ['fo-1'], updatedAt: 1000, by: 'Nguoi A', madeBy: 'usera@thu.vn' }] }
 const PEEK_OPEN = { id: 'fam1', name: 'Cty Thu', open: true, people: 3, me: null, orders: [
   { id: 'o1', name: 'Don HN', place: 'Ha Noi', by: 'Nguoi A', updatedAt: Date.now(), lines: [{ code: 'SP002', name: 'TBA 180', qty: 120, kg: 9.85 }, { code: 'SP008', name: 'ECOLEAN', qty: 40, kg: 3.08 }] },
@@ -178,7 +180,7 @@ for (const vw of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
 
 console.log('— Thành viên: đơn chưa vào chuyến nào xếp lên chuyến mới (ô Chuyến xe ▾ + danh sách Đơn hàng)')
 {
-  const { ctx, p, errs, signIn } = await fresh({ role: 'member' })
+  const { ctx, p, log, errs, signIn } = await fresh({ role: 'member' })
   await signIn()
   await p.getByRole('button', { name: T('Danh mục'), exact: true }).click(); await p.waitForTimeout(250)
   await p.locator('[data-popover]').getByRole('radio', { name: 'Family Cty Thu' }).click(); await p.waitForTimeout(2500)
@@ -191,6 +193,14 @@ console.log('— Thành viên: đơn chưa vào chuyến nào xếp lên chuyế
   const url0 = p.url()
   await sh.getByRole('button', { name: T('Xếp {n} đơn lên xe', { n: 2 }) }).click(); await p.waitForTimeout(1500)
   ok(p.url() !== url0 && await p.getByRole('button', { name: /Don Le 1/ }).first().isVisible() && await p.getByRole('button', { name: /Don Le 2/ }).first().isVisible(), 'chọn 2 đơn ⇒ chuyến mới chở đúng 2 đơn')
+  // Thùng rời ↔ Pallet: xe do chủ giữ ⇒ ghi theo CHUYẾN (chủ dự án 13/11: thành viên đổi ở bàn xếp xe không được)
+  await p.waitForTimeout(2500); await p.screenshot({ path: OUT + '/ui-family-kind.png' })
+  const other = await p.getByRole('button', { name: T('Thùng rời'), exact: true }).first().getAttribute('aria-pressed') === 'true' ? 'Pallet' : T('Thùng rời')
+  const btn = p.getByRole('button', { name: other, exact: true }).first()
+  await btn.click(); await p.waitForTimeout(2500)
+  ok(await btn.getAttribute('aria-pressed') === 'true' && !(await p.getByText(T('Mã hàng, xe, cỡ pallet do chủ Family quản lý.')).count()), `thành viên đổi sang ${other} được, không bị chặn`)
+  ok(calls(log, 'family_sync').some(x => JSON.stringify(x.args).includes(`"kind":"${other === 'Pallet' ? 'pallet' : 'loose'}"`)), 'gửi lên Family: cách chở ghi theo chuyến')
+  ok(!calls(log, 'family_sync').some(x => (x.args?.p_changes?.vehicles ?? []).length), 'không đụng tới xe của chủ')
   await p.getByRole('button', { name: T('Danh mục'), exact: true }).click(); await p.waitForTimeout(250)
   await p.locator('[data-popover]').getByRole('button', { name: T('Đơn hàng'), exact: true }).click(); await p.waitForTimeout(800)
   await p.getByRole('dialog').getByRole('checkbox', { name: T('Chọn {name}', { name: 'Don Family' }) }).click()
