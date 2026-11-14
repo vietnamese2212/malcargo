@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { TripInput, TripResult, TruckInput } from './plan'
 import type { FitCheck, WorkerReq, WorkerRes } from './worker'
+import { reloadForNewVersion, report } from '../ui/errors'
 
 let worker: Worker | null = null
 let seq = 0
@@ -18,6 +19,13 @@ function startJob(req: WorkerReq, onMsg: (r: WorkerRes) => void) {
   if (!worker) {
     worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
     worker.onmessage = (e: MessageEvent<WorkerRes>) => handler?.(e.data)
+    // file worker không tải được (bản mới vừa lên, trang còn bản cũ; máy chặn) ⇒ báo lỗi thay vì "đang tính" mãi
+    worker.onerror = e => {
+      e.preventDefault()
+      const h = handler; cancelJob()
+      if (!reloadForNewVersion('Failed to fetch dynamically imported module (worker)')) report(e.message || 'worker failed', 'worker')
+      h?.({ id: seq, error: e.message || 'worker' })
+    }
   }
   handler = onMsg
   worker.postMessage(req)

@@ -42,6 +42,34 @@ export async function signOut() {
   await c.auth.signOut({ scope: 'local' })
   await onSignedOut()
 }
+/** Xoá tài khoản + mọi dữ liệu của nó trên máy chủ (`delete_my_account`: user_data, Family chỉ còn mình, link chia sẻ…), rồi dọn
+ *  máy này. CH Play bắt buộc có trong app. Trả mã lỗi (`family_has_members` = đang làm chủ Family còn người khác) hoặc null. */
+export async function deleteAccount(): Promise<string | null> {
+  const c = await sb()
+  if (pushTimer) { clearTimeout(pushTimer); pushTimer = undefined }   // không đẩy nữa: tài khoản sắp mất
+  await saving
+  const { error } = await c.rpc('delete_my_account')
+  if (error) return error.message
+  const fams = useFamily.getState().families.map(f => f.id)
+  ;['me', useSpace.getState().id, ...fams].forEach(id => setDirty(id, false))   // thay đổi chưa đẩy cũng bỏ theo tài khoản
+  try { await c.auth.signOut({ scope: 'local' }) } catch { /* phiên đã chết theo tài khoản */ }
+  await onSignedOut()
+  // sự kiện đăng xuất có thể chạy trước (uid đã null ⇒ không dọn) ⇒ dọn chắc chắn ở đây
+  resetMine(); setOwner(null); jumpToLatest()
+  return null
+}
+/** Gửi một lỗi của app về máy chủ (`log_error`, khách cũng gửi được). Không gửi dữ liệu người dùng nhập. */
+export async function sendError(p: { msg: string; stack?: string; page?: string }) {
+  if (!cloudEnabled || navigator.webdriver) return
+  try { const c = await sb(); await c.rpc('log_error', { p: { ...p, ver: __APP_VER__, ua: navigator.userAgent.slice(0, 300) } }) } catch { /* mất mạng: bỏ */ }
+}
+export interface ClientError { msg: string; n: number; people: number; last: string; stack: string | null; ver: string | null; ua: string | null; page: string | null }
+/** Lỗi gần đây (chỉ super admin), gom theo câu lỗi. */
+export async function loadAdminErrors(): Promise<ClientError[] | string> {
+  const c = await sb()
+  const { data, error } = await c.rpc('admin_errors')
+  return error ? error.message : (data as ClientError[]) ?? []
+}
 export async function switchAccount() {
   await signOut()
   await signInGoogle()
