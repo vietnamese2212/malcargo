@@ -3,7 +3,7 @@ import { Boxes, ChevronRight, Plus } from 'lucide-react'
 import { denyEdit, findVehicle, isSample, newId, newTripLabel, tripTime, tripTitle, tripsByDay, useAllItems, useAllVehicles, useData } from '../data/store'
 import { resolveOrder } from '../data/resolve'
 import { orderTotals } from '../engine/plan'
-import { Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SelectBar, SummaryBand, cx, fmtDay, fmtInt, fmtKgShort, fmtM3, fmtTime, useSelection } from '../ui/kit'
+import { Button, Confirm, DayHead, Empty, ListFooter, ListHead, RowCheck, SelectBar, SummaryBand, cx, fmtDate, fmtInt, fmtKgShort, fmtM3, fmtTime, useFold, useSelection } from '../ui/kit'
 import { ListCard, Page, PageHeader, usePanel } from '../ui/Shell'
 import { go, useRoute } from '../ui/route'
 import { t, tx } from '../i18n'
@@ -26,6 +26,10 @@ export default function TripsPage() {
     return { t, v: findVehicle(vehicles, t.vehicleId), n: os.length, tot: orderTotals(os.flatMap(o => o.lines), pallet), made: tm.exact ? fmtTime(tm.at) : null }
   }), r => r.t), [trips, orders, items, vehicles, pallet])
   const rows = useMemo(() => days.flatMap(g => g.rows), [days])
+  // chủ dự án 14/11: "ngày mở ra dạng expand, ngày tháng năm" ⇒ mỗi ngày một dòng gập (tổng chuyến · thùng · tấn);
+  // mở sẵn ngày mới nhất + ngày của chuyến đang mở
+  const dayKey = (d: number | null) => String(d ?? 'mau')
+  const fold = useFold([dayKey(days[0]?.day ?? null), dayKey(days.find(g => route.page === 'trip' && g.rows.some(r => r.t.id === route.id))?.day ?? null)])
   const sum = rows.reduce((s, r) => ({ cartons: s.cartons + r.tot.cartons, kg: s.kg + r.tot.kg }), { cartons: 0, kg: 0 })
   const noVehicle = rows.filter(r => !r.v).length
   // chọn nhiều để xoá (chuyến mẫu không xoá được); xoá luôn các đơn chỉ nằm trong những chuyến đã chọn
@@ -77,14 +81,15 @@ export default function TripsPage() {
               <span>{t('Chuyến')}</span><span>{t('Xe')}</span><span className="text-right">{t('Đơn')}</span><span className="text-right">{t('Thùng')}</span>
               <span className="text-right">{t('Khối lượng')}</span><span className="text-right">{t('Thể tích')}</span><span />
             </ListHead>
-            {days.map(g => (
-              <section key={g.day ?? 'mau'} aria-label={g.day == null ? t('Chuyến mẫu có sẵn') : fmtDay(g.day)}>
-                <div className="num flex flex-wrap items-baseline gap-x-2 border-b border-slate-200 bg-slate-50 px-4 py-1.5 text-[13px] text-slate-600">
-                  <span className="font-semibold text-slate-800">{g.day == null ? t('Chuyến mẫu có sẵn') : fmtDay(g.day)}</span>
-                  <span>{t('{n} chuyến', { n: fmtInt(g.rows.length) })} · {t('{n} thùng', { n: fmtInt(g.rows.reduce((a, r) => a + r.tot.cartons, 0)) })} · {fmtKgShort(g.rows.reduce((a, r) => a + r.tot.kg, 0))}</span>
-                </div>
-            {g.rows.map(({ t: trip, v, n, tot, made }) => (
-              <div key={trip.id} className={cx('flex border-b border-slate-100 last:border-b-0', sel.has(trip.id) && 'bg-brand-50')}>
+            {days.map(g => {
+              const k = dayKey(g.day), open = fold.isOpen(k)
+              return (
+              <section key={k} aria-label={g.day == null ? t('Chuyến mẫu có sẵn') : fmtDate(g.day)}>
+                <DayHead day={g.day} open={open} onToggle={() => fold.toggle(k)} className="pl-3.5 pr-4">
+                  {t('{n} chuyến', { n: fmtInt(g.rows.length) })} · <span className="whitespace-nowrap">{t('{n} thùng', { n: fmtInt(g.rows.reduce((a, r) => a + r.tot.cartons, 0)) })}</span> · <span className="whitespace-nowrap">{fmtKgShort(g.rows.reduce((a, r) => a + r.tot.kg, 0))}</span>
+                </DayHead>
+            {open && g.rows.map(({ t: trip, v, n, tot, made }) => (
+              <div key={trip.id} className={cx('flex border-b border-slate-100', sel.has(trip.id) && 'bg-brand-50')}>
                 {/* chuyến mẫu không xoá được — chừa chỗ cho thẳng cột */}
                 {isSample(trip.id) ? <span className="w-11 shrink-0" /> : <RowCheck checked={sel.has(trip.id)} onChange={() => sel.toggle(trip.id)} label={t('Chọn {name}', { name: tripTitle(trip, orders) })} />}
                 <a href={`#/trip/${trip.id}`} onClick={() => panel?.close()}
@@ -108,7 +113,8 @@ export default function TripsPage() {
               </div>
             ))}
               </section>
-            ))}
+              )
+            })}
             <ListFooter>{t('{n} chuyến', { n: rows.length })}</ListFooter>
             <SelectBar n={sel.ids.length} total={ids.length} all={sel.all} onAll={sel.toggleAll} onClear={sel.clear} onDelete={() => { setWithOrders(true); setAskDel(true) }} />
           </ListCard>

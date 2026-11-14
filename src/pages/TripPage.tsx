@@ -4,7 +4,7 @@
 // Sửa mã hàng / xe MẪU CHUNG ⇒ tự thành bản "của tôi" rồi gắn vào chuyến, mẫu giữ nguyên.
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import {
-  AlertTriangle, ArrowDown, ArrowUp, Camera, Check, ChevronDown, ClipboardCopy, ClipboardList, ClipboardPen, Crosshair, ExternalLink, Eye, EyeOff,
+  AlertTriangle, ArrowDown, ArrowUp, Camera, Check, ChevronDown, ChevronRight, ClipboardCopy, ClipboardList, ClipboardPen, Crosshair, ExternalLink, Eye, EyeOff,
   ArrowLeftRight, FileSpreadsheet, HelpCircle, Layers, Loader2, LogOut, MapPin, Maximize2, Menu, Minimize2, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Printer, Rotate3d, Ruler,
   Settings, Share2, SlidersHorizontal, Smartphone, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, UsersRound, X,
 } from 'lucide-react'
@@ -21,8 +21,8 @@ import Scene from '../three/LazyScene'
 import type { ViewPreset } from '../three/TruckScene'
 import { groupColor, itemColors, tint } from '../three/colors'
 import {
-  Badge, BoxGlyph, Button, Confirm, Empty, Field, IconButton, KeyboardShield, LiveNum, MenuItem, Popover, SearchInput, SectionBand, Segmented, Sheet,
-  TextInput, cx, fmtDay, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3, fmtTime, usePhone, useTouchContain, useViewportBox, useVisualView,
+  Badge, BoxGlyph, Button, Confirm, DayHead, Empty, Field, IconButton, KeyboardShield, LiveNum, MenuItem, Popover, SearchInput, SectionBand, Segmented, Sheet,
+  TextInput, cx, dayAgo, fmtDate, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3, fmtTime, useFold, usePhone, useTouchContain, useViewportBox, useVisualView,
 } from '../ui/kit'
 import { GoogleG, Logo, PageHeader, Panel } from '../ui/Shell'
 import { TruckGlyph } from './VehiclesPage'
@@ -598,19 +598,23 @@ function TripSwitch({ trip, trips, onRename, onDelete, onAll, onNew, onShare, lo
     const places = [...new Set(raw.map(o => tx(o.place)).filter(Boolean))].join(', ')
     const title = tripTitle(tr, orders), tm = tripTime(tr)
     return { tr, v, tot, title, places, n: raw.length, made: tm.exact ? fmtTime(tm.at) : null, over: !!v?.payloadKg && tot.kgKnown && tot.kg > v.payloadKg,
-      hay: [title, places, ...raw.map(o => o.name), tr.name, tr.code ?? '', tripMade(tr) ?? '', v ? tx(v.name) : ''].join(' ').toLowerCase() }
+      hay: [title, places, ...raw.map(o => o.name), tr.name, tr.code ?? '', tripMade(tr) ?? '', fmtDate(tm.at), v ? tx(v.name) : ''].join(' ').toLowerCase() }
   }), [trips, orders, items, vehicles, pallet])
   const title = tripTitle(trip, orders)
   const needle = q.trim().toLowerCase()
   const shown = needle ? rows.filter(r => r.hay.includes(needle)) : rows
   const days = tripsByDay(shown, r => r.tr)
+  // chủ dự án 14/11: "ngày mở ra dạng expand, ngày tháng năm; expand ra các chuyến, không rối mắt" ⇒ mỗi ngày một dòng gập;
+  // mở sẵn ngày mới nhất + ngày của chuyến đang mở; đang tìm ⇒ mở hết
+  const dayKey = (d: number | null) => String(d ?? 'mau')
+  const fold = useFold([dayKey(days[0]?.day ?? null), dayKey(days.find(g => g.rows.some(r => r.tr.id === trip.id))?.day ?? null)], !!needle)
   return (
     // điện thoại: bảng trải gần hết bề ngang màn, ngay dưới thanh (bám theo nút thì tràn mép phải)
     <Popover className="min-w-0" panelClass="w-[380px] max-w-[calc(100vw-24px)] overflow-hidden max-sm:fixed max-sm:inset-x-3 max-sm:top-[52px] max-sm:mt-0 max-sm:w-auto"
       trigger={({ open, toggle }) => (
         <h1 className="min-w-0">
           {/* trông như Ô CHỌN (chủ dự án 30/10: "cho cái gì vào để người ta biết bấm được"): khung viền xanh + nút tròn ▾ */}
-          <button onClick={() => { setRenaming(false); setQ(''); toggle() }} aria-expanded={open} data-tour="trip" aria-label={t('Chuyến đang mở: {name}. Bấm để xem các chuyến', { name: title })}
+          <button onClick={() => { setRenaming(false); setQ(''); fold.reset(); toggle() }} aria-expanded={open} data-tour="trip" aria-label={t('Chuyến đang mở: {name}. Bấm để xem các chuyến', { name: title })}
             title={title}
             className={cx('hit flex h-10 w-full min-w-0 max-w-[320px] items-center gap-1.5 rounded-lg border border-brand-500 pl-2 pr-1 text-left transition-colors hover:bg-white/15 sm:h-11 sm:gap-2 sm:pl-2.5 sm:pr-1.5',
               open ? 'bg-white/15' : 'bg-white/[0.07]')}>
@@ -644,31 +648,36 @@ function TripSwitch({ trip, trips, onRename, onDelete, onAll, onNew, onShare, lo
           </div>
           <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
             <span className="shrink-0 text-[13px] font-semibold text-slate-700">{t('Các chuyến')} · {fmtInt(rows.length)}</span>
-            {rows.length > 6 && <SearchInput value={q} onChange={e => setQ(e.target.value)} placeholder={t('Tìm đơn, điểm giao…')} aria-label={t('Tìm chuyến')} className="min-w-0 flex-1" />}
+            {rows.length > 6 && <SearchInput value={q} onChange={e => { setQ(e.target.value); fold.reset() }} placeholder={t('Tìm đơn, điểm giao…')} aria-label={t('Tìm chuyến')} className="min-w-0 flex-1" />}
           </div>
           <div className="max-h-[55vh] overflow-y-auto">
             {!shown.length && <p className="px-3 py-4 text-center text-sm text-slate-600">{t('Không thấy chuyến nào')}</p>}
-            {days.map(g => (
-              <section key={g.day ?? 'mau'} aria-label={g.day == null ? t('Chuyến mẫu có sẵn') : fmtDay(g.day)}>
-                {/* đầu nhóm ngày dính trên cùng khung cuộn */}
-                <div className="sticky top-0 z-[1] flex items-baseline gap-2 border-b border-slate-200 bg-slate-100 px-3 py-1 text-[12px] font-semibold text-slate-700">
-                  <span className="min-w-0 flex-1">{g.day == null ? t('Chuyến mẫu có sẵn') : fmtDay(g.day)}</span>
-                  <span className="num shrink-0 font-normal text-slate-600">{t('{n} chuyến', { n: fmtInt(g.rows.length) })}</span>
-                </div>
-                <div className="divide-y divide-slate-100">
+            {days.map(g => {
+              const k = dayKey(g.day), open = fold.isOpen(k)
+              return (
+              <section key={k} aria-label={g.day == null ? t('Chuyến mẫu có sẵn') : fmtDate(g.day)}>
+                {/* đầu nhóm ngày: bấm để mở / gập; dính trên cùng khung cuộn khi đang mở */}
+                <DayHead day={g.day} open={open} onToggle={() => fold.toggle(k)} className={cx('px-3', open && 'sticky top-0 z-[1]')}>
+                  {t('{n} chuyến', { n: fmtInt(g.rows.length) })}
+                </DayHead>
+                {open && <div className="divide-y divide-slate-100 border-b border-slate-200">
             {g.rows.map(({ tr, v, tot, title: tt, places, n, made, over }) => {
               const cur = tr.id === trip.id
               return (
                 <div key={tr.id} className={cx('flex items-center', cur && 'bg-brand-50')}>
-                  <a href={`#/trip/${tr.id}`} onClick={close} aria-current={cur ? 'page' : undefined} className="min-w-0 flex-1 px-3 py-2 hover:bg-slate-50">
-                    <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm font-semibold text-slate-900">
-                      <span className="min-w-0 break-words">{tt}</span>
-                      {cur && <Badge tone="blue">{t('đang mở')}</Badge>}
-                      {over && <Badge tone="red">{t('Quá tải')}</Badge>}
+                  {/* dòng: tên (+ nhãn) · giờ tạo bên phải; dưới: điểm giao; xe · thùng · tấn */}
+                  <a href={`#/trip/${tr.id}`} onClick={close} aria-current={cur ? 'page' : undefined} className="min-w-0 flex-1 py-2 pl-9 pr-3 hover:bg-slate-50">
+                    <span className="flex items-start gap-2">
+                      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm font-semibold text-slate-900">
+                        <span className="min-w-0 break-words">{tt}</span>
+                        {cur && <Badge tone="blue">{t('đang mở')}</Badge>}
+                        {over && <Badge tone="red">{t('Quá tải')}</Badge>}
+                      </span>
+                      {made && <span className="num shrink-0 pt-px text-[12px] text-slate-600">{made}</span>}
                     </span>
                     {(places || n > 1) && <span className="block break-words text-[13px] leading-snug text-slate-700">{[places, n > 1 && t('{n} đơn', { n: fmtInt(n) })].filter(Boolean).join(' · ')}</span>}
                     <span className="num block break-words text-[12px] leading-snug text-slate-600">
-                      {v ? tx(v.name) : <span className="text-amber-700">{t('Chưa chọn xe')}</span>} · {t('{n} thùng', { n: fmtInt(tot.cartons) })} · {fmtKgShort(tot.kg)}{made && <> · <span className="whitespace-nowrap">{made}</span></>}
+                      {v ? tx(v.name) : <span className="text-amber-700">{t('Chưa chọn xe')}</span>} · {t('{n} thùng', { n: fmtInt(tot.cartons) })} · {fmtKgShort(tot.kg)}
                     </span>
                   </a>
                   {isSample(tr.id)
@@ -677,9 +686,10 @@ function TripSwitch({ trip, trips, onRename, onDelete, onAll, onNew, onShare, lo
                 </div>
               )
             })}
-                </div>
+                </div>}
               </section>
-            ))}
+              )
+            })}
           </div>
           {/* đơn chưa vào chuyến nào (vd. chủ Family nạp đơn từ Excel) không phải chuyến ⇒ không có trong danh sách trên;
               chủ dự án 13/11: "các đơn chủ family đã up, tôi không thấy nó trong chọn chuyến" */}

@@ -3,7 +3,7 @@
 // chữ phụ tối thiểu slate-500 trên nền trắng, không bóng trên thứ nằm yên, góc bo 6–8 px.
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject, type ButtonHTMLAttributes, type InputHTMLAttributes } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, Trash2, X } from 'lucide-react'
+import { ChevronRight, Search, Trash2, X } from 'lucide-react'
 import { numLocale, t } from '../i18n'
 import { useBackClose } from './route'
 
@@ -632,17 +632,37 @@ export const fmtDec = (n: number, d = 1) => n.toLocaleString(numLocale(), { maxi
 export const fmtDims = (l: number, w: number, h: number) => `${fmtInt(l)} × ${fmtInt(w)} × ${fmtInt(h)}`
 export const fmtM3 = (m3: number) => `${fmtDec(m3, m3 < 10 ? 2 : 1)} m³`
 export const fmtKgShort = (kg: number) => (kg >= 1000 ? `${fmtDec(kg / 1000, 2)} ${t('tấn')}` : `${fmtInt(kg)} kg`)
-/** Tên ngày cho nhóm theo ngày: "Hôm nay · 14/11", "Hôm qua · 13/11", "Th 4, 12/11" (năm khác ⇒ kèm năm). `day` = 0 giờ ngày đó. */
-export function fmtDay(day: number): string {
-  const d = new Date(day), now = new Date(), today = new Date(now).setHours(0, 0, 0, 0), year = d.getFullYear() !== now.getFullYear()
-  // tiếng Việt dd/mm (trình duyệt tự ghi "14-11" khi không kèm thứ); tiếng Anh "Nov 14"
-  const date = numLocale() === 'vi-VN'
-    ? `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}${year ? `/${d.getFullYear()}` : ''}`
-    : d.toLocaleDateString(numLocale(), { month: 'short', day: 'numeric', year: year ? 'numeric' : undefined })
-  const back = Math.round((today - day) / 86400000)
-  if (back === 0) return `${t('Hôm nay')} · ${date}`
-  if (back === 1) return `${t('Hôm qua')} · ${date}`
-  return `${d.toLocaleDateString(numLocale(), { weekday: 'short' })}, ${date}`
+/** Ngày ĐỦ ngày tháng năm (chủ dự án 14/11): tiếng Việt "14/11/2026"; tiếng Anh "14 Nov 2026" (ngày trước tháng — "11/14" dễ đọc nhầm). */
+export function fmtDate(ms: number): string {
+  const d = new Date(ms)
+  return numLocale() === 'vi-VN'
+    ? `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+    : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+/** "Hôm nay" / "Hôm qua" cho ngày `day` (0 giờ ngày đó), ngày khác ⇒ null. */
+export function dayAgo(day: number): string | null {
+  const back = Math.round((new Date().setHours(0, 0, 0, 0) - day) / 86400000)
+  return back === 0 ? t('Hôm nay') : back === 1 ? t('Hôm qua') : null
+}
+/** Nhóm gập / mở (danh sách chuyến theo ngày): mặc định mở các nhóm `start`; đang tìm (`all`) ⇒ mở hết; `reset` khi mở lại bảng. */
+export function useFold(start: string[], all = false) {
+  const [fold, setFold] = useState<Record<string, boolean>>({})
+  const isOpen = (k: string) => fold[k] ?? (all || start.includes(k))
+  return { isOpen, toggle: (k: string) => setFold(f => ({ ...f, [k]: !isOpen(k) })), reset: () => setFold({}) }
+}
+/** Đầu nhóm ngày gập / mở: "▸ 14/11/2026 Hôm nay ······ phần phải" (số chuyến…). `day` null = nhóm chuyến mẫu. */
+export function DayHead({ day, open, onToggle, children, className }: { day: number | null; open: boolean; onToggle: () => void; children?: ReactNode; className?: string }) {
+  const rel = day == null ? null : dayAgo(day)
+  return (
+    <button type="button" onClick={onToggle} aria-expanded={open}
+      className={cx('flex min-h-[44px] w-full flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-slate-200 py-1.5 text-left text-sm transition-colors hover:bg-slate-100',
+        open ? 'bg-slate-50' : 'bg-white', className)}>
+      <ChevronRight size={16} strokeWidth={2.5} className={cx('shrink-0 text-slate-500 transition-transform', open && 'rotate-90')} />
+      <span className="num font-semibold text-slate-900">{day == null ? t('Chuyến mẫu có sẵn') : fmtDate(day)}</span>
+      {rel && <span className="text-[12px] font-medium text-brand-700">{rel}</span>}
+      <span className="num ml-auto text-right text-[12px] text-slate-600">{children}</span>
+    </button>
+  )
 }
 /** Giờ:phút theo ngôn ngữ. */
 export const fmtTime = (ms: number) => new Date(ms).toLocaleTimeString(numLocale(), { hour: '2-digit', minute: '2-digit' })
