@@ -151,6 +151,20 @@ for (const st of E.SAMPLE_TRIPS) {
   console.log(`• Luật 24 (đơn 85 thùng 7 mã, xe pallet) — ${r.plan.placedCount}/${r.plan.totalCount} pallet, cao ${hs.join(' / ')} mm`)
 }
 
+// Luật 25 (chủ dự án 14/11, ảnh chuyến 2.860 thùng TBA 180, container 40ft 100% tải): "chưa xếp tới cửa xe" — trải tới cửa chỉ hạ được cả
+// lớp: 12 lớp dài 27 hàng (hở cửa 557 mm), 11 lớp không đủ chỗ. Khối sát cửa dùng hết chỗ còn lại, thừa nổi một lớp
+{
+  const o = { id: 'o37', name: 'Đơn 2.860 thùng', place: '', lines: [{ item: E.ADMIN_ITEMS.find(i => i.code === 'SP002'), qty: 2860 }] }
+  const T = trucks['adm-v-c40'], r = E.computeTrip({ truck: T, orders: [o], pallet: E.DEFAULT_PALLET_SETTINGS })
+  invariants('luật 25', r)
+  const gap = T.l - Math.max(...r.plan.placed.map(b => b.x + b.l))
+  const cols = new Map(); for (const b of r.plan.placed) { const k = b.x + '|' + b.y; cols.set(k, (cols.get(k) ?? 0) + 1) }
+  const ns = [...cols.values()]
+  ok(r.plan.placedCount === 2860 && gap < 260 * 1.5 && Math.max(...ns) - Math.min(...ns) <= 1,
+    `luật 25: chở ${r.plan.placedCount}/2860, hở cửa ${gap} mm, cột ${Math.min(...ns)}–${Math.max(...ns)} lớp`)
+  console.log(`• Luật 25 (2.860 thùng một mã, container 40ft) — hở cửa ${gap} mm, cột ${Math.min(...ns)}–${Math.max(...ns)} lớp`)
+}
+
 // Hàng xá trải dài theo % TẢI (chủ dự án 29/10): sàn cần dùng = % tải ÷ 85%, từ 85% tải ⇒ tới sát cửa;
 // chưa biết tải ⇒ đã ≥ 75% sàn thì tới cửa
 {
