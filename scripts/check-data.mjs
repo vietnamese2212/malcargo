@@ -279,5 +279,19 @@ console.log('• Đồng bộ từng bản ghi: chỉ gửi phần đổi, kéo 
   ok(S.applyChanges(local, { orders: [order('s1', 'cũ', [], { updatedAt: u(15) })] }, syn2).orders.find(o => o.id === 's1').name === 'Đơn 1 sửa', 'bản máy chủ CŨ hơn bản trên máy ⇒ không đè')
 }
 
+console.log('• Tên chuyến để hiện (chủ dự án 14/11: không có số chuyến thì gọi theo số đơn)')
+{
+  const os = [{ id: 'a', name: '131126_77' }, { id: 'b', name: '131126_78' }, { id: 'c', name: 'Đơn rất dài tên khách hàng số một' }]
+  const tr = (name, orderIds, extra = {}) => ({ id: 't1', code: '141126-0655-01', name, orderIds, ...extra })
+  ok(S.tripTitle(tr('141126-0655-01', ['a']), os) === '131126_77', 'chuyến tên mã ⇒ gọi theo đơn')
+  ok(S.tripTitle(tr('141126-0655-01', ['a', 'b']), os) === '131126_77, 131126_78', 'hai đơn ⇒ nối tên')
+  ok(S.tripTitle(tr('141126-0655-01', ['a', 'b', 'c']), os) === '131126_77, 131126_78 +1', 'dài quá 40 ký tự ⇒ +n')
+  ok(S.tripTitle(tr('Chuyến 3', ['a']), os) === '131126_77', 'tên mặc định Chuyến N ⇒ gọi theo đơn')
+  ok(S.tripTitle(tr('Xe sáng thứ 2', ['a']), os) === 'Xe sáng thứ 2', 'đã đặt tên riêng ⇒ giữ tên')
+  ok(S.tripTitle(tr('141126-0655-01', []), os) === '141126-0655-01', 'chuyến chưa có đơn ⇒ hiện mã')
+  ok(S.tripTitle({ ...S.SAMPLE_TRIPS[0] }, [{ id: S.SAMPLE_TRIPS[0].orderIds[0], name: 'ĐƠN X' }]) !== 'ĐƠN X', 'chuyến mẫu ⇒ giữ tên mẫu, không gọi theo đơn')
+  ok(S.tripMade(tr('x', [])) === '14/11 06:55', 'giờ tạo đọc từ mã chuyến')
+}
+
 console.log(fail ? `\nĐỎ — ${fail} lỗi` : '\nXANH')
 process.exit(fail ? 1 : 0)

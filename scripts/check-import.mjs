@@ -124,7 +124,7 @@ console.log('• Cột Nhập vào: Admin / Family / Riêng theo quyền')
 }
 
 r = parse({ items: tpl('items'), vehicles: tpl('vehicles'), orders: tpl('orders'), trips: tpl('trips') })
-ok(!r.errors.length && r.items.length === 2 && r.vehicles.length === 2 && r.orders.length === 2 && r.trips.length === 1, `dòng ví dụ của 4 file mẫu ⇒ không lỗi (${r.errors.join(' | ')})`)
+ok(!r.errors.length && r.items.length === 2 && r.vehicles.length === 2 && r.orders.length === 3 && r.trips.length === 1, `dòng ví dụ của 4 file mẫu ⇒ không lỗi (${r.errors.join(' | ')})`)
 r = parse({ items: [head('items'), ['SP1', 'Hộp lẻ', '420,5', '255.5', 100, '9,85', 140, 14, ''], ['SP2', 'Thạch', 310, 130, 130, 3.08, 216, 8, 'x']] })
 const sp1 = r.items.find(i => i.code === 'SP1')
 ok(!r.errors.length && sp1?.l === 420.5 && sp1?.w === 255.5 && sp1?.kg === 9.85 && sp1?.perPallet === 140 && sp1?.light === false, 'kích thước + kg số lẻ (dấu phẩy hay chấm) ⇒ nhận; hàng nhẹ để trống ⇒ không nhẹ')
@@ -215,6 +215,26 @@ r = parse({
 }, { ...none, items, vehicles: fleet })
 ok(!r.errors.length && r.trips.find(x => x.name === 'C7')?.vehicleId === 'v2', 'chuyến không ghi xe ⇒ lấy dòng xe của đơn ĐẦU có ghi (Đ8)')
 ok(r.trips.find(x => x.name === 'C8')?.vehicleId === 'v1', 'chuyến có ghi xe ⇒ giữ xe của chuyến')
+
+console.log('• Cột Số chuyến của file Đơn hàng (chủ dự án 14/11: có số chuyến thì theo số chuyến, không có thì theo số đơn)')
+{
+  const have = { ...none, items, vehicles: fleet }
+  const rows = [head('orders'), ['Đ1', '', 'SP1', 10, '', '', 'C-01'], ['Đ1', '', 'SP2', 5, '', '', 'C-01'], ['Đ2', '', 'SP1', 4, '29C2', '', 'C-01'], ['Đ3', '', 'SP1', 2, 'Xe tải 5 tấn', '', '']]
+  const s = I.parseImport({ orders: rows }, have, { solo: true })
+  const id = n => s.orders.find(o => o.name === n)?.id, c1 = s.trips.find(x => x.name === 'C-01')
+  ok(!s.errors.length && s.trips.length === 2, `2 đơn cùng số chuyến + 1 đơn trống ⇒ 2 chuyến (có ${s.trips.length}; ${s.errors.join(' | ')})`)
+  ok(c1 && c1.orderIds.join() === [id('Đ1'), id('Đ2')].join() && c1.vehicleId === 'v2', 'cùng số chuyến ⇒ một chuyến tên = số chuyến, đơn theo thứ tự dòng, xe = dòng xe của đơn đầu có ghi')
+  ok(s.trips.find(x => x.orderIds.includes(id('Đ3')))?.name === 'Đ3', 'không ghi số chuyến ⇒ chuyến tên = tên đơn')
+  const inTrip = I.parseImport({ orders: rows }, have)
+  ok(inTrip.trips.length === 1 && inTrip.trips[0].name === 'C-01', 'nạp từ Bàn xếp xe: đơn có số chuyến vẫn vào chuyến đó, đơn trống vào chuyến đang mở')
+  const again = I.parseImport({ orders: [head('orders'), ['Đ1', '', 'SP1', 3, '', '', 'C-01']] }, { ...have, trips: [{ id: 't9', code: 'x', name: 'C-01', vehicleId: 'v1', orderIds: ['o-cu'], lightOwnLoose: true, updatedAt: 1 }] }, { solo: true })
+  ok(again.trips.length === 1 && again.trips[0].id === 't9' && again.trips[0].lightOwnLoose && again.trips[0].vehicleId === 'v1', 'số chuyến trùng chuyến đã có ⇒ ghi đè danh sách đơn, giữ mã + cài đặt + xe')
+  const bad = I.parseImport({ orders: [head('orders'), ['Đ1', '', 'SP1', 3, '', '', 'C-01'], ['Đ1', '', 'SP2', 3, '', '', 'C-02']] }, have, { solo: true })
+  ok(has(bad, 3, /số chuyến khác dòng 2/), 'một đơn ghi hai số chuyến ⇒ lỗi đúng dòng')
+  ok(I.headError('orders', ['Tên đơn', 'Điểm giao', 'Mã hàng', 'Số thùng', 'Dòng xe', 'Nhập vào (Family / Riêng)']) === null, 'file mẫu Đơn hàng đời trước (chưa có cột Số chuyến) ⇒ vẫn nhận')
+  const extra = I.parseImport({ orders: [['Tên đơn', 'Điểm giao', 'Mã hàng', 'Số thùng', 'Dòng xe', 'Nhập vào (Family / Riêng)', 'Ghi chú'], ['Đ1', '', 'SP1', 3, '', '', 'gọi trước']] }, have, { solo: true })
+  ok(!extra.errors.length && extra.trips[0]?.name === 'Đ1', 'file cũ tự thêm cột Ghi chú ở cuối ⇒ không đọc nhầm thành số chuyến')
+}
 
 console.log('• Nạp file Đơn hàng từ menu: đơn chưa thuộc chuyến nào ⇒ mỗi đơn một chuyến riêng (chủ dự án 13/11)')
 {

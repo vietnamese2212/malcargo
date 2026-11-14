@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Check, ClipboardCopy, Loader2, Send } from 'lucide-react'
 import { createShare, fetchShare, signInGoogle, switchSpace, useAuth } from '../data/cloud'
 import { adoptShare, packTrip, shareNeedsCatalog, shareUrl, useShareInbox, type SharePack } from '../data/share'
-import { catalogLocked, findVehicle, readOnly } from '../data/store'
+import { catalogLocked, findVehicle, readOnly, tripTitle } from '../data/store'
 import { resolveOrder } from '../data/resolve'
 import { orderTotals } from '../engine/plan'
 import { Button, Sheet, TextInput, fmtDims, fmtInt, fmtKgShort } from './kit'
@@ -135,7 +135,7 @@ export function ShareInbox() {
         : pack && sum && (
           <div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <div className="break-words text-[15px] font-bold leading-snug text-slate-900">{tx(pack.trip.name) || t('Chuyến xe')}</div>
+              <div className="break-words text-[15px] font-bold leading-snug text-slate-900">{tripTitle(pack.trip, pack.orders) || t('Chuyến xe')}</div>
               <div className="mt-0.5 break-words text-[13px] leading-snug text-slate-700">
                 {sum.v ? <>{tx(sum.v.name)} <span className="num whitespace-nowrap">· {fmtDims(sum.v.l, sum.v.w, sum.v.h)} mm</span></> : t('Chưa chọn xe')}
               </div>

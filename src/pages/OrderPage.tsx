@@ -1,7 +1,7 @@
 // Sửa đơn — tự lưu mỗi lần đổi, tổng cập nhật ngay, một nút đi thẳng sang xếp xe.
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowRight, ClipboardList, Minus, Plus, Trash2, X } from 'lucide-react'
-import { denyEdit, isSample, newId, newTripLabel, useAllItems, useData } from '../data/store'
+import { denyEdit, isSample, newId, newTripLabel, tripTitle, useAllItems, useData } from '../data/store'
 import type { Order } from '../data/types'
 import { orderTotals } from '../engine/plan'
 import { resolveOrder } from '../data/resolve'
@@ -15,6 +15,7 @@ export default function OrderPage({ id, back }: { id: string; back?: string }) {
   // vừa tách chuyến mẫu: đọc NGAY bản sao của đơn (đường dẫn đổi sau một nhịp — phím gõ nhanh không sửa lại đơn mẫu)
   const order = useData(s => { const oid = s.fork && !s.fork.seen && s.fork.orders[id] ? s.fork.orders[id] : id; return s.orders.find(o => o.id === oid) })
   const trips = useData(s => s.trips)
+  const allOrders = useData(s => s.orders)
   const upsert = useData(s => s.upsertOrder)
   const removeOrder = useData(s => s.removeOrder)
   const upsertTrip = useData(s => s.upsertTrip)
@@ -25,7 +26,7 @@ export default function OrderPage({ id, back }: { id: string; back?: string }) {
   const { kb } = useVisualView()
   const backTrip = back?.startsWith('trip:') ? trips.find(t => t.id === back.slice(5)) : undefined
   const backHref = back?.startsWith('trip:') ? `#/trip/${back.slice(5)}` : '#/orders'
-  const backLabel = backTrip ? tx(backTrip.name) : t('Đơn hàng')
+  const backLabel = backTrip ? tripTitle(backTrip, allOrders) : t('Đơn hàng')
 
   // sửa đơn MẪU ⇒ chuyến mẫu đã tách thành chuyến mới: chuyển sang bản sao của đơn này (lối về trỏ chuyến mới).
   // Chỉ đánh dấu `seen` khi màn ĐÃ cầm bản sao: đánh dấu trước lúc đường dẫn đổi thì có một nhịp màn đọc lại đơn mẫu —
@@ -64,7 +65,7 @@ export default function OrderPage({ id, back }: { id: string; back?: string }) {
 
   return (
     <>
-      <PageHeader title={tx(order.name)} subtitle={[tx(order.place), trip && t('Trong {trip}', { trip: tx(trip.name) })].filter(Boolean).join(' · ') || t('Đơn hàng')}
+      <PageHeader title={tx(order.name)} subtitle={[tx(order.place), trip && t('Trong {trip}', { trip: tripTitle(trip, allOrders) })].filter(Boolean).join(' · ') || t('Đơn hàng')}
         back={backHref} backLabel={backLabel}
         actions={isSample(order.id) ? undefined : <IconButton label={t('Xoá đơn')} onClick={() => setAskDel(true)}><Trash2 size={19} /></IconButton>} />
       <Page flush className="pb-32 lg:pb-28">
@@ -137,7 +138,7 @@ export default function OrderPage({ id, back }: { id: string; back?: string }) {
 
       <ItemPicker open={picking} onClose={() => setPicking(false)} picked={picked} onToggle={it => toggle(it.id)} />
       <Confirm open={askDel} onClose={() => setAskDel(false)} title={t('Xoá {name}?', { name: tx(order.name) })}
-        body={trip ? t('Đơn sẽ được gỡ khỏi {trip}.', { trip: tx(trip.name) }) : t('Không thể hoàn tác.')}
+        body={trip ? t('Đơn sẽ được gỡ khỏi {trip}.', { trip: tripTitle(trip, allOrders) }) : t('Không thể hoàn tác.')}
         onOk={() => { removeOrder(order.id); window.location.hash = backHref }} />
     </>
   )

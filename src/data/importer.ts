@@ -25,7 +25,8 @@ type Pick = 'codes' | 'trucks' | 'orders' | 'modes' | 'x' | 'scope' | 'scope2'
 /** `text`: chữ hiện trên giao diện tiếng Anh khi nghĩa cột khác chữ dịch của `label` (vd cột "Mã hàng" = mã, không phải danh mục).
  *  `old`: tiêu đề cột đời trước vẫn nhận (file mẫu người dùng đã tải về). `late`: cột thêm sau — file mẫu cũ thiếu cột
  *  này vẫn nhận. `rule` / `pick` / `uniq` (không trùng dòng khác): ràng buộc ô. `file`: tên file mẫu của loại này. */
-type Col = { label: string; text?: string; old?: string[]; late?: boolean; req?: boolean; w: number; rule?: Rule; pick?: Pick; uniq?: boolean; scope?: boolean }
+// `tail`: cột cuối thêm sau — file cũ có cột tự thêm ở vị trí đó (tiêu đề khác) ⇒ coi là cột thừa, đọc bỏ qua (như cột Nhập vào)
+type Col = { label: string; text?: string; old?: string[]; late?: boolean; req?: boolean; w: number; rule?: Rule; pick?: Pick; uniq?: boolean; scope?: boolean; tail?: boolean }
 export interface SheetDef { key: SheetKey; title: string; file: string; cols: Col[]; sample: (string | number)[][] }
 
 // Cột cuối mọi file mẫu (chủ dự án 05/11): có quyền thì vào đó, không có quyền thì vẫn vào riêng (`destOf`). Trống = Riêng.
@@ -69,8 +70,11 @@ export const SHEETS: SheetDef[] = [
       { label: 'Tên đơn', req: true, w: 18 }, { label: 'Điểm giao', w: 24 }, { label: 'Mã hàng', text: 'Mã', req: true, w: 34, pick: 'codes' }, // i18n-key
       { label: 'Số thùng', req: true, w: 10, rule: QTY }, { label: 'Dòng xe', w: 22, pick: 'trucks', late: true }, // i18n-key
       SCOPE_COL2,
+      // Số chuyến (chủ dự án 14/11: "nếu có số chuyến, lấy theo số chuyến; không có thì lấy số chuyến là số đơn"): đơn cùng số
+      // ⇒ chung một chuyến mang số đó; trống ⇒ chuyến riêng tên = tên đơn. Cột CUỐI để file mẫu cũ vẫn nạp được
+      { label: 'Số chuyến (trống = theo tên đơn)', old: ['Số chuyến'], w: 26, late: true, tail: true }, // i18n-key
     ],
-    sample: [['Đơn 101', 'Cửa hàng A', 'SP001', 120, 'Xe tải 5 tấn', 'Riêng'], ['Đơn 101', 'Cửa hàng A', 'SP002', 30, 'Xe tải 5 tấn', 'Riêng'], ['Đơn 102', 'Cửa hàng B', 'SP001', 80, '', 'Riêng']], // i18n-ok
+    sample: [['Đơn 101', 'Cửa hàng A', 'SP001', 120, 'Xe tải 5 tấn', 'Riêng', 'Chuyến sáng 28/10'], ['Đơn 101', 'Cửa hàng A', 'SP002', 30, 'Xe tải 5 tấn', 'Riêng', 'Chuyến sáng 28/10'], ['Đơn 102', 'Cửa hàng B', 'SP001', 80, '', 'Riêng', 'Chuyến sáng 28/10'], ['Đơn 103', 'Cửa hàng C', 'SP002', 50, '', 'Riêng', '']], // i18n-ok
   },
   {
     key: 'trips', title: 'Chuyến', file: 'malcargo-mau-chuyen.xlsx', // i18n-key
@@ -175,7 +179,7 @@ const names = (c: Col) => [...heads(c), ...(c.old ?? []).flatMap(o => [o, EN[o] 
 export function headError(k: SheetKey, row: Rows[number] | undefined): string | null {
   for (const [i, c] of cols(k).entries()) {
     // cột Nhập vào là cột cuối: file cũ có cột tự thêm ở vị trí đó vẫn là "thừa cột cuối" (đọc bỏ qua — `scopeOn`)
-    if (names(c).includes(norm(row?.[i])) || (c.late && !str(row?.[i])) || c.scope) continue
+    if (names(c).includes(norm(row?.[i])) || (c.late && !str(row?.[i])) || c.scope || c.tail) continue
     const got = str(row?.[i])
     return got ? t('cột {col} là "{got}", mẫu là "{want}"', { col: letter(i), got, want: colHead(c) })
       : t('thiếu cột {col} "{want}"', { col: letter(i), want: colHead(c) })
@@ -310,6 +314,7 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
   }
   const orderMap = new Map<string, Order>(), placeAt = new Map<string, [string, number]>()
   const orderDest = new Map<string, Dest>(), orderScope = scopeCell(src.orders ?? [], 'orders', 5)
+  const tripNoCell = scopeCell(src.orders ?? [], 'orders', 6), tripNoAt = new Map<string, [string, number]>()
   for (const [ln, r] of body(src.orders ?? [], 'orders', (l, m) => err('orders', l, m), 3)) {
     const name = str(r[0]), place = str(r[1]), code = str(r[2]), truck = str(r[4])
     if (!name || !code) { err('orders', ln, t('thiếu tên đơn hoặc mã hàng')); continue }
@@ -338,6 +343,9 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     const v = truck ? findVehicle(truck, dest) : null
     if (v && !out.orderTruck[o.id]) out.orderTruck[o.id] = v.id
     if (truck && !v && !out.unknownTrucks.includes(truck)) out.unknownTrucks.push(truck)
+    const no = str(tripNoCell(r)), n0 = tripNoAt.get(key(name))
+    if (no && n0 && key(n0[0]) !== key(no)) err('orders', ln, t('đơn "{name}": số chuyến khác dòng {line} ("{trip}")', { name, line: n0[1], trip: n0[0] }))
+    else if (no && !n0) tripNoAt.set(key(name), [no, ln])
   }
   const listOf = (d: Dest) => (d === 'mine' ? out.toMine : d === 'family' ? out.toFamily : out)
   for (const [k, o] of orderMap) listOf(orderDest.get(k)!).orders.push(o)
@@ -378,6 +386,26 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
   for (const [k, trip] of tripMap) {
     const v = truckOf.has(k) ? undefined : trip.orderIds.map(id => out.orderTruck[id]).find(Boolean)
     if (v) trip.vehicleId = v
+  }
+  // ── Cột Số chuyến của file Đơn hàng: đơn cùng số ⇒ một chuyến tên = số đó (đã có chuyến cùng tên ⇒ ghi đè danh sách đơn,
+  // giữ mã + cài đặt như file Chuyến); xe = dòng xe của đơn đầu có ghi. Đơn đã ghi ở file Chuyến cùng lượt thì theo file Chuyến.
+  {
+    const held = new Set([...tripMap.values()].flatMap(tr => tr.orderIds))
+    for (const [k, o] of orderMap) {
+      const no = tripNoAt.get(k)
+      if (!no || held.has(o.id)) continue
+      const dest = orderDest.get(k)!, tk = key(no[0])
+      if (tripDest.has(tk) && tripDest.get(tk) !== dest) { err('orders', no[1], t('chuyến "{name}": các dòng phải cùng nơi nhập vào', { name: no[0] })); continue }
+      let trip = tripMap.get(tk)
+      if (!trip) {
+        const old = oldTrips(dest).find(x => key(x.name) === tk)
+        if (old) out.updated++
+        trip = { ...old, id: old?.id ?? newId(), name: no[0], vehicleId: old?.vehicleId ?? null, orderIds: [], updatedAt: 0 }
+        tripMap.set(tk, trip); tripDest.set(tk, dest)
+      }
+      trip.orderIds.push(o.id)
+      if (!truckOf.has(tk) && !trip.orderIds.slice(0, -1).some(id => out.orderTruck[id]) && out.orderTruck[o.id]) trip.vehicleId = out.orderTruck[o.id]
+    }
   }
   for (const [k, trip] of tripMap) listOf(tripDest.get(k)!).trips.push(trip)
 

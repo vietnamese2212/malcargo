@@ -187,9 +187,9 @@ for (const dev of [DEVICES[1], { ...DEVICES[1], name: 'phone-ngang', viewport: {
     ok(await tab('items').getAttribute('aria-pressed') === 'true' && /2$/.test(await tab('items').innerText()), `[${l}] nạp file Mã hàng (${other}) lúc đang ở Đơn hàng ⇒ vào Mã hàng, đọc 2 mã`)
     await tab('orders').click(); await p.waitForTimeout(150)
     await sheet.locator('input[type=file]').setInputFiles(files[other].orders); await p.waitForTimeout(800)
-    const btn = await sheet.getByRole('button', { name: /^(Nhập 4 dòng dữ liệu|Import 4 rows)$/ }).count()
+    const btn = await sheet.getByRole('button', { name: /^(Nhập \d+ dòng dữ liệu|Import \d+ rows)$/ }).count()
     if (!btn) console.log('    nút:', await sheet.getByRole('button').allInnerTexts())
-    ok(btn > 0 && !(await sheet.locator('li svg.lucide-triangle-alert, li svg.lucide-alert-triangle').count()), `[${l}] thêm file Đơn hàng (${other}) ⇒ 2 mã + 2 đơn nhập một lần, không lỗi dòng`)
+    ok(btn > 0 && !(await sheet.locator('li svg.lucide-triangle-alert, li svg.lucide-alert-triangle').count()), `[${l}] thêm file Đơn hàng (${other}) ⇒ 2 mã + 3 đơn (+ chuyến theo cột Số chuyến) nhập một lần, không lỗi dòng`)
     await p.keyboard.press('Escape'); await p.waitForTimeout(200)
   }
   // file 4 trang đời trước (có trang Hướng dẫn, cột C Chuyến "Tên đơn") ⇒ đọc đủ 4 loại; trang tên lạ ("Sheet1") nhận

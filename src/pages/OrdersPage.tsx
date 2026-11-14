@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { ChevronRight, ClipboardList, Plus, Truck } from 'lucide-react'
-import { denyEdit, isSample, newId, newTripLabel, nextName, useAllItems, useData } from '../data/store'
+import { denyEdit, isSample, newId, newTripLabel, nextName, tripTitle, useAllItems, useData } from '../data/store'
 import { resolveOrder } from '../data/resolve'
 import { orderTotals } from '../engine/plan'
 import { Badge, Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SelectBar, SummaryBand, cx, fmtInt, fmtKgShort, fmtM3, useSelection } from '../ui/kit'
@@ -86,11 +86,11 @@ export default function OrdersPage({ onOpenTrip }: { onOpenTrip?: () => void } =
                       {isSample(o.id) && <span className="ml-1.5 align-[1px]" title={t('Đơn mặc định của app — sửa sẽ lưu thành đơn mới')}><Badge>{t('mặc định')}</Badge></span>}
                     </span>
                     <span className="num block text-[13px] leading-snug text-slate-600 sm:hidden">
-                      {[tx(o.place), fmtKgShort(tot.kg) + (tot.kgKnown ? '' : '*'), fmtM3(tot.m3), trip && tx(trip.name)].filter(Boolean).join(' · ')}
+                      {[tx(o.place), fmtKgShort(tot.kg) + (tot.kgKnown ? '' : '*'), fmtM3(tot.m3), trip && tripTitle(trip, orders)].filter(Boolean).join(' · ')}
                     </span>
                   </span>
                   <span className="hidden break-words text-sm text-slate-700 sm:block">{tx(o.place) || <span className="text-slate-500">—</span>}</span>
-                  <span className="hidden break-words text-sm sm:block">{trip ? <span className="text-brand-700">{tx(trip.name)}</span> : <span className="text-slate-500">{t('Chưa vào chuyến')}</span>}</span>
+                  <span className="hidden break-words text-sm sm:block">{trip ? <span className="text-brand-700">{tripTitle(trip, orders)}</span> : <span className="text-slate-500">{t('Chưa vào chuyến')}</span>}</span>
                   <span className="num shrink-0 text-right text-sm font-semibold text-slate-900">
                     {fmtInt(tot.cartons)}<span className="font-normal text-slate-600 sm:hidden"> {t('{n:thùng|thùng}', { n: tot.cartons })}</span>
                   </span>

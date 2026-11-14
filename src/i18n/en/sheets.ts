@@ -163,6 +163,10 @@ export const SHEETS: Record<string, string> = {
   // ── dòng ví dụ file mẫu (dữ liệu, dịch bằng tx() — các tên mẫu khác đã có ở EN_NAMES) ──
   'Đơn 101': 'Order 101',
   'Đơn 102': 'Order 102',
+  'Đơn 103': 'Order 103',
+  'Số chuyến (trống = theo tên đơn)': 'Trip no. (blank = order name)',
+  'Số chuyến': 'Trip no.',
+  'đơn "{name}": số chuyến khác dòng {line} ("{trip}")': 'order "{name}": trip no. differs from row {line} ("{trip}")',
   'Chuyến sáng 28/10': 'Morning trip 28/10',
   // Diễn giải từng mã (28/10)
   'Dòng xe': 'Vehicle type',

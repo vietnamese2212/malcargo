@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Boxes, ChevronRight, Plus } from 'lucide-react'
-import { denyEdit, findVehicle, isSample, newId, newTripLabel, useAllItems, useAllVehicles, useData } from '../data/store'
+import { denyEdit, findVehicle, isSample, newId, newTripLabel, tripTitle, useAllItems, useAllVehicles, useData } from '../data/store'
 import { resolveOrder } from '../data/resolve'
 import { orderTotals } from '../engine/plan'
 import { Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SelectBar, SummaryBand, cx, fmtInt, fmtKgShort, fmtM3, useSelection } from '../ui/kit'
@@ -77,11 +77,11 @@ export default function TripsPage() {
             {rows.map(({ t: trip, v, n, tot }) => (
               <div key={trip.id} className={cx('flex border-b border-slate-100 last:border-b-0', sel.has(trip.id) && 'bg-brand-50')}>
                 {/* chuyến mẫu không xoá được — chừa chỗ cho thẳng cột */}
-                {isSample(trip.id) ? <span className="w-11 shrink-0" /> : <RowCheck checked={sel.has(trip.id)} onChange={() => sel.toggle(trip.id)} label={t('Chọn {name}', { name: tx(trip.name) })} />}
+                {isSample(trip.id) ? <span className="w-11 shrink-0" /> : <RowCheck checked={sel.has(trip.id)} onChange={() => sel.toggle(trip.id)} label={t('Chọn {name}', { name: tripTitle(trip, orders) })} />}
                 <a href={`#/trip/${trip.id}`} onClick={() => panel?.close()}
                   className={`group flex min-w-0 flex-1 items-center gap-4 py-3 pr-4 transition-colors hover:bg-slate-50 sm:grid sm:min-h-[52px] sm:py-2 ${GRID}`}>
                   <span className="min-w-0 flex-1">
-                    <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{tx(trip.name)}</span>
+                    <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{tripTitle(trip, orders)}</span>
                     <span className="num block text-[13px] leading-snug text-slate-600 sm:hidden">
                       {v ? tx(v.name) : t('Chưa chọn xe')} · {t('{n} đơn', { n })} · {fmtKgShort(tot.kg)} · {fmtM3(tot.m3)}
                     </span>

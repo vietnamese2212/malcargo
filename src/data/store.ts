@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import type { Item, Order, PalletSettings, Trip, Vehicle } from './types'
-import { t } from '../i18n'
+import { t, tx } from '../i18n'
 import { ADMIN_ITEMS, ADMIN_VEHICLES, DEFAULT_PALLET_SETTINGS, PREV_SAMPLES, SAMPLE_ORDERS, SAMPLE_TRIPS } from './catalog'
 
 export const newId = () =>
@@ -149,6 +149,24 @@ export function tripCode(trips: Trip[], d = new Date()): string {
 
 /** Chuyến mới: tên mặc định = mã chuyến (đổi tên sau vẫn giữ mã). */
 export const newTripLabel = (trips: Trip[]) => { const code = tripCode(trips); return { code, name: code } }
+
+const CODE_RE = /^(\d{2})(\d{2})\d{2}-(\d{2})(\d{2})-\d+$/
+/** Tên chuyến để HIỆN (chủ dự án 14/11: "không có số chuyến thì lấy số chuyến là số đơn — mã chuyến rất khó nhìn"): chuyến còn
+ *  tên mặc định (mã ddmmyy-hhmm-stt / "Chuyến N") ⇒ gọi theo các đơn trong chuyến; đặt tên riêng, chuyến mẫu ⇒ tên đó.
+ *  Chỉ để hiện — dữ liệu lưu không đổi (dọn nháp, tách chuyến mẫu vẫn dựa tên mặc định). */
+export function tripTitle(trip: Pick<Trip, 'id' | 'name' | 'code' | 'orderIds'>, orders: Pick<Order, 'id' | 'name'>[]): string {
+  if (isSample(trip.id) || !(trip.name === trip.code || DEFAULT_TRIP.test(trip.name) || CODE_RE.test(trip.name))) return tx(trip.name)
+  const names = trip.orderIds.map(id => orders.find(o => o.id === id)?.name).filter((n): n is string => !!n?.trim()).map(n => tx(n))
+  if (!names.length) return tx(trip.name)
+  let s = names[0], k = 1
+  while (k < names.length && s.length + 2 + names[k].length <= 40) s += `, ${names[k++]}`
+  return k < names.length ? `${s} +${names.length - k}` : s
+}
+/** Lúc tạo chuyến đọc từ mã ddmmyy-hhmm-stt ("13/11 19:08") — phân biệt hai chuyến cùng đơn; không có mã ⇒ null. */
+export function tripMade(trip: Pick<Trip, 'code' | 'name'>): string | null {
+  const m = CODE_RE.exec(trip.code ?? trip.name)
+  return m ? `${m[1]}/${m[2]} ${m[3]}:${m[4]}` : null
+}
 
 /** Chuyến mẫu vừa tách: `orders` = đơn mẫu → đơn mới. `seen` = màn chuyến đã chuyển sang chuyến mới. */
 export interface ForkInfo { from: string; to: string; orders: Record<string, string>; seen: boolean }

@@ -48,6 +48,7 @@ export const EN_NAMES: Record<string, string> = {
   'Đơn mẫu 2': 'Sample order 2',
   'Cửa hàng A': 'Store A',
   'Cửa hàng B': 'Store B',
+  'Cửa hàng C': 'Store C',
   'hàng nhẹ': 'light goods',
   'thùng': 'cartons',
   'pallet': 'pallets',
