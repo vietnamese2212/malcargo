@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { ChevronRight, ClipboardList, Plus, Truck } from 'lucide-react'
+import { useHideSamples } from '../data/cloud'
 import { denyEdit, isSample, newId, newTripLabel, nextName, tripTitle, useAllItems, useData } from '../data/store'
 import { resolveOrder } from '../data/resolve'
 import { orderTotals } from '../engine/plan'
@@ -23,7 +24,9 @@ export function useCreateOrder() {
 }
 
 export default function OrdersPage({ onOpenTrip }: { onOpenTrip?: () => void } = {}) {
-  const orders = useData(s => s.orders)
+  const allOrders = useData(s => s.orders)
+  const hideSamples = useHideSamples()   // Family đã ẩn dữ liệu mẫu
+  const orders = useMemo(() => (hideSamples ? allOrders.filter(o => !isSample(o.id)) : allOrders), [allOrders, hideSamples])
   const trips = useData(s => s.trips)
   const items = useAllItems()
   const pallet = useData(s => s.pallet)

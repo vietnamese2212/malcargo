@@ -18,9 +18,11 @@ const safeStorage: StateStorage = {
   removeItem: k => { try { localStorage.removeItem(k) } catch { memory.delete(k) } },
 }
 
-// Mặc định TIẾNG ANH (chủ dự án 28/10); người dùng bấm nút cạnh Login để sang tiếng Việt
+// Mặc định THEO MÁY (chủ dự án 14/11 — trước đó 28/10 luôn tiếng Anh): máy đặt tiếng Việt ⇒ tiếng Việt, còn lại tiếng Anh;
+// người dùng bấm nút cạnh Login để đổi, nhớ trên máy (đã chọn thì không theo máy nữa)
+const deviceLang = (): Lang => { try { return (navigator.languages?.length ? navigator.languages : [navigator.language]).some(l => /^vi/i.test(l ?? '')) ? 'vi' : 'en' } catch { return 'en' } }
 export const useLang = create<{ lang: Lang; setLang: (lang: Lang) => void }>()(persist(
-  set => ({ lang: 'en', setLang: lang => set({ lang }) }),
+  set => ({ lang: deviceLang(), setLang: lang => set({ lang }) }),
   { name: 'malcargo-lang-v1', storage: createJSONStorage(() => safeStorage) },
 ))
 

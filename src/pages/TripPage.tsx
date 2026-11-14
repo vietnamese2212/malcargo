@@ -9,7 +9,7 @@ import {
   Settings, Share2, SlidersHorizontal, Split, Smartphone, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, UsersRound, X,
 } from 'lucide-react'
 import { LOCKED, catalogLocked, denyEdit, famLabel, findVehicle, isBlankOrder, isSample, newId, newTripLabel, nextName, tripMade, tripTime, tripTitle, tripsByDay, useAllItems, useAllVehicles, useData, useSpace } from '../data/store'
-import { cloudEnabled, signInGoogle, signOut, switchAccount, switchSpace, useAuth, useFamily, useJoinRequests } from '../data/cloud'
+import { cloudEnabled, signInGoogle, signOut, switchAccount, switchSpace, useAuth, useFamily, useHideSamples, useJoinRequests } from '../data/cloud'
 import { when } from '../ui/FamilyGate'
 import { ShareSheet } from '../ui/Share'
 import { pickPool, resolveOrder, truckOf } from '../data/resolve'
@@ -65,6 +65,9 @@ export default function TripPage({ id }: { id: string }) {
   const trip = useData(s => s.trips.find(t => t.id === tid))
   const trips = useData(s => s.trips)
   const orders = useData(s => s.orders)
+  // Family đã ẩn dữ liệu mẫu: không liệt kê chuyến mẫu; đang đứng ở chuyến mẫu ⇒ về chuyến của Family gần nhất
+  const hideSamples = useHideSamples()
+  useEffect(() => { if (hideSamples && isSample(tid)) go({ page: 'trips' }) }, [hideSamples, tid])
   const pallet = useData(s => s.pallet)
   const upsertTrip = useData(s => s.upsertTrip)
   const removeTrip = useData(s => s.removeTrip)
@@ -246,14 +249,16 @@ export default function TripPage({ id }: { id: string }) {
   }
 
   // ── sửa XE ngay tại chỗ (xe mẫu ⇒ thành xe của tôi) ──
+  // Thùng rời ↔ Pallet trên dải thông số = XEM TÌNH HUỐNG cho chuyến này (chủ dự án 14/11: "bản chất việc đổi chỉ là cho user thấy các
+  // tình huống sẽ như thế nào") ⇒ ghi theo CHUYẾN (`Trip.kind`), xe giữ nguyên. Trước đó sửa luôn xe: mọi chuyến cùng xe đổi theo,
+  // xe mẫu thì đẻ bản "(của tôi)". Cách chở MẶC ĐỊNH của xe vẫn sửa ở bảng Thùng xe / form Xe.
+  const setTripKind = (k: VehicleKind) => {
+    if (!baseVehicle) return
+    const { kind: _old, ...rest } = trip
+    upsertTrip(k === baseVehicle.kind ? rest : { ...rest, kind: k })
+  }
   const patchVehicle = (patch: Partial<Vehicle>) => {
     if (!vehicle || !baseVehicle) return
-    // đổi Thùng rời ↔ Pallet mà không sửa được xe (thành viên Family) hay chuyến đã có cách chở riêng ⇒ ghi theo CHUYẾN
-    if (patch.kind && Object.keys(patch).length === 1 && (catalogLocked() || trip.kind)) {
-      const { kind: _old, ...rest } = trip
-      upsertTrip(patch.kind === baseVehicle.kind ? rest : { ...rest, kind: patch.kind })
-      return
-    }
     if (catalogLocked()) { setToast(t(LOCKED)); return }   // thành viên Family: xe do chủ quản lý
     if (vehicle.owner === 'admin') {
       const v: Vehicle = { ...vehicle, ...patch, id: newId(), owner: 'me', name: `${vehicle.name} (của tôi)` } // i18n-ok — dữ liệu lưu; tx() dịch lúc hiện
@@ -342,7 +347,7 @@ export default function TripPage({ id }: { id: string }) {
       <header ref={headRef} className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-1 bg-navy-950 pl-1 pr-3 text-white sm:h-14 sm:gap-2 sm:pl-2 sm:pr-4">
         <MainMenu onPanel={setPanel} onImport={() => setImporting('menu')} onTour={() => setTour(true)} />
         <Button variant="primary" onClick={newTrip} aria-label={t('Chuyến mới')} title={t('Tạo chuyến mới')} className="w-10 shrink-0 px-0 sm:w-auto sm:px-3.5"><Plus size={18} /><span className="hidden sm:inline">{t('Chuyến mới')}</span></Button>
-        <TripSwitch trip={trip} trips={trips} onRename={name => upsertTrip({ ...trip, name })} onDelete={setDelTrip}
+        <TripSwitch trip={trip} trips={hideSamples ? trips.filter(x => !isSample(x.id)) : trips} onRename={name => upsertTrip({ ...trip, name })} onDelete={setDelTrip}
           onAll={() => setPanel('trips')} onNew={newTrip} onShare={() => setSharing(true)} loose={looseN} onLoose={() => !denyEdit() && setPickOrders('fresh')} />
         <nav className="ml-3 hidden items-center gap-0.5 xl:flex">
           {MENU.map(mn => (
@@ -368,7 +373,7 @@ export default function TripPage({ id }: { id: string }) {
         <section ref={sceneRef} data-scene className={full
           ? 'fixed inset-0 z-40 flex flex-col bg-[#e7ecf2] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)]'
           : cx('sticky top-12 z-10 flex flex-col bg-[#e7ecf2] sm:top-14 lg:relative lg:top-0 lg:order-2 lg:h-full', (kb || !roomy) && 'max-lg:relative max-lg:!top-0')}>
-          <SpecStrip vehicle={vehicle} pallet={pallet} keep={full} onSpecs={() => (catalogLocked() ? setToast(t(LOCKED)) : setSpec(true))} onKind={k => patchVehicle({ kind: k })}
+          <SpecStrip vehicle={vehicle} pallet={pallet} keep={full} onSpecs={() => (catalogLocked() ? setToast(t(LOCKED)) : setSpec(true))} onKind={setTripKind}
             orders={orderRows} onEditOrder={setEditOrder}
             picker={close => (
               <VehicleList vehicle={vehicle} vehicles={vehicles} suggestion={suggestion} fits={hasCargo ? fits : {}} onShown={setPicking}
@@ -436,7 +441,7 @@ export default function TripPage({ id }: { id: string }) {
               )}
             </div>
 
-            {spec && vehicle && <SpecPopup vehicle={vehicle} sharedWith={vehicleSharedWith} onClose={() => setSpec(false)} onPatch={patchVehicle} />}
+            {spec && baseVehicle && <SpecPopup vehicle={baseVehicle} sharedWith={vehicleSharedWith} onClose={() => setSpec(false)} onPatch={patchVehicle} />}
           </div>
         </section>
 
@@ -1637,11 +1642,12 @@ function OrderPicker({ open, fresh, onClose, inTrip, onAdd, onNew }: { open: boo
   const wasOpen = useRef(false)
   useEffect(() => { if (open && !wasOpen.current) setSel([]); wasOpen.current = open }, [open])
   const trips = useData(s => s.trips)
+  const hideSamples = useHideSamples()
   // đơn chưa vào chuyến nào lên trước (đơn đang ở chuyến khác xuống dưới)
   const avail = useMemo(() => {
     const used = new Set(trips.flatMap(x => x.orderIds))
-    return orders.filter(o => !inTrip.includes(o.id)).sort((a, b) => Number(used.has(a.id)) - Number(used.has(b.id)))
-  }, [orders, trips, inTrip])
+    return orders.filter(o => !inTrip.includes(o.id) && !(hideSamples && isSample(o.id))).sort((a, b) => Number(used.has(a.id)) - Number(used.has(b.id)))
+  }, [orders, trips, inTrip, hideSamples])
   const tripName = useMemo(() => new Map(trips.flatMap(tr => tr.orderIds.map(id => [id, tripTitle(tr, orders)] as const))), [trips, orders])
   return (
     <Sheet open={open} onClose={onClose} title={fresh ? t('Xếp đơn lên chuyến mới') : t('Thêm đơn / điểm giao')} subtitle={t('Đơn giao trước được xếp sát cửa')}

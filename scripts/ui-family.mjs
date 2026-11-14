@@ -1,7 +1,7 @@
 // Family mở / đóng, link xin vào, duyệt, phân vai, chuyển quyền, người chỉ xem (chủ dự án 13/11) — máy chủ GIẢ LẬP, không chạm
 // máy chủ thật. Chạy sau `npm run build`: node scripts/ui-family.mjs. Ảnh ra scripts/out/family-*.png để xem bằng mắt.
 import { readFileSync } from 'node:fs'
-import { OUT, T, launch, startPreview } from './ui-lib.mjs'
+import { OUT, T, TX, launch, startPreview } from './ui-lib.mjs'
 let url = ''
 try { url = /^VITE_SUPABASE_URL=(.+)$/m.exec(readFileSync('.env.local', 'utf8'))?.[1]?.trim() ?? '' } catch { /* không có file */ }
 if (!url) { console.log('XANH (bỏ qua: bản này chưa nối máy chủ)'); process.exit(0) }
@@ -31,11 +31,11 @@ let bad = 0
 const ok = (c, m) => { console.log(c ? '  ✓' : '  ✗', m); if (!c) bad++ }
 
 /** Một trình duyệt + máy chủ giả: `me` = vai của userA trong Family 'fam1'. */
-async function fresh({ role = 'owner', peek = PEEK_OPEN, viewport = { width: 1280, height: 800 } } = {}) {
+async function fresh({ role = 'owner', peek = PEEK_OPEN, viewport = { width: 1280, height: 800 }, hide = false } = {}) {
   const ctx = await b.newContext({ viewport })
   const log = []
   const st = {
-    fam: { id: 'fam1', name: 'Cty Thu', discount_code: null, paid_until: null, open: false, link: null, created_at: '2026-11-01' },
+    fam: { id: 'fam1', name: 'Cty Thu', discount_code: null, paid_until: null, open: false, link: null, created_at: '2026-11-01', hide_samples: hide },
     members: [
       { family_id: 'fam1', email: 'usera@thu.vn', name: 'Người userA', role, status: 'active', invited_at: '2026-11-01' },
       ...(role === 'owner' ? [] : [{ family_id: 'fam1', email: 'chu@thu.vn', name: 'Chu', role: 'owner', status: 'active', invited_at: '2026-11-01' }]),
@@ -60,6 +60,7 @@ async function fresh({ role = 'owner', peek = PEEK_OPEN, viewport = { width: 128
     if (rpc === 'family_decline') { st.requested = false; return json(null) }
     if (rpc === 'family_link') { st.fam.link = body().p_new ? 'LINKFAM002' : (st.fam.link ?? 'LINKFAM001'); return json(st.fam.link) }
     if (rpc === 'family_set_open') { st.fam.open = !!body().p_open; return json(null) }
+    if (rpc === 'family_set_hide_samples') { st.fam.hide_samples = !!body().p_hide; return json(null) }
     if (rpc === 'family_approve') { const m = st.members.find(x => x.email === body().p_email); if (m) m.status = 'active'; return json(null) }
     if (rpc === 'family_remove') { st.members = st.members.filter(x => x.email !== body().p_email); return json(null) }
     if (rpc === 'family_set_role') { const m = st.members.find(x => x.email === body().p_email); if (m) m.role = body().p_role; return json(null) }
@@ -159,6 +160,9 @@ for (const vw of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
   const sw = card.getByRole('switch', { name: new RegExp(T('Mở cho người ngoài xem đơn hàng')) })
   await sw.click(); await p.waitForTimeout(800)
   ok(calls(log, 'family_set_open').at(-1)?.args.p_open === true && await sw.getAttribute('aria-checked') === 'true', 'bật Mở ⇒ máy chủ ghi mở')
+  const hideSw = card.getByRole('switch', { name: new RegExp(T('Ẩn dữ liệu mẫu cho cả Family')) })
+  await hideSw.click(); await p.waitForTimeout(800)
+  ok(calls(log, 'family_set_hide_samples').at(-1)?.args.p_hide === true && await hideSw.getAttribute('aria-checked') === 'true', 'bật "Ẩn dữ liệu mẫu cho cả Family" ⇒ máy chủ ghi')
   await card.getByRole('button', { name: T('Chia sẻ Family') }).click(); await p.waitForTimeout(900)
   const share = p.getByRole('dialog').filter({ hasText: T('Link Family') })
   ok((await share.locator('[data-family-url]').inputValue()).endsWith('/f/LINKFAM001'), 'Chia sẻ Family ⇒ có link /f/<mã>')
@@ -207,6 +211,25 @@ console.log('— Thành viên: đơn chưa vào chuyến nào xếp lên chuyế
   const url1 = p.url()
   await p.getByRole('button', { name: T('Xếp {n} đơn lên xe', { n: 1 }) }).click(); await p.waitForTimeout(1500)
   ok(p.url() !== url1 && !(await p.getByRole('dialog').count()) && await p.getByRole('button', { name: /Don Family/ }).first().isVisible(), 'danh sách Đơn hàng: chọn ⇒ Xếp lên xe ⇒ chuyến mới, tấm đóng')
+  ok(!errs.length, 'không lỗi trình duyệt' + (errs.length ? ': ' + errs.join(' | ') : ''))
+  await ctx.close()
+}
+
+console.log('— Family đã ẩn dữ liệu mẫu: thành viên không thấy chuyến / đơn mẫu')
+{
+  const { ctx, p, errs, signIn } = await fresh({ role: 'member', hide: true })
+  await signIn()
+  await p.getByRole('button', { name: T('Danh mục'), exact: true }).click(); await p.waitForTimeout(250)
+  await p.locator('[data-popover]').getByRole('radio', { name: 'Family Cty Thu' }).click(); await p.waitForTimeout(2500)
+  await p.evaluate(() => { location.hash = '#/trip/sample-t1' }); await p.waitForTimeout(1500)
+  ok(!p.url().includes('sample-'), `mở thẳng chuyến mẫu ⇒ về chuyến của Family (${p.url().split('#')[1]})`)
+  await p.locator('[data-tour=trip]').click(); await p.waitForTimeout(400)
+  const pop = p.locator('[data-popover]')
+  ok(!(await pop.getByText(T('Chuyến mẫu có sẵn')).count()) && !(await pop.getByText(TX('Mẫu pallet')).count()), 'ô Chuyến xe ▾: không có nhóm chuyến mẫu')
+  await p.keyboard.press('Escape'); await p.waitForTimeout(200)
+  await p.getByRole('button', { name: T('Danh mục'), exact: true }).click(); await p.waitForTimeout(250)
+  await p.locator('[data-popover]').getByRole('button', { name: T('Đơn hàng'), exact: true }).click(); await p.waitForTimeout(800)
+  ok(!(await p.getByRole('dialog').getByText(TX('Đơn mẫu pallet')).count()) && await p.getByRole('dialog').getByText('Don Family').first().isVisible(), 'danh sách Đơn hàng: không có đơn mẫu, có đơn của Family')
   ok(!errs.length, 'không lỗi trình duyệt' + (errs.length ? ': ' + errs.join(' | ') : ''))
   await ctx.close()
 }

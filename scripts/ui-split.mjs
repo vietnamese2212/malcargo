@@ -51,6 +51,25 @@ for (const dev of [DEVICES[0], { ...DEVICES[1], name: 'small', viewport: { width
   ok(!errs.length, 'không lỗi trình duyệt' + (errs.length ? ': ' + errs.join(' | ') : ''))
   await ctx.close()
 }
+// Thùng rời ↔ Pallet = xem tình huống cho CHUYẾN NÀY (chủ dự án 14/11): xe giữ nguyên, chuyến khác cùng xe không đổi, không đẻ xe "(của tôi)"
+console.log('đổi Thùng rời ↔ Pallet theo chuyến')
+{
+  const two = structuredClone(seed)
+  two.state.trips.push({ id: 's-t2', code: '141126-0900-02', name: '141126-0900-02', vehicleId: 's-v1', orderIds: ['s-o2'], updatedAt: now })
+  two.state.trips[0].orderIds = ['s-o1']
+  const ctx = await b.newContext(DEVICES[0])
+  await ctx.addInitScript(s => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('malcargo-data-v1', JSON.stringify(s)); sessionStorage.setItem('seeded', '1') } }, two)
+  const p = await ctx.newPage(); const errs = watchErrors(p)
+  await p.goto(srv.base + '#/trip/s-t1', { waitUntil: 'networkidle' }); await p.waitForTimeout(1500)
+  await p.getByRole('button', { name: 'Pallet', exact: true }).first().click(); await p.waitForTimeout(800)
+  const st = await data(p)
+  ok(st.trips.find(t => t.id === 's-t1').kind === 'pallet' && !st.trips.find(t => t.id === 's-t2').kind, 'chuyến này ghi Pallet, chuyến kia cùng xe không đổi')
+  ok(st.vehicles.length === 1 && st.vehicles[0].kind === 'loose', 'xe giữ nguyên Thùng rời, không thêm xe')
+  await p.getByRole('button', { name: T('Thùng rời'), exact: true }).first().click(); await p.waitForTimeout(800)
+  ok(!(await data(p)).trips.find(t => t.id === 's-t1').kind, 'đổi lại Thùng rời (= cách chở của xe) ⇒ bỏ cách chở riêng')
+  ok(!errs.length, 'không lỗi trình duyệt' + (errs.length ? ': ' + errs.join(' | ') : ''))
+  await ctx.close()
+}
 await b.close(); await srv.close()
 console.log(bad ? `${bad} phép HỎNG` : 'XANH')
 process.exit(bad ? 1 : 0)

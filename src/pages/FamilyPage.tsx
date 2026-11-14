@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import { Check, ClipboardCopy, Crown, Loader2, Mail, RefreshCw, Send, Share2, Trash2, UsersRound, X } from 'lucide-react'
 import {
   acceptInvite, adminDeleteCode, adminSaveCode, adminSetPrice, applyCode, approveMember, createFamily, declineInvite, deleteFamily, familyLink,
-  inviteMember, isFamAdmin, leaveFamily, myFamilyWork, removeMember, renameFamily, setFamilyOpen, setMemberRole, signInGoogle, switchSpace,
+  inviteMember, isFamAdmin, leaveFamily, myFamilyWork, removeMember, renameFamily, setFamilyHideSamples, setFamilyOpen, setMemberRole, signInGoogle, switchSpace,
   transferOwner, useAuth, useFamily, type Family, type Fee, type Member,
 } from '../data/cloud'
 import { familyUrl } from '../data/famlink'
@@ -241,6 +241,12 @@ function FamilyCard({ f }: { f: Family }) {
             hint={f.open ? t('Ai có link Family xem được đơn hàng (chỉ xem, không sửa). Mã hàng, xe, chuyến vẫn kín.') : t('Đang đóng: chỉ người trong Family xem được dữ liệu.')} />
           <Button className="mt-3 w-full sm:w-auto" onClick={() => setSharing(true)}><Share2 size={16} />{t('Chia sẻ Family')}</Button>
           <p className="mt-1.5 text-[12px] text-slate-600">{t('Gửi link cho người muốn vào: họ đăng nhập rồi bấm Xin vào, bạn duyệt ở đây.')}</p>
+          {/* chủ dự án 14/11: "chủ family có thể chọn — hide hết đơn mẫu đi cho toàn family" */}
+          {f.hideSupported && <div className="mt-4">
+            <Switch checked={f.hideSamples} onChange={v => void run(setFamilyHideSamples(f.id, v))}
+              label={t('Ẩn dữ liệu mẫu cho cả Family')}
+              hint={f.hideSamples ? t('Mọi người trong Family không thấy chuyến và đơn mẫu (Mẫu pallet, Mẫu 40ft).') : t('Chuyến và đơn mẫu đang hiện cho mọi người — để làm quen app.')} />
+          </div>}
         </section>
       )}
 

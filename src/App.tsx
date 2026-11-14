@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Lock } from 'lucide-react'
 import { Shell } from './ui/Shell'
 import { useRoute } from './ui/route'
-import { newId, newTripLabel, useData, useNotice, useSpace } from './data/store'
+import { isSample, newId, newTripLabel, useData, useNotice, useSpace } from './data/store'
+import { hideSamplesNow } from './data/cloud'
 import TripPage from './pages/TripPage'
 import OrdersPage from './pages/OrdersPage'
 import OrderPage from './pages/OrderPage'
@@ -18,7 +19,7 @@ function Home() {
   const trips = useData(s => s.trips)
   const upsertTrip = useData(s => s.upsertTrip)
   useEffect(() => {
-    const latest = [...trips].sort((a, b) => b.updatedAt - a.updatedAt)[0]
+    const latest = [...trips].filter(x => !(hideSamplesNow() && isSample(x.id))).sort((a, b) => b.updatedAt - a.updatedAt)[0]
     let id = latest?.id
     if (!id) {
       id = newId()

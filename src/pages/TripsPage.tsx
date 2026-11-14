@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Boxes, ChevronRight, Plus } from 'lucide-react'
+import { useHideSamples } from '../data/cloud'
 import { denyEdit, findVehicle, isSample, newId, newTripLabel, tripTime, tripTitle, tripsByDay, useAllItems, useAllVehicles, useData } from '../data/store'
 import { resolveOrder } from '../data/resolve'
 import { orderTotals } from '../engine/plan'
@@ -11,7 +12,9 @@ import { t, tx } from '../i18n'
 const GRID = 'sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1.3fr)_48px_72px_88px_84px_16px]'
 
 export default function TripsPage() {
-  const trips = useData(s => s.trips)
+  const allTrips = useData(s => s.trips)
+  const hideSamples = useHideSamples()   // Family đã ẩn dữ liệu mẫu
+  const trips = useMemo(() => (hideSamples ? allTrips.filter(x => !isSample(x.id)) : allTrips), [allTrips, hideSamples])
   const orders = useData(s => s.orders)
   const pallet = useData(s => s.pallet)
   const upsertTrip = useData(s => s.upsertTrip)

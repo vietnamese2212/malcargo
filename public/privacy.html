@@ -103,6 +103,8 @@
   (function () {
     var lang = new URLSearchParams(location.search).get('lang')
     if (!lang) try { lang = JSON.parse(localStorage.getItem('malcargo-lang-v1') || '{}').state.lang } catch (e) {}
+    // chưa chọn trong app ⇒ theo ngôn ngữ của máy (như app)
+    if (!lang) lang = (navigator.languages || [navigator.language]).some(function (l) { return /^vi/i.test(l || '') }) ? 'vi' : 'en'
     if (lang !== 'vi') return
     document.documentElement.lang = 'vi'
     document.title = 'Chính sách bảo mật · MAL Cargo'

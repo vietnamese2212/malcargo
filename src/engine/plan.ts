@@ -9,7 +9,9 @@ import {
 export { spreadTarget } from './loadPlan'
 import type { Item, PalletSettings, VehicleKind } from '../data/types'
 
-export interface TruckInput { id: string; name: string; kind: VehicleKind; l: number; w: number; h: number; payloadKg: number | null }
+export interface TruckInput { id: string; name: string; kind: VehicleKind; l: number; w: number; h: number; payloadKg: number | null
+  own?: boolean   // xe của người dùng / Family (không phải mẫu chung) — gợi ý xe xét các xe này TRƯỚC
+}
 export interface OrderInput { id: string; name: string; place: string; lines: { item: Item; qty: number }[] }
 export interface TripInput {
   truck: TruckInput; orders: OrderInput[]; pallet: PalletSettings
@@ -301,6 +303,12 @@ const leftOf = (p: LoadPlan) => p.leftover.reduce((s, x) => s + x.count, 0)
 
 /** Xe nhỏ nhất (theo thể tích lòng thùng) chở hết hàng và không vượt tải — cùng kiểu xe. */
 export function suggestTruck(orders: OrderInput[], pallet: PalletSettings, candidates: TruckInput[], lightOwnPallet?: boolean, lightOwnLoose?: boolean): string | null {
+  // xe CỦA MÌNH trước (chủ dự án 14/11: đã khai đội xe riêng mà app cứ gợi ý xe mẫu); không xe nào của mình chở hết mới xét mẫu chung
+  const own = candidates.filter(c => c.own)
+  if (own.length && own.length < candidates.length) {
+    const mine = suggestTruck(orders, pallet, own, lightOwnPallet, lightOwnLoose)
+    if (mine) return mine
+  }
   const t = orderTotals(orders.flatMap(o => o.lines), pallet)
   if (!t.cartons) return null
   const list = candidates

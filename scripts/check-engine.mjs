@@ -500,6 +500,17 @@ console.log('• Hàng nhẹ một dải liền, không tháp; công tắc xếp
   ok(b.some(x => x.n === 11) && b.some(x => x.n === 12) && b.every(x => !x.on && (x.n === 11 || x.n === 12)), `số lớp 3D một mã 2.860 thùng: ${b.map(x => x.n).join(', ')}`)
 }
 
+// Gợi ý xe ưu tiên XE CỦA MÌNH (chủ dự án 14/11): xe của tôi chở hết ⇒ chọn xe của tôi dù xe mẫu nhỏ hơn cũng vừa; không xe nào của tôi
+// chở hết ⇒ mới xét mẫu chung
+{
+  const SP2 = E.ADMIN_ITEMS.find(i => i.code === 'SP002').id
+  const ord = q => [{ id: 'o', name: 'O', place: '', lines: [{ item: items[SP2], qty: q }] }]
+  const pool = [{ ...trucks['adm-v-5t'], own: false }, { ...trucks['adm-v-8t'], own: false }, { ...trucks['adm-v-15t'], id: 'my-15', own: true }]
+  ok(E.suggestTruck(ord(200), E.DEFAULT_PALLET_SETTINGS, pool) === 'my-15', 'ưu tiên xe của tôi: 200 thùng vừa xe 5 tấn mẫu nhưng chọn xe 15 tấn của tôi')
+  const small = [{ ...trucks['adm-v-15t'], own: false }, { ...trucks['adm-v-1t5'], id: 'my-1t5', own: true }]
+  ok(E.suggestTruck(ord(600), E.DEFAULT_PALLET_SETTINGS, small) === 'adm-v-15t', 'xe của tôi không chở hết ⇒ xét xe mẫu')
+}
+
 const t0 = performance.now()
 const sug = E.suggestTruck(sample, E.DEFAULT_PALLET_SETTINGS, E.pickPool(E.ADMIN_VEHICLES, undefined))
 console.log(`• Gợi ý xe cho chuyến mẫu: ${sug} (${Math.round(performance.now() - t0)} ms)`)

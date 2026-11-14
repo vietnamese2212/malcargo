@@ -146,4 +146,7 @@ export const FAMILY: Record<string, string> = {
   'Tìm đơn': 'Search orders',
   'Family chưa có đơn hàng nào.': 'This Family has no orders yet.',
   'Xem thêm {n} đơn': 'Show {n} more {n:order|orders}',
+  'Ẩn dữ liệu mẫu cho cả Family': 'Hide sample data for the whole Family',
+  'Mọi người trong Family không thấy chuyến và đơn mẫu (Mẫu pallet, Mẫu 40ft).': 'Nobody in the Family sees the sample trips and orders (Pallet demo, 40ft demo).',
+  'Chuyến và đơn mẫu đang hiện cho mọi người — để làm quen app.': 'Sample trips and orders are shown to everyone — to get to know the app.',
 }
