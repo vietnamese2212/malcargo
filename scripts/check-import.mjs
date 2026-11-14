@@ -246,6 +246,8 @@ console.log('• Nạp file Đơn hàng từ menu: đơn chưa thuộc chuyến 
   ok(tr('Đ1').length === 1 && tr('Đ1')[0].name === 'Đ1' && tr('Đ1')[0].orderIds.length === 1 && tr('Đ1')[0].vehicleId === 'adm-v-5t', 'chuyến riêng: tên = tên đơn, chỉ đơn đó, xe = cột Dòng xe')
   ok(tr('Đ2').length === 1 && tr('Đ2')[0].vehicleId === null, 'không ghi Dòng xe ⇒ chuyến chưa có xe (app tự chọn)')
   ok(tr('Đ3').length === 1 && tr('Đ3')[0].name === 'C1', 'đơn đã có trong file Chuyến ⇒ không đẻ thêm chuyến riêng')
+  const codes = s.trips.map(x => x.code ?? '')
+  ok(codes.every(c => /^\d{6}-\d{4}-\d{2}$/.test(c)) && new Set(codes).size === codes.length, `chuyến mới nhập có mã ngày, không trùng (gom theo ngày — ${codes.join(', ')})`)
   ok(I.parseImport(src, have).trips.length === 1, 'nạp từ Bàn xếp xe (không solo) ⇒ không đẻ chuyến (đơn vào chuyến đang mở)')
   const again = I.parseImport({ orders: [head('orders'), ['Đ1', '', 'SP1', 3]] }, { ...have, orders: [{ id: 'o1', name: 'Đ1', place: '', lines: [], updatedAt: 1 }], trips: [{ id: 't1', name: 'X', vehicleId: null, orderIds: ['o1'], updatedAt: 1 }] }, { solo: true })
   ok(again.orders[0]?.id === 'o1' && !again.trips.length, 'nạp lại đơn đã nằm trong chuyến ⇒ ghi đè đơn, không đẻ chuyến trùng')

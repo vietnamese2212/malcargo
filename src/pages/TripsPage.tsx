@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Boxes, ChevronRight, Plus } from 'lucide-react'
-import { denyEdit, findVehicle, isSample, newId, newTripLabel, tripTitle, useAllItems, useAllVehicles, useData } from '../data/store'
+import { denyEdit, findVehicle, isSample, newId, newTripLabel, tripTime, tripTitle, tripsByDay, useAllItems, useAllVehicles, useData } from '../data/store'
 import { resolveOrder } from '../data/resolve'
 import { orderTotals } from '../engine/plan'
-import { Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SelectBar, SummaryBand, cx, fmtInt, fmtKgShort, fmtM3, useSelection } from '../ui/kit'
+import { Button, Confirm, Empty, ListFooter, ListHead, RowCheck, SelectBar, SummaryBand, cx, fmtDay, fmtInt, fmtKgShort, fmtM3, fmtTime, useSelection } from '../ui/kit'
 import { ListCard, Page, PageHeader, usePanel } from '../ui/Shell'
 import { go, useRoute } from '../ui/route'
 import { t, tx } from '../i18n'
@@ -19,10 +19,13 @@ export default function TripsPage() {
   const vehicles = useAllVehicles()
   const panel = usePanel()
   const route = useRoute()
-  const rows = useMemo(() => [...trips].sort((a, b) => b.updatedAt - a.updatedAt).map(t => {
+  // chủ dự án 14/11: "trong phần chuyến để dữ liệu theo ngày" ⇒ gom theo NGÀY tạo, mỗi ngày một dòng đầu (số chuyến, thùng, tấn)
+  const days = useMemo(() => tripsByDay(trips.map(t => {
     const os = t.orderIds.map(id => orders.find(o => o.id === id)).filter(Boolean).map(o => resolveOrder(o!, items))
-    return { t, v: findVehicle(vehicles, t.vehicleId), n: os.length, tot: orderTotals(os.flatMap(o => o.lines), pallet) }
-  }), [trips, orders, items, vehicles, pallet])
+    const tm = tripTime(t)
+    return { t, v: findVehicle(vehicles, t.vehicleId), n: os.length, tot: orderTotals(os.flatMap(o => o.lines), pallet), made: tm.exact ? fmtTime(tm.at) : null }
+  }), r => r.t), [trips, orders, items, vehicles, pallet])
+  const rows = useMemo(() => days.flatMap(g => g.rows), [days])
   const sum = rows.reduce((s, r) => ({ cartons: s.cartons + r.tot.cartons, kg: s.kg + r.tot.kg }), { cartons: 0, kg: 0 })
   const noVehicle = rows.filter(r => !r.v).length
   // chọn nhiều để xoá (chuyến mẫu không xoá được); xoá luôn các đơn chỉ nằm trong những chuyến đã chọn
@@ -74,7 +77,13 @@ export default function TripsPage() {
               <span>{t('Chuyến')}</span><span>{t('Xe')}</span><span className="text-right">{t('Đơn')}</span><span className="text-right">{t('Thùng')}</span>
               <span className="text-right">{t('Khối lượng')}</span><span className="text-right">{t('Thể tích')}</span><span />
             </ListHead>
-            {rows.map(({ t: trip, v, n, tot }) => (
+            {days.map(g => (
+              <section key={g.day ?? 'mau'} aria-label={g.day == null ? t('Chuyến mẫu có sẵn') : fmtDay(g.day)}>
+                <div className="num flex flex-wrap items-baseline gap-x-2 border-b border-slate-200 bg-slate-50 px-4 py-1.5 text-[13px] text-slate-600">
+                  <span className="font-semibold text-slate-800">{g.day == null ? t('Chuyến mẫu có sẵn') : fmtDay(g.day)}</span>
+                  <span>{t('{n} chuyến', { n: fmtInt(g.rows.length) })} · {t('{n} thùng', { n: fmtInt(g.rows.reduce((a, r) => a + r.tot.cartons, 0)) })} · {fmtKgShort(g.rows.reduce((a, r) => a + r.tot.kg, 0))}</span>
+                </div>
+            {g.rows.map(({ t: trip, v, n, tot, made }) => (
               <div key={trip.id} className={cx('flex border-b border-slate-100 last:border-b-0', sel.has(trip.id) && 'bg-brand-50')}>
                 {/* chuyến mẫu không xoá được — chừa chỗ cho thẳng cột */}
                 {isSample(trip.id) ? <span className="w-11 shrink-0" /> : <RowCheck checked={sel.has(trip.id)} onChange={() => sel.toggle(trip.id)} label={t('Chọn {name}', { name: tripTitle(trip, orders) })} />}
@@ -82,8 +91,9 @@ export default function TripsPage() {
                   className={`group flex min-w-0 flex-1 items-center gap-4 py-3 pr-4 transition-colors hover:bg-slate-50 sm:grid sm:min-h-[52px] sm:py-2 ${GRID}`}>
                   <span className="min-w-0 flex-1">
                     <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{tripTitle(trip, orders)}</span>
+                    {made && <span className="num hidden text-[12px] text-slate-600 sm:block">{made}</span>}
                     <span className="num block text-[13px] leading-snug text-slate-600 sm:hidden">
-                      {v ? tx(v.name) : t('Chưa chọn xe')} · {t('{n} đơn', { n })} · {fmtKgShort(tot.kg)} · {fmtM3(tot.m3)}
+                      {v ? tx(v.name) : t('Chưa chọn xe')} · {t('{n} đơn', { n })} · <span className="whitespace-nowrap">{fmtKgShort(tot.kg)}</span> · <span className="whitespace-nowrap">{fmtM3(tot.m3)}</span>{made && <> · <span className="whitespace-nowrap">{made}</span></>}
                     </span>
                   </span>
                   <span className={`hidden break-words text-sm sm:block ${v ? 'text-slate-700' : 'text-amber-700'}`}>{v ? tx(v.name) : t('Chưa chọn xe')}</span>
@@ -96,6 +106,8 @@ export default function TripsPage() {
                   <ChevronRight size={16} className="shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
                 </a>
               </div>
+            ))}
+              </section>
             ))}
             <ListFooter>{t('{n} chuyến', { n: rows.length })}</ListFooter>
             <SelectBar n={sel.ids.length} total={ids.length} all={sel.all} onAll={sel.toggleAll} onClear={sel.clear} onDelete={() => { setWithOrders(true); setAskDel(true) }} />

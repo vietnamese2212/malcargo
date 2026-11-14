@@ -167,6 +167,29 @@ export function tripMade(trip: Pick<Trip, 'code' | 'name'>): string | null {
   const m = CODE_RE.exec(trip.code ?? trip.name)
   return m ? `${m[1]}/${m[2]} ${m[3]}:${m[4]}` : null
 }
+const CODE_AT = /^(\d{2})(\d{2})(\d{2})-(\d{2})(\d{2})-(\d+)$/
+/** Lúc tạo chuyến (ms, giờ máy) đọc từ mã ddmmyy-hhmm-stt — `exact` = có mã; chuyến không mã (đời trước, nhập Excel trước 14/11)
+ *  ⇒ lần sửa cuối. */
+export function tripTime(trip: Pick<Trip, 'code' | 'name' | 'updatedAt'>): { at: number; exact: boolean } {
+  const m = CODE_AT.exec(trip.code ?? trip.name)
+  if (!m) return { at: trip.updatedAt, exact: false }
+  const [, dd, mm, yy, hh, mi, n] = m.map(Number)
+  // stt trong ngày ⇒ hai chuyến cùng phút vẫn đúng thứ tự tạo
+  return { at: new Date(2000 + yy, mm - 1, dd, hh, mi).getTime() + Math.min(n, 59) * 1000, exact: true }
+}
+/** Gom chuyến theo NGÀY tạo (chủ dự án 14/11: "trong phần chuyến để dữ liệu theo ngày"): ngày mới nhất trước, trong ngày chuyến tạo
+ *  sau đứng trước; chuyến mẫu một nhóm riêng cuối (`day` = null). `day` = 0 giờ ngày đó (giờ máy). */
+export function tripsByDay<R>(rows: R[], tripOf: (r: R) => Trip): { day: number | null; rows: R[] }[] {
+  const keyed = rows.map(r => { const tr = tripOf(r), at = isSample(tr.id) ? null : tripTime(tr).at; return { r, at } })
+  const groups = new Map<number | null, { at: number; r: R }[]>()
+  for (const { r, at } of keyed) {
+    const day = at == null ? null : new Date(at).setHours(0, 0, 0, 0)
+    ;(groups.get(day) ?? groups.set(day, []).get(day)!).push({ r, at: at ?? 0 })
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => (a == null ? 1 : b == null ? -1 : b - a))
+    .map(([day, xs]) => ({ day, rows: xs.sort((p, q) => q.at - p.at).map(x => x.r) }))
+}
 
 /** Chuyến mẫu vừa tách: `orders` = đơn mẫu → đơn mới. `seen` = màn chuyến đã chuyển sang chuyến mới. */
 export interface ForkInfo { from: string; to: string; orders: Record<string, string>; seen: boolean }

@@ -632,3 +632,17 @@ export const fmtDec = (n: number, d = 1) => n.toLocaleString(numLocale(), { maxi
 export const fmtDims = (l: number, w: number, h: number) => `${fmtInt(l)} × ${fmtInt(w)} × ${fmtInt(h)}`
 export const fmtM3 = (m3: number) => `${fmtDec(m3, m3 < 10 ? 2 : 1)} m³`
 export const fmtKgShort = (kg: number) => (kg >= 1000 ? `${fmtDec(kg / 1000, 2)} ${t('tấn')}` : `${fmtInt(kg)} kg`)
+/** Tên ngày cho nhóm theo ngày: "Hôm nay · 14/11", "Hôm qua · 13/11", "Th 4, 12/11" (năm khác ⇒ kèm năm). `day` = 0 giờ ngày đó. */
+export function fmtDay(day: number): string {
+  const d = new Date(day), now = new Date(), today = new Date(now).setHours(0, 0, 0, 0), year = d.getFullYear() !== now.getFullYear()
+  // tiếng Việt dd/mm (trình duyệt tự ghi "14-11" khi không kèm thứ); tiếng Anh "Nov 14"
+  const date = numLocale() === 'vi-VN'
+    ? `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}${year ? `/${d.getFullYear()}` : ''}`
+    : d.toLocaleDateString(numLocale(), { month: 'short', day: 'numeric', year: year ? 'numeric' : undefined })
+  const back = Math.round((today - day) / 86400000)
+  if (back === 0) return `${t('Hôm nay')} · ${date}`
+  if (back === 1) return `${t('Hôm qua')} · ${date}`
+  return `${d.toLocaleDateString(numLocale(), { weekday: 'short' })}, ${date}`
+}
+/** Giờ:phút theo ngôn ngữ. */
+export const fmtTime = (ms: number) => new Date(ms).toLocaleTimeString(numLocale(), { hour: '2-digit', minute: '2-digit' })

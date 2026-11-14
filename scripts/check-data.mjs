@@ -293,5 +293,17 @@ console.log('• Tên chuyến để hiện (chủ dự án 14/11: không có s�
   ok(S.tripMade(tr('x', [])) === '14/11 06:55', 'giờ tạo đọc từ mã chuyến')
 }
 
+console.log('• Chuyến gom theo ngày tạo (chủ dự án 14/11: "trong phần chuyến để dữ liệu theo ngày")')
+{
+  const T = (id, code, updatedAt = 0) => ({ id, ...(code ? { code } : {}), name: code ?? id, orderIds: [], vehicleId: null, updatedAt })
+  const at = S.tripTime(T('a', '141126-0655-02'))
+  ok(at.exact && new Date(at.at).getDate() === 14 && new Date(at.at).getMonth() === 10 && new Date(at.at).getFullYear() === 2026 && new Date(at.at).getHours() === 6, 'lúc tạo đọc từ mã ddmmyy-hhmm-stt')
+  const late = new Date(2026, 10, 12, 21, 0).getTime()
+  ok(!S.tripTime(T('b', null, late)).exact && S.tripTime(T('b', null, late)).at === late, 'chuyến không có mã ⇒ lần sửa cuối')
+  const g = S.tripsByDay([T('a', '131126-0900-01'), T(S.SAMPLE_TRIPS[0].id, null), T('b', '141126-0655-01'), T('c', '141126-0655-02'), T('d', '131126-1800-01'), T('e', null, late)], x => x)
+  ok(g.map(x => x.day == null ? 'mẫu' : new Date(x.day).getDate()).join() === '14,13,12,mẫu', 'ngày mới nhất trước, chuyến mẫu nhóm riêng cuối')
+  ok(g[0].rows.map(x => x.id).join() === 'c,b' && g[1].rows.map(x => x.id).join() === 'd,a', 'trong ngày: chuyến tạo sau đứng trước (cùng phút theo số thứ tự)')
+}
+
 console.log(fail ? `\nĐỎ — ${fail} lỗi` : '\nXANH')
 process.exit(fail ? 1 : 0)

@@ -2,7 +2,7 @@
 // file, hoặc chép bảng dán vào. Trùng tên / mã với cái đã có ⇒ GHI ĐÈ (giữ id cũ), chưa có ⇒ thêm mới.
 // Kiểm chặt (chủ dự án 29/10): tiêu đề cột đúng mẫu, số trong khoảng hợp lý, không trùng trong file — có lỗi là không nhập gì.
 import type { Item, Order, Trip, Vehicle } from './types'
-import { newId, type FamilyRole, type ImportBatch } from './store'
+import { newId, tripCode, type FamilyRole, type ImportBatch } from './store'
 import { getLang, numLocale, t, tx, txEn } from '../i18n'
 import { EN } from '../i18n/en'
 import { saveFile } from '../ui/saveFile'
@@ -249,6 +249,10 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     : [...out.vehicles, ...out.toShared.vehicles, ...have.vehicles]
   const oldOrders = (d: Dest) => d === 'mine' ? ctx.mine?.orders ?? [] : d === 'family' ? ctx.family?.orders ?? [] : have.orders
   const oldTrips = (d: Dest) => d === 'mine' ? ctx.mine?.trips ?? [] : d === 'family' ? ctx.family?.trips ?? [] : have.trips
+  // mã chuyến (ddmmyy-hhmm-stt, lúc nhập) cho chuyến MỚI — chuyến nằm đúng ngày trong danh sách chuyến (chủ dự án 14/11); stt nối tiếp
+  // chuyến đã có của bộ đó + chuyến vừa đặt mã trong lượt này
+  const coded: Trip[] = []
+  const stamp = (d: Dest) => { const code = tripCode([...oldTrips(d), ...coded]); coded.push({ code } as Trip); return code }
   const scopeCell = (rows: Rows, k: SheetKey, i: number) => { const on = scopeOn(rows, k, i); return (r: Rows[number]) => (on ? r[i] : '') }
   const wasDenied = (v: unknown) => { const sv = scopeVal(v); return !!sv && destOf(sv, ctx).denied }
 
@@ -377,7 +381,7 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
       const old = oldTrips(dest).find(x => key(x.name) === key(name))
       if (old) out.updated++
       // chuyến đã có: giữ mã chuyến + cài đặt (hàng nhẹ xe pallet…), file chỉ ghi đè xe và đơn
-      trip = { ...old, id: old?.id ?? newId(), name, vehicleId: old?.vehicleId ?? null, orderIds: [], updatedAt: 0 }
+      trip = { ...old, ...(old ? {} : { code: stamp(dest) }), id: old?.id ?? newId(), name, vehicleId: old?.vehicleId ?? null, orderIds: [], updatedAt: 0 }
       tripMap.set(key(name), trip)
     }
     if (v) trip.vehicleId = v.id
@@ -400,7 +404,7 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
       if (!trip) {
         const old = oldTrips(dest).find(x => key(x.name) === tk)
         if (old) out.updated++
-        trip = { ...old, id: old?.id ?? newId(), name: no[0], vehicleId: old?.vehicleId ?? null, orderIds: [], updatedAt: 0 }
+        trip = { ...old, ...(old ? {} : { code: stamp(dest) }), id: old?.id ?? newId(), name: no[0], vehicleId: old?.vehicleId ?? null, orderIds: [], updatedAt: 0 }
         tripMap.set(tk, trip); tripDest.set(tk, dest)
       }
       trip.orderIds.push(o.id)
@@ -417,7 +421,7 @@ export function parseImport(src: Partial<Record<SheetKey, Rows>>, have: { items:
     for (const [k, o] of orderMap) {
       const dest = orderDest.get(k)!
       if (held.has(o.id) || oldTrips(dest).some(tr => tr.orderIds.includes(o.id))) continue
-      listOf(dest).trips.push({ id: newId(), name: o.name, vehicleId: out.orderTruck[o.id] ?? null, orderIds: [o.id], updatedAt: 0 })
+      listOf(dest).trips.push({ id: newId(), code: stamp(dest), name: o.name, vehicleId: out.orderTruck[o.id] ?? null, orderIds: [o.id], updatedAt: 0 })
     }
   }
   return out
