@@ -2,3 +2,5 @@
 export { explainLoose, explainPallets, explainPalletCards } from '../src/engine/explain'
 export { pickPool } from '../src/data/resolve'
 export { ADMIN_ITEMS, ADMIN_VEHICLES, SAMPLE_ORDERS, SAMPLE_TRIPS, PREV_SAMPLES, DEFAULT_PALLET_SETTINGS } from '../src/data/catalog'
+export { splitTrip } from '../src/engine/split'
+export { layerBadges } from '../src/three/layerBadges'

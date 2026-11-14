@@ -305,5 +305,31 @@ console.log('• Chuyến gom theo ngày tạo (chủ dự án 14/11: "trong ph�
   ok(g[0].rows.map(x => x.id).join() === 'c,b' && g[1].rows.map(x => x.id).join() === 'd,a', 'trong ngày: chuyến tạo sau đứng trước (cùng phút theo số thứ tự)')
 }
 
+console.log('• Chia ra nhiều xe (splitTripInto): xe 1 ở lại, xe sau thành chuyến mới; đơn bị chia ⇒ đơn mới "(k)"')
+{
+  D().replaceAll({ ...base, deleted: {},
+    orders: [order('s-a', 'Đơn A', [{ itemId: 'i1', qty: 100 }, { itemId: 'i2', qty: 40 }, { itemId: 'gone', qty: 5 }], { place: 'Kho 1' }),
+      order('s-b', 'Đơn B', [{ itemId: 'i1', qty: 60 }], { place: 'Kho 2' }), order('s-c', 'Đơn C', [{ itemId: 'i2', qty: 10 }])],
+    trips: [trip('s-t', '281026-0900-01', ['s-a', 's-b', 's-c'], { vehicleId: 'v-big', kind: 'pallet', lightOwnLoose: true })],
+  })
+  // xe 1: Đơn A 70 i1 + 40 i2; xe 2: Đơn A 30 i1 + Đơn B (nguyên); xe 3: Đơn C (nguyên)
+  const parts = [[{ orderId: 's-a', itemId: 'i1', qty: 70 }, { orderId: 's-a', itemId: 'i2', qty: 40 }],
+    [{ orderId: 's-a', itemId: 'i1', qty: 30 }, { orderId: 's-b', itemId: 'i1', qty: 60 }], [{ orderId: 's-c', itemId: 'i2', qty: 10 }]]
+  const fresh = S.splitTripInto('s-t', parts, 'v-small')
+  const st = D(), T0 = st.trips.find(t => t.id === 's-t'), [T2, T3] = fresh.map(id => st.trips.find(t => t.id === id))
+  const A = st.orders.find(o => o.id === 's-a'), A2 = st.orders.find(o => o.id === T2?.orderIds[0])
+  const ls = o => o.lines.map(l => l.itemId + ':' + l.qty).join()
+  ok(fresh.length === 2 && T0.orderIds.join() === 's-a', `chuyến gốc giữ phần xe 1 (${T0.orderIds.join()}), tạo ${fresh.length} chuyến mới`)
+  ok(ls(A) === 'i1:70,i2:40,gone:5', `đơn gốc giữ phần xe 1 + dòng mã không tính được (${ls(A)})`)
+  ok(A2 && A2.id !== 's-a' && A2.name === 'Đơn A (2)' && A2.place === 'Kho 1' && ls(A2) === 'i1:30', `phần sau của đơn bị chia = đơn mới "Đơn A (2)", cùng điểm giao (${A2?.name})`)
+  ok(T2.orderIds.length === 2 && T2.orderIds[1] === 's-b' && T3.orderIds.join() === 's-c', 'đơn nằm trọn một xe chuyển nguyên, giữ thứ tự giao')
+  ok(T2.vehicleId === 'v-big' && T2.kind === 'pallet' && T2.lightOwnLoose && T3.vehicleId === 'v-small' && !T3.kind, 'chuyến mới cùng xe + cài đặt; chuyến cuối dùng xe nhỏ hơn (bỏ cách chở riêng)')
+  ok(/^\d{6}-\d{4}-\d{2}$/.test(T2.code) && T2.code !== T3.code && T2.name === T2.code, `chuyến mới mang mã ngày, không trùng (${T2.code}, ${T3.code})`)
+  const total = id => st.orders.reduce((a, o) => a + o.lines.filter(l => l.itemId === id).reduce((b, l) => b + l.qty, 0), 0)
+  ok(total('i1') === 160 && total('i2') === 50, 'tổng hàng không đổi sau khi chia')
+  ok(S.splitTripInto('sample-t1', parts).length === 0, 'chuyến mẫu: không chia')
+}
+
+
 console.log(fail ? `\nĐỎ — ${fail} lỗi` : '\nXANH')
 process.exit(fail ? 1 : 0)

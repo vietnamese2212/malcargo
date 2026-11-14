@@ -84,6 +84,21 @@ export function parseNum(s: string): number {
   return v === '' ? NaN : Number(v)
 }
 
+/** Ô SỐ THÙNG (dòng hàng): số nguyên ≥ 0, gõ phím nào ghi ngay phím đó (tách chuyến mẫu lúc gõ dựa vào đây); "12,5" / "-5" / chữ ⇒ đỏ,
+ *  KHÔNG ghi (trước 14/11 bỏ mọi ký tự không phải số: "12,5" thành 125). Dấu ngăn nghìn theo ngôn ngữ vẫn nhận ("1.500" = 1500). */
+export function QtyInput({ value, onChange, className, ...rest }:
+  Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'> & { value: number; onChange: (v: number) => void }) {
+  const [raw, setRaw] = useState<string | null>(null)   // null = không gõ dở ⇒ hiện số đang lưu
+  const parse = (s: string) => { if (!s.trim()) return 0; const n = parseNum(s); return Number.isInteger(n) && n >= 0 ? n : null }
+  const bad = raw != null && parse(raw) == null
+  return (
+    <input inputMode="numeric" {...rest} value={raw ?? (value ? String(value) : '')} aria-invalid={bad}
+      onChange={e => { const s = e.target.value; setRaw(s); const n = parse(s); if (n != null && n !== value) onChange(n) }}
+      onBlur={e => { setRaw(null); rest.onBlur?.(e) }}
+      className={cx(className, bad && '!border-red-500 !bg-red-50 focus:!ring-red-100')} />
+  )
+}
+
 export function NumInput({ value, onChange, suffix, className, min = 0, ...rest }:
   Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'> & { value: number | null; onChange: (v: number | null) => void; suffix?: string; min?: number }) {
   const [raw, setRaw] = useState(value == null ? '' : String(value))
@@ -405,11 +420,25 @@ const typingIn = (el: HTMLElement | null) => {
   return !!el && el.contains(a) && isTextField(a)
 }
 
-/** Tấm trượt: điện thoại trượt từ đáy, máy tính trượt từ lề phải. Header + thân cuộn + chân dính đáy. */
-export function Sheet({ open, onClose, title, subtitle, children, footer, wide }: {
+/** Tấm trượt: điện thoại trượt từ đáy, máy tính trượt từ lề phải. Header + thân cuộn + chân dính đáy.
+ *  `dirty` (form có thay đổi chưa lưu): chạm ra ngoài / X / Esc / Back ⇒ hỏi "Bỏ thay đổi?" thay vì đóng luôn (thử 14/11: điền xong
+ *  form mã hàng, cất bàn phím, chạm dải mờ phía trên ⇒ mất hết). Nút "Huỷ" của form là chủ ý bỏ ⇒ form gọi `onClose` thẳng. */
+export function Sheet({ open, onClose, title, subtitle, children, footer, wide, dirty }: {
   open: boolean; onClose: () => void; title: ReactNode; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode; wide?: boolean | 'table'
+  dirty?: boolean
 }) {
   const sheet = useRef<HTMLDivElement>(null), wrap = useRef<HTMLDivElement>(null)
+  const [ask, setAsk] = useState(false), [again, setAgain] = useState(0), askNext = useRef(false)
+  const dirtyRef = useRef(dirty)
+  dirtyRef.current = dirty
+  // Back đã lùi mục lịch sử của tấm ⇒ đẩy lại mục đó TRƯỚC (effect của useBackClose ở trên), rồi mới mở hộp hỏi — hộp hỏi phải nằm
+  // trên cùng để Back kế tiếp đóng hộp (= sửa tiếp), không đóng tấm
+  const tryClose = (fromBack = false) => {
+    if (!dirtyRef.current) { onClose(); return }
+    if (fromBack) { askNext.current = true; setAgain(n => n + 1) } else setAsk(true)
+  }
+  const tryRef = useRef(tryClose)
+  tryRef.current = tryClose
   useTouchContain(wrap, open)
   useEffect(() => {
     if (!open) return
@@ -417,16 +446,18 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, wide }
     const k = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       const all = document.querySelectorAll('[role=dialog][data-sheet],[role=alertdialog]')
-      if (!all.length || all[all.length - 1] === sheet.current) onClose()
+      if (!all.length || all[all.length - 1] === sheet.current) tryRef.current()
     }
     window.addEventListener('keydown', k)
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => { window.removeEventListener('keydown', k); document.body.style.overflow = prev }
-  }, [open, onClose])
+  }, [open])
   const box = useViewportBox(open)
   const { kb } = useVisualView()
-  useBackClose(open, onClose)
+  useBackClose(open, () => tryRef.current(true), again)
+  useEffect(() => { if (askNext.current) { askNext.current = false; setAsk(true) } }, [again])
+  useEffect(() => { if (!open) setAsk(false) }, [open])
   // điện thoại đang gõ mà chạm ra ngoài tấm: chỉ cất bàn phím, KHÔNG đóng tấm — khỏi mất chữ vừa gõ
   const keepOpen = useRef(false)
   if (!open) return null
@@ -434,7 +465,7 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, wide }
     <div ref={wrap} className="fixed inset-0 z-50 flex items-end justify-center sm:items-stretch sm:justify-end" style={box}>
       <div className="absolute inset-0 bg-navy-950/45" style={{ animation: 'fade .15s' }}
         onPointerDown={e => { keepOpen.current = e.pointerType !== 'mouse' && typingIn(sheet.current) }}
-        onClick={() => { if (keepOpen.current) (document.activeElement as HTMLElement).blur(); else onClose() }} />
+        onClick={() => { if (keepOpen.current) (document.activeElement as HTMLElement).blur(); else tryClose() }} />
       <KeyboardShield />
       <div ref={sheet} role="dialog" aria-modal="true" data-sheet
         className={cx('relative flex max-h-[92%] w-full flex-col rounded-t-2xl bg-white shadow-pop sm:h-full sm:max-h-none sm:rounded-none sm:border-l sm:border-slate-200',
@@ -446,12 +477,14 @@ export function Sheet({ open, onClose, title, subtitle, children, footer, wide }
             <h2 className="text-lg font-semibold leading-snug text-slate-900">{title}</h2>
             {subtitle && <p className="mt-0.5 text-[13px] text-slate-600">{subtitle}</p>}
           </div>
-          <IconButton label={t('Đóng')} onClick={onClose} className="-mr-2"><X size={20} /></IconButton>
+          <IconButton label={t('Đóng')} onClick={() => tryClose()} className="-mr-2"><X size={20} /></IconButton>
         </div>
         <div data-scroll className="flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
         {/* bàn phím mở: đáy tấm đã ở trên bàn phím — bỏ khoảng chừa vạch Home */}
         {footer && <div className={cx('border-t border-slate-200 bg-white px-5 py-3', !kb && 'pb-safe')}>{footer}</div>}
       </div>
+      <Confirm open={ask} onClose={() => setAsk(false)} title={t('Bỏ những gì vừa sửa?')} body={t('Các thay đổi chưa lưu sẽ mất.')}
+        okText={t('Bỏ thay đổi')} cancelText={t('Sửa tiếp')} onOk={onClose} />
     </div>,
     document.body,
   )
@@ -632,6 +665,8 @@ export const fmtDec = (n: number, d = 1) => n.toLocaleString(numLocale(), { maxi
 export const fmtDims = (l: number, w: number, h: number) => `${fmtInt(l)} × ${fmtInt(w)} × ${fmtInt(h)}`
 export const fmtM3 = (m3: number) => `${fmtDec(m3, m3 < 10 ? 2 : 1)} m³`
 export const fmtKgShort = (kg: number) => (kg >= 1000 ? `${fmtDec(kg / 1000, 2)} ${t('tấn')}` : `${fmtInt(kg)} kg`)
+/** Khối lượng khi có thể có mã chưa khai kg: biết hết ⇒ "1,25 tấn"; biết một phần ⇒ "≥1,25 tấn"; chưa biết gì ⇒ "?". */
+export const fmtKgOf = (t: { kg: number; kgKnown: boolean }) => (t.kgKnown ? fmtKgShort(t.kg) : t.kg > 0 ? `≥${fmtKgShort(t.kg)}` : '?')
 /** Ngày ĐỦ ngày tháng năm (chủ dự án 14/11): tiếng Việt "14/11/2026"; tiếng Anh "14 Nov 2026" (ngày trước tháng — "11/14" dễ đọc nhầm). */
 export function fmtDate(ms: number): string {
   const d = new Date(ms)

@@ -5,7 +5,7 @@ import { denyEdit, isSample, newId, newTripLabel, tripTitle, useAllItems, useDat
 import type { Order } from '../data/types'
 import { orderTotals } from '../engine/plan'
 import { resolveOrder } from '../data/resolve'
-import { BoxGlyph, Button, Confirm, Empty, Field, IconButton, SectionBand, TextInput, cx, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3, useVisualView } from '../ui/kit'
+import { BoxGlyph, Button, Confirm, Empty, Field, IconButton, QtyInput, SectionBand, TextInput, cx, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3, useVisualView } from '../ui/kit'
 import { ListCard, Page, PageHeader } from '../ui/Shell'
 import { ItemPicker } from '../ui/ItemPicker'
 import { go, replaceRoute } from '../ui/route'
@@ -104,8 +104,8 @@ export default function OrderPage({ id, back }: { id: string; back?: string }) {
                     </div>
                     <div className="ml-auto flex items-center gap-1">
                       <IconButton label={t('Bớt 1')} onClick={() => setQty(l.itemId, l.qty - 1)} disabled={l.qty <= 0} className="border border-slate-300"><Minus size={16} /></IconButton>
-                      <input inputMode="numeric" value={l.qty || ''} placeholder={t('Số thùng')} aria-label={t('Số thùng {name}', { name: tx(it.name) })}
-                        onChange={e => setQty(l.itemId, Number(e.target.value.replace(/\D/g, '')) || 0)}
+                      <QtyInput value={l.qty} placeholder={t('Số thùng')} aria-label={t('Số thùng {name}', { name: tx(it.name) })}
+                        onChange={n => setQty(l.itemId, n)}
                         className={cx('tap num w-[84px] rounded-md border px-2 text-center text-base font-semibold outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-sm',
                           l.qty > 0 ? 'border-slate-300' : 'border-amber-400 bg-amber-50 placeholder:text-[13px] placeholder:font-normal placeholder:text-amber-800')} />
                       <IconButton label={t('Thêm 1')} onClick={() => setQty(l.itemId, l.qty + 1)} className="border border-slate-300"><Plus size={16} /></IconButton>

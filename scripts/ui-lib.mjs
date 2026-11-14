@@ -11,9 +11,11 @@ import { pathToFileURL } from 'node:url'
 export const OUT = join(process.cwd(), 'scripts', 'out')
 mkdirSync(OUT, { recursive: true })
 
+// UI_DIST: phục vụ bản build ở thư mục khác (hai việc kiểm chạy song song không giẫm lên dist/ của nhau)
 export async function startPreview(port = 4180) {
-  if (!existsSync('dist/index.html')) throw new Error('Chưa có dist/ — chạy `npm run build` trước.')
-  const server = await preview({ preview: { port, host: '127.0.0.1', strictPort: true }, logLevel: 'silent' })
+  const outDir = process.env.UI_DIST || 'dist'
+  if (!existsSync(join(outDir, 'index.html'))) throw new Error(`Chưa có ${outDir}/ — chạy \`npm run build\` trước.`)
+  const server = await preview({ build: { outDir }, preview: { port, host: '127.0.0.1', strictPort: true }, logLevel: 'silent' })
   return { base: `http://127.0.0.1:${port}/`, close: () => new Promise(r => server.httpServer.close(r)) }
 }
 

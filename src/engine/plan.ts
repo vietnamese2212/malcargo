@@ -206,7 +206,9 @@ export function computeTrip(input: TripInput): TripResult {
     const guessed = missing.filter(g => { const it = itemOf(g); return !!it && !!perPalletOf(it, spec) })
     const unknown = missing.filter(g => !guessed.includes(g))   // thùng không nằm nổi trên chân pallet
     if (guessed.length) warnings.push(`Chưa khai số thùng/pallet: ${names(guessed)} — đang ước theo cỡ thùng.`) // i18n-ok
-    if (unknown.length) warnings.push(`Chưa khai số thùng/pallet: ${names(unknown)} — đang tạm tính mỗi mã 1 pallet.`) // i18n-ok
+    // thùng không nằm nổi trên chân pallet (to hơn chân / cao hơn trần) mà chưa khai số thùng/pallet: lõi coi cả dòng là 1 pallet
+    // ⇒ báo "Vừa xe" cho 200 thùng 1,3 m trên 1 pallet (thử 14/11). Không đoán được ⇒ KHÔNG xếp, nói rõ cách sửa.
+    if (unknown.length) errors.push(`Thùng không đặt lên pallet được: ${names(unknown)} — khai số thùng/pallet cho mã này, hoặc chở thùng rời.`) // i18n-ok
     const srcByKey = new Map(toPal.map(g => [g.key, g]))
     const lightIds = new Set(allLines.filter(l => l.item.light).map(l => l.item.id))
     const maxLayers = new Map(allLines.filter(l => l.item.maxLayers).map(l => [l.item.id, l.item.maxLayers!]))

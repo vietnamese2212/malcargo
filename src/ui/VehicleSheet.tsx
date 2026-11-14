@@ -23,7 +23,8 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
   const [askDel, setAskDel] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  useEffect(() => { if (open) { setF(vehicle ? { ...vehicle, name: tx(vehicle.name) } : blank(asSample ? 'admin' : 'me')); setTried(false); setErr(null) } }, [open, vehicle, asSample])
+  const start = useRef('')   // bản lúc mở — khác thì tấm hỏi trước khi bỏ (chạm ra ngoài / Back)
+  useEffect(() => { if (open) { const v = vehicle ? { ...vehicle, name: tx(vehicle.name) } : blank(asSample ? 'admin' : 'me'); setF(v); start.current = JSON.stringify(v); setTried(false); setErr(null) } }, [open, vehicle, asSample])
   const nameOf = () => untx(f.name.trim(), vehicle?.name ?? '') || f.plate.trim().toUpperCase()
 
   // Mẫu chung vẫn sửa được: bấm Lưu ⇒ thành xe CỦA TÔI (id mới), mẫu giữ nguyên. Admin thì lưu thẳng vào mẫu chung.
@@ -71,7 +72,7 @@ export function VehicleSheet({ vehicle, open, onClose, onSaved, asSample }: {
   }
 
   return (
-    <Sheet open={open} onClose={onClose} wide
+    <Sheet open={open} onClose={onClose} wide dirty={!ro && !busy && JSON.stringify(f) !== start.current}
       title={sample ? (vehicle ? t('Xe mẫu: {name}', { name: tx(vehicle.name) }) : t('Thêm xe mẫu chung')) : vehicle ? t('Sửa xe') : t('Thêm xe')}
       subtitle={adminEdit ? <><Badge tone="blue">Admin</Badge> {t('Lưu mẫu chung: mọi người dùng thấy ngay.')}</>
         : ro ? t(LOCKED) : sample ? t('Sửa rồi bấm Lưu, xe thành của bạn. Mẫu chung giữ nguyên.') : t('Đo LÒNG thùng (bên trong), tính bằng mm')}

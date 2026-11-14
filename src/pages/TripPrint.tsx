@@ -31,7 +31,8 @@ const perPallet = (g?: TripResult['meta'][number]) => {
 export function tripVerdict(r: TripResult, vehicle: Vehicle) {
   const p = r.plan
   const left = p.leftover.reduce((s, x) => s + x.count, 0)
-  const pal = vehicle.kind === 'pallet'
+  // kiểu chở theo KẾT QUẢ đang hiện, không theo xe: vừa đổi Pallet → Thùng rời mà sơ đồ cũ còn hiện thì "Thiếu 24 thùng" là số pallet (thử 14/11)
+  const pal = r.meta.length ? r.meta.some(m => m.isPallet) : vehicle.kind === 'pallet'
   const sum = (u: 'pallet' | 'thùng', k: 'placed' | 'total') => r.count.filter(c => c.unit === u).reduce((s, c) => s + c[k], 0) // i18n-ok — đơn vị của thuật toán
   const palPlaced = sum('pallet', 'placed'), palTotal = sum('pallet', 'total')
   const topPlaced = sum('thùng', 'placed'), topTotal = sum('thùng', 'total') // i18n-ok
@@ -43,7 +44,9 @@ export function tripVerdict(r: TripResult, vehicle: Vehicle) {
   // có mã chưa khai kg ⇒ tải chưa rõ: đừng ghi "Tải 0%" (thử 31/10) — biết được một phần thì ghi "≥", chưa biết gì thì "?"
   const kgPart = (s: string) => (r.totals.kgKnown ? s : r.weightKg > 0 ? `≥${s}` : '?')
   const loadPct = r.totals.kgKnown || r.weightKg > 0 ? r.payloadPct : null
-  return { left, pal, palPlaced, palTotal, topPlaced, topTotal, head, count, kgPart, loadPct }
+  // thể tích ĐÃ LÊN XE / lòng thùng — hàng chưa lên được không cộng vào (trước ghi tổng hàng đặt cạnh % đã xếp: "91,7 m³ · 83%" cho xe 51,9 m³)
+  const boxM3 = (vehicle.l * vehicle.w * vehicle.h) / 1e9, loadedM3 = (boxM3 * p.volumePct) / 100
+  return { left, pal, palPlaced, palTotal, topPlaced, topTotal, head, count, kgPart, loadPct, boxM3, loadedM3 }
 }
 
 /** Khung 3D đang hiện ⇒ ảnh PNG (góc người dùng đang xem). Chưa có khung ⇒ null. */
@@ -59,9 +62,11 @@ export function TripPrint({ png, tripName, vehicle, orders, resolved, r, colors,
     const done = () => { if (!gone) { gone = true; onDone() } }
     window.addEventListener('afterprint', done)
     const img = document.querySelector<HTMLImageElement>('[data-print] img')
-    const go = () => requestAnimationFrame(() => { window.print(); setTimeout(done, 500) })
+    // máy tính: print() chờ hộp in đóng ⇒ afterprint. Điện thoại (iOS / Android) print() trả về NGAY: bỏ khối sau 500 ms thì phiếu
+    // chưa kịp dựng ⇒ chỉ bỏ ở afterprint, hoặc khi người dùng chạm lại vào app (khối ẩn trên màn hình, để lâu không sao)
+    const go = () => requestAnimationFrame(() => { window.print(); setTimeout(() => window.addEventListener('pointerdown', done, { once: true }), 1500) })
     if (img && !img.complete) img.addEventListener('load', go, { once: true }); else go()
-    return () => { window.removeEventListener('afterprint', done) }
+    return () => { window.removeEventListener('afterprint', done); window.removeEventListener('pointerdown', done) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const v = tripVerdict(r, vehicle), p = r.plan
@@ -101,7 +106,7 @@ export function TripPrint({ png, tripName, vehicle, orders, resolved, r, colors,
               {v.kgPart(fmtKgShort(r.weightKg))}{vehicle.payloadKg ? ` / ${fmtKgShort(vehicle.payloadKg)}` : ''}{v.loadPct != null ? ` · ${fmtDec(v.loadPct, 0)}%` : ''}
             </td>
             <th className={th}>{t('Thể tích')} · {t('Sàn')}</th>
-            <td className={cell + ' num'}>{fmtM3(r.totals.m3)} · {fmtDec(p.volumePct, 0)}% · {m((vehicle.l * p.lengthUsedPct) / 100)}/{m(vehicle.l)} m</td>
+            <td className={cell + ' num'}>{fmtM3(v.loadedM3)} / {fmtM3(v.boxM3)} · {fmtDec(p.volumePct, 0)}% · {m((vehicle.l * p.lengthUsedPct) / 100)}/{m(vehicle.l)} m</td>
           </tr>
         </tbody>
       </table>
@@ -139,7 +144,7 @@ export function TripPrint({ png, tripName, vehicle, orders, resolved, r, colors,
       <h2 className="mt-3 text-[12.5px] font-bold">{t('Bảng đếm chân')} <span className="font-normal">· {t('thứ tự xếp từ cabin ra cửa')}</span></h2>
       <table className="mt-1 w-full border-collapse">
         <thead>
-          <tr><th className={th} style={{ width: '5%' }}>#</th><th className={th}>{t('Hàng')}</th><th className={th}>{t('Đơn')}</th><th className={th}>{t('Cách xếp')}</th><th className={th + ' text-right'} style={{ width: '13%' }}>{t('Số lượng')}</th></tr>
+          <tr><th className={th} style={{ width: '5%' }}>#</th><th className={th}>{t('Hàng')}</th><th className={th} style={{ width: '18%' }}>{t('Đơn')}</th><th className={th}>{t('Cách xếp')}</th><th className={th + ' text-right'} style={{ width: '13%' }}>{t('Số lượng')}</th></tr>
         </thead>
         <tbody>
           {r.count.map((c, i) => (

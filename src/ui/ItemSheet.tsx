@@ -25,7 +25,8 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample, onUnlink }: 
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const box = useRef<HTMLFieldSetElement>(null)
-  useEffect(() => { if (open) { setF(item ? { ...item, name: tx(item.name) } : blank(asSample ? 'admin' : 'me')); setTried(false); setErr(null) } }, [open, item, asSample])
+  const start = useRef('')   // bản lúc mở — khác thì tấm hỏi trước khi bỏ (chạm ra ngoài / Back)
+  useEffect(() => { if (open) { const v = item ? { ...item, name: tx(item.name) } : blank(asSample ? 'admin' : 'me'); setF(v); start.current = JSON.stringify(v); setTried(false); setErr(null) } }, [open, item, asSample])
   const nameOf = () => untx(f.name.trim(), item?.name ?? '')
 
   // Mẫu chung vẫn sửa được: bấm Lưu ⇒ thành mã CỦA TÔI (id mới), mẫu giữ nguyên. Admin thì lưu thẳng vào mẫu chung.
@@ -79,7 +80,7 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample, onUnlink }: 
   }
 
   return (
-    <Sheet open={open} onClose={onClose}
+    <Sheet open={open} onClose={onClose} dirty={!ro && !busy && JSON.stringify(f) !== start.current}
       title={sample ? (item ? t('Mã mẫu: {name}', { name: tx(item.name) }) : t('Thêm mã mẫu chung')) : item ? t('Sửa mã hàng') : t('Thêm mã hàng')}
       subtitle={adminEdit ? <><Badge tone="blue">Admin</Badge> {t('Lưu mẫu chung: mọi người dùng thấy ngay.')}</>
         : ro ? t(LOCKED) : sample ? t('Sửa rồi bấm Lưu, mã thành của bạn. Mẫu chung giữ nguyên.') : t('Kích thước tính bằng milimét (mm)')}
@@ -102,7 +103,11 @@ export function ItemSheet({ item, open, onClose, onSaved, asSample, onUnlink }: 
           <Field label={t('Tên hàng')} error={tried ? errs.name : null}><TextInput value={f.name} onChange={e => set('name', e.target.value)} placeholder={t('Sữa 110ml x48')} /></Field>
         </div>
         <Field label={t('Kích thước thùng (mm) — dài × rộng × cao')} error={tried ? errs.dims : null}
-          hint={looksCm ? <span className="text-amber-800">{t('Số khá nhỏ — có phải bạn đang nhập cm? Ô này tính bằng mm (40 cm = 400 mm).')}</span> : t('Đo mặt ngoài thùng. Thùng đứng đúng chiều mũi tên thì "cao" là chiều đứng.')}>
+          // gõ cm vào ô mm (38 × 26 × 22) ⇒ thùng 38 mm, xe "chở" hàng nghìn thùng tí hon (thử 14/11) — một chạm đổi sang mm
+          hint={looksCm ? <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-amber-800">{t('Số khá nhỏ — có phải bạn đang nhập cm? Ô này tính bằng mm (40 cm = 400 mm).')}
+            <button type="button" onClick={() => setF(x => ({ ...x, l: x.l * 10, w: x.w * 10, h: x.h * 10 }))}
+              className="tap rounded-md border border-amber-400 bg-amber-50 px-2.5 text-[13px] font-semibold text-amber-900 hover:bg-amber-100">{t('Đổi sang mm (×10)')}</button></span>
+            : t('Đo mặt ngoài thùng. Thùng đứng đúng chiều mũi tên thì "cao" là chiều đứng.')}>
           <div className="grid grid-cols-3 gap-2">
             <NumInput value={f.l || null} onChange={v => set('l', v ?? 0)} placeholder={t('Dài')} />
             <NumInput value={f.w || null} onChange={v => set('w', v ?? 0)} placeholder={t('Rộng')} />

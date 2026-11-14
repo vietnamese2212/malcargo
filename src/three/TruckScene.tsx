@@ -10,6 +10,8 @@ import type { LoadPlan } from '../engine/loadPlan'
 import type { PlanGroupMeta } from '../engine/plan'
 import { buildTruck, type TruckHandle } from './truckModel'
 import { buildCargo, type CargoHandle, type CartonPrint } from './cargo'
+import { buildMarks, type MarksHandle } from './marks'
+import { layerBadges } from './layerBadges'
 import { concreteTexture } from './textures'
 import { t } from '../i18n'
 
@@ -40,6 +42,7 @@ interface Ctx {
   ao: GTAOPass | null
   truck: TruckHandle | null
   cargo: CargoHandle | null
+  marks: MarksHandle | null   // nhãn số lớp trên nóc từng vùng hàng
   walls: 'glass' | 'open'
   dirty: boolean
   moved: boolean
@@ -173,7 +176,7 @@ export default function TruckScene(p: TruckSceneProps) {
         orig()
         scene.traverse(o => {
           const m = o as THREE.Mesh
-          if (!m.isMesh || !m.visible) return
+          if (!(m.isMesh || (o as THREE.Sprite).isSprite) || !m.visible) return   // nhãn số lớp (sprite) cũng không tính che khuất
           const mat = Array.isArray(m.material) ? m.material[0] : m.material
           if (m.userData.noAO || mat?.transparent) { m.visible = false; inner._visibilityCache.push(m) }
         })
@@ -182,7 +185,7 @@ export default function TruckScene(p: TruckSceneProps) {
       composer.addPass(new OutputPass())
     } catch { composer = null; ao = null }
 
-    const c: Ctx = { renderer, scene, camera, controls, sun, blob, ao, truck: null, cargo: null, walls: 'open', dirty: true, moved: false, tween: null }
+    const c: Ctx = { renderer, scene, camera, controls, sun, blob, ao, truck: null, cargo: null, marks: null, walls: 'open', dirty: true, moved: false, tween: null }
     ctx.current = c
     controls.addEventListener('change', () => { c.dirty = true; c.moved = true })
 
@@ -240,7 +243,7 @@ export default function TruckScene(p: TruckSceneProps) {
 
     return () => {
       cancelAnimationFrame(raf); ro.disconnect(); controls.dispose()
-      c.cargo?.dispose(); c.truck?.dispose()
+      c.cargo?.dispose(); c.marks?.dispose(); c.truck?.dispose()
       composer?.dispose(); ao?.dispose()
       envTex.dispose(); pmrem.dispose(); groundTex.dispose()
       scene.traverse(o => {
@@ -259,10 +262,13 @@ export default function TruckScene(p: TruckSceneProps) {
     const c = ctx.current
     if (!c) return
     if (c.truck) { c.scene.remove(c.truck.group); c.truck.dispose(); c.truck = null }
+    if (c.marks) { c.scene.remove(c.marks.group); c.marks.dispose(); c.marks = null }
     if (!p.truck) { c.dirty = true; return }
     const t = buildTruck({ L: p.truck.l / 1000, W: p.truck.w / 1000, H: p.truck.h / 1000, container: p.truck.container, plate: p.truck.plate })
     c.truck = t
     c.scene.add(t.group)
+    c.marks = buildMarks({ length: p.truck.l, width: p.truck.w }, t.floorY)
+    c.scene.add(c.marks.group)
     const b = t.bounds
     const cx = (b.minX + b.maxX) / 2, len = b.maxX - b.minX
     c.blob.scale.set(len + 1.6, b.halfW * 2 + 1.2, 1); c.blob.position.x = cx
@@ -300,6 +306,13 @@ export default function TruckScene(p: TruckSceneProps) {
   }, [p.plan, p.prints, tk])
 
   useEffect(() => { const c = ctx.current; if (c?.cargo) { c.cargo.setStep(p.step ?? null); c.dirty = true } }, [p.step])
+  // số lớp theo vùng: theo bước đang xem + khối đang soi; sơ đồ / xe đổi thì tính lại
+  useEffect(() => {
+    const c = ctx.current
+    if (!c?.marks) return
+    c.marks.update(p.plan && p.meta && p.plan.placed.length ? layerBadges(p.plan, p.meta, p.step ?? null, p.focus ?? null) : [])
+    c.dirty = true
+  }, [p.plan, p.meta, p.step, p.focus, tk])
   useEffect(() => { const c = ctx.current; if (c?.cargo) { c.cargo.setFocus(p.focus ?? null, p.focusItem); c.dirty = true } }, [p.focus, p.focusItem])
   useEffect(() => { const c = ctx.current; if (c) { c.walls = p.walls ?? 'open'; c.dirty = true } }, [p.walls])
   useEffect(() => { const c = ctx.current; if (c && p.view) goTo(c, p.view.preset, true) }, [p.view?.n])

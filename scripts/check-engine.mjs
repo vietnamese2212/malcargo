@@ -428,6 +428,78 @@ console.log('• Hàng nhẹ một dải liền, không tháp; công tắc xếp
   ok(palOwn.plan.placed.length === palBase.plan.placed.length, 'công tắc xe xá không được đổi xe pallet')
 }
 
+// Chia ra nhiều xe (`splitTrip`, chủ dự án 14/11: phát triển app thật sự): một xe không chở hết ⇒ chia hàng ra nhiều xe cùng loại.
+// Mỗi phần phải VỪA xe khi tính đủ bước (mở chuyến ra là "Vừa xe"), cộng các phần đúng bằng hàng đã đặt, không xe nào quá tải.
+{
+  const line = (o, k) => o.lines.reduce((m, l) => m.set(o.id + '|' + l.item.id, (m.get(o.id + '|' + l.item.id) ?? 0) + l.qty), k)
+  const check = (name, truck, orders, opt = {}) => {
+    const t0 = performance.now()
+    const input = { truck, orders, pallet: E.DEFAULT_PALLET_SETTINGS, ...opt }
+    const res = E.splitTrip(input)
+    const ms = Math.round(performance.now() - t0)
+    ok(!res.error, `chia xe ${name}: lỗi ${res.error} ${res.stuck ?? ''}`)
+    const want = orders.reduce((m, o) => line(o, m), new Map()), got = new Map()
+    for (const part of res.parts) for (const x of part) got.set(x.orderId + '|' + x.itemId, (got.get(x.orderId + '|' + x.itemId) ?? 0) + x.qty)
+    ok([...want].every(([k, n]) => got.get(k) === n) && got.size === want.size, `chia xe ${name}: cộng các phần ≠ hàng đã đặt`)
+    res.parts.forEach((part, i) => {
+      const r = E.computeTrip({ ...input, orders: orders.map(o => ({ ...o, lines: part.filter(x => x.orderId === o.id).map(x => ({ item: o.lines.find(l => l.item.id === x.itemId).item, qty: x.qty })) })).filter(o => o.lines.length) })
+      invariants(`chia xe ${name} · xe ${i + 1}`, r)
+      ok(r.fits, `chia xe ${name}: xe ${i + 1} không vừa (${r.plan.placedCount}/${r.plan.totalCount}, quá tải ${r.overweight})`)
+    })
+    console.log(`• Chia xe — ${name}: ${res.parts.length} xe (${res.parts.map(p => p.reduce((s, x) => s + x.qty, 0)).join(' + ')} thùng), ${ms} ms`)
+    return res
+  }
+  const o = (id, ls) => ({ id, name: 'Đơn ' + id, place: '', lines: ls.map(([it, q]) => ({ item: items[it], qty: q })) })
+  const SP1 = E.ADMIN_ITEMS.find(i => i.code === 'SP001').id, SP2 = E.ADMIN_ITEMS.find(i => i.code === 'SP002').id, SP8 = E.ADMIN_ITEMS.find(i => i.code === 'SP008').id
+  // container 40ft thùng rời: 4.000 TBA 180 + 3.000 TBA 110 (một xe chỉ ~2.860 TBA 180)
+  const a = check('container 40ft thùng rời, 2 đơn 7.000 thùng', trucks['adm-v-c40'], [o('A', [[SP2, 4000], [SP8, 300]]), o('B', [[SP1, 3000]])])
+  ok(a.parts.length >= 2 && a.parts.length <= 4, `chia xe container: số xe ${a.parts.length} (mong 2–4)`)
+  // xe pallet 15 tấn: chuyến mẫu pallet × 2 (34 pallet, một xe 17)
+  const palTrip = E.SAMPLE_TRIPS.find(t => t.id === 'sample-t1')
+  const palOrders = palTrip.orderIds.map(id => E.SAMPLE_ORDERS.find(x => x.id === id)).map(x => ({ ...orderOf(x), lines: orderOf(x).lines.map(l => ({ ...l, qty: l.qty * 2 })) }))
+  const b = check('xe pallet 15 tấn, mẫu pallet × 2', trucks[palTrip.vehicleId], palOrders)
+  ok(b.parts.length >= 2 && b.parts.length <= 3, `chia xe pallet: số xe ${b.parts.length} (mong 2–3)`)
+  // quá TẢI mà vẫn đủ chỗ: thùng nặng trên xe 5 tấn ⇒ chia theo tải
+  const heavy = { ...items[SP2], id: 'nang', code: 'NANG', name: 'Hàng nặng', kg: 40 }
+  items.nang = heavy
+  const c = check('xe 5 tấn quá tải (hàng 40 kg/thùng)', trucks['adm-v-5t'], [o('C', [['nang', 300]])])
+  ok(c.parts.length === 3, `chia xe theo tải: 300 × 40 kg = 12 tấn trên xe 5 tấn ⇒ 3 xe (được ${c.parts.length})`)
+  // thùng to hơn lòng xe ⇒ báo, không chia mãi
+  items.to = { ...items[SP2], id: 'to', code: 'TO', name: 'Thùng to', l: 9000, w: 3000, h: 3000 }
+  const d = E.splitTrip({ truck: trucks['adm-v-5t'], orders: [o('D', [['to', 2], [SP2, 10]])], pallet: E.DEFAULT_PALLET_SETTINGS })
+  ok(d.error === 'unplaceable', `thùng to hơn xe ⇒ báo không lên được (được ${d.error ?? 'không lỗi'}, ${d.parts.length} phần)`)
+}
+
+// Xe pallet + mã chưa khai thùng/pallet mà thùng không nằm nổi trên chân pallet (to hơn chân / cao hơn trần): trước 14/11 lõi coi cả dòng
+// là 1 pallet ⇒ "Vừa xe" cho 200 thùng 1,3 m trên xe 8 tấn. Nay báo lỗi, không vừa.
+{
+  const tv = { ...items[E.ADMIN_ITEMS[0].id], id: 'tv', code: 'TV', name: 'Tivi', l: 1300, w: 1050, h: 500, kg: 30, perPallet: null, maxLayers: null }
+  const r = E.computeTrip({ truck: trucks['adm-v-p8t'], orders: [{ id: 'tv', name: 'Đơn TV', place: '', lines: [{ item: tv, qty: 200 }] }], pallet: E.DEFAULT_PALLET_SETTINGS })
+  ok(!r.fits && r.errors.some(e => e.startsWith('Thùng không đặt lên pallet được: Tivi')), `xe pallet, thùng to hơn chân pallet chưa khai thùng/pallet ⇒ không vừa, báo lỗi (fits ${r.fits}, ${r.errors.join(' | ')})`)
+  const ok2 = E.computeTrip({ truck: trucks['adm-v-p8t'], orders: [{ id: 'tv', name: 'Đơn TV', place: '', lines: [{ item: { ...tv, perPallet: 1 }, qty: 12 }] }], pallet: E.DEFAULT_PALLET_SETTINGS })
+  ok(!ok2.errors.some(e => e.startsWith('Thùng không đặt lên pallet được')), 'đã khai thùng/pallet ⇒ không báo lỗi đó')
+}
+
+// Số lớp trên hình 3D (chủ dự án 14/11): nhãn theo vùng chân cùng số lớp; xe pallet = số lớp thùng trên pallet; theo bước + khối đang soi
+{
+  for (const st of E.SAMPLE_TRIPS) {
+    const orders = st.orderIds.map(id => E.SAMPLE_ORDERS.find(o => o.id === id)).map(orderOf)
+    const r = E.computeTrip({ truck: trucks[st.vehicleId], orders, pallet: E.DEFAULT_PALLET_SETTINGS })
+    const b = E.layerBadges(r.plan, r.meta, null, null)
+    const H = trucks[st.vehicleId].h, maxL = Math.max(...orders.flatMap(o => o.lines.map(l => (st.vehicleId === 'adm-v-c40' ? l.item.looseLayers || l.item.maxLayers : l.item.maxLayers) || 99)))
+    ok(b.length > 0 && b.every(x => x.n >= 1 && x.n <= Math.max(maxL, 30) && x.top <= H + 1 && x.x >= 0 && x.x <= trucks[st.vehicleId].l),
+      `số lớp 3D ${st.name}: ${b.length} nhãn, lớp ${[...new Set(b.map(x => (x.on ? '+' : '') + x.n))].join(' ')}`)
+    // mọi chân đều nằm trong một nhãn: tổng thùng theo nhãn không lớn hơn số đã xếp
+    ok(E.layerBadges(r.plan, r.meta, 0, null).length === 0, `số lớp 3D ${st.name}: bước 0 ⇒ chưa có nhãn`)
+    ok(E.layerBadges(r.plan, r.meta, null, new Set()).length === 0, `số lớp 3D ${st.name}: soi khối khác ⇒ không nhãn`)
+    console.log(`• Số lớp 3D — ${st.name}: ${b.length} nhãn (${b.map(x => (x.on ? '+' : '') + x.n).join(', ')})`)
+  }
+  // một mã container 40ft 2.860 thùng (luật 25): 11 lớp + phần lớp 12 ⇒ nhãn 11 và 12, không nhãn "trên nóc"
+  const r = E.computeTrip({ truck: trucks['adm-v-c40'], orders: [{ id: 'x', name: 'X', place: '', lines: [{ item: items[E.ADMIN_ITEMS.find(i => i.code === 'SP002').id], qty: 2860 }] }], pallet: E.DEFAULT_PALLET_SETTINGS })
+  const b = E.layerBadges(r.plan, r.meta, null, null)
+  ok(b.some(x => x.n === 11) && b.some(x => x.n === 12) && b.every(x => !x.on && (x.n === 11 || x.n === 12)), `số lớp 3D một mã 2.860 thùng: ${b.map(x => x.n).join(', ')}`)
+}
+
 const t0 = performance.now()
 const sug = E.suggestTruck(sample, E.DEFAULT_PALLET_SETTINGS, E.pickPool(E.ADMIN_VEHICLES, undefined))
 console.log(`• Gợi ý xe cho chuyến mẫu: ${sug} (${Math.round(performance.now() - t0)} ms)`)

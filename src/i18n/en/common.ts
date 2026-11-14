@@ -15,4 +15,9 @@ export const COMMON: Record<string, string> = {
   'Ngôn ngữ': 'Language',
   'Đổi sang tiếng Việt': 'Switch to Vietnamese',
   'Đổi sang tiếng Anh': 'Switch to English',
+  // tấm form còn thay đổi chưa lưu
+  'Bỏ những gì vừa sửa?': 'Discard your changes?',
+  'Các thay đổi chưa lưu sẽ mất.': 'Unsaved changes will be lost.',
+  'Bỏ thay đổi': 'Discard',
+  'Sửa tiếp': 'Keep editing',
 }

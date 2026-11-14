@@ -55,8 +55,9 @@ if (typeof window !== 'undefined') {
   })
 }
 
-/** Gắn vào tấm / bảng phủ: `open` ⇒ Back của máy đóng nó (gọi `onClose`). */
-export function useBackClose(open: boolean, onClose: () => void) {
+/** Gắn vào tấm / bảng phủ: `open` ⇒ Back của máy đóng nó (gọi `onClose`). `again` đổi ⇒ đẩy lại mục lịch sử (tấm từ chối đóng
+ *  khi Back — form còn thay đổi chưa lưu, hỏi trước — mục cũ đã lùi mất). */
+export function useBackClose(open: boolean, onClose: () => void, again: unknown = 0) {
   const close = useRef(onClose)
   close.current = onClose
   useEffect(() => {
@@ -71,7 +72,7 @@ export function useBackClose(open: boolean, onClose: () => void) {
       // đang đứng ở mục của tấm (không phải vừa chuyển sang màn khác từ trong tấm) ⇒ lùi bỏ mục đó
       if (history.state?.overlay) { ownBack++; history.back() }
     }
-  }, [open])
+  }, [open, again]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 export function useRoute(): Route {

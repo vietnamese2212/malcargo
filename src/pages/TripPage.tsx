@@ -6,7 +6,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type Re
 import {
   AlertTriangle, ArrowDown, ArrowUp, Camera, Check, ChevronDown, ChevronRight, ClipboardCopy, ClipboardList, ClipboardPen, Crosshair, ExternalLink, Eye, EyeOff,
   ArrowLeftRight, FileSpreadsheet, HelpCircle, Layers, Loader2, LogOut, MapPin, Maximize2, Menu, Minimize2, Minus, MoreVertical, Package, Pause, Pencil, Play, Plus, Printer, Rotate3d, Ruler,
-  Settings, Share2, SlidersHorizontal, Smartphone, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, UsersRound, X,
+  Settings, Share2, SlidersHorizontal, Split, Smartphone, Sparkles, Table2, Trash2, Truck, Upload, UserRound, Users, UsersRound, X,
 } from 'lucide-react'
 import { LOCKED, catalogLocked, denyEdit, famLabel, findVehicle, isBlankOrder, isSample, newId, newTripLabel, nextName, tripMade, tripTime, tripTitle, tripsByDay, useAllItems, useAllVehicles, useData, useSpace } from '../data/store'
 import { cloudEnabled, signInGoogle, signOut, switchAccount, switchSpace, useAuth, useFamily, useJoinRequests } from '../data/cloud'
@@ -22,13 +22,14 @@ import type { ViewPreset } from '../three/TruckScene'
 import { groupColor, itemColors, tint } from '../three/colors'
 import {
   Badge, BoxGlyph, Button, Confirm, DayHead, Empty, Field, IconButton, KeyboardShield, LiveNum, MenuItem, Popover, SearchInput, SectionBand, Segmented, Sheet,
-  TextInput, cx, dayAgo, fmtDate, fmtDec, fmtDims, fmtInt, fmtKgShort, fmtM3, fmtTime, useFold, usePhone, useTouchContain, useViewportBox, useVisualView,
+  QtyInput, TextInput, cx, dayAgo, fmtDate, fmtDec, fmtKgOf, fmtDims, fmtInt, fmtKgShort, fmtM3, fmtTime, useFold, usePhone, useTouchContain, useViewportBox, useVisualView,
 } from '../ui/kit'
 import { GoogleG, Logo, PageHeader, Panel } from '../ui/Shell'
 import { TruckGlyph } from './VehiclesPage'
 import { VehicleSheet } from '../ui/VehicleSheet'
 import { ItemSheet } from '../ui/ItemSheet'
 import { ExplainPopup } from './TripExplain'
+import { SplitSheet } from './TripSplit'
 import { PalletFields, PalletSheet } from '../ui/PalletSettings'
 import { LangSwitch } from '../ui/LangSwitch'
 import { t, tx, untx } from '../i18n'
@@ -124,6 +125,7 @@ export default function TripPage({ id }: { id: string }) {
   const [walls, setWalls] = useState<'open' | 'glass'>('open')
   const [open, setOpen] = useState({ cargo: true, count: false })
   const [explain, setExplain] = useState(false)   // popup bảng diễn giải từng mã (nút trên khung 3D)
+  const [splitting, setSplitting] = useState(false)   // "Chia ra nhiều xe" (chuyến không vừa một xe)
   const [palletOpen, setPalletOpen] = useState(false)   // cài đặt pallet (nút ⚙ cạnh nút chọn Pallet)
   const [panel, setPanel] = useState<PanelName | null>(null)
   const [importing, setImporting] = useState<'menu' | 'trip' | null>(null)   // 'trip' = nút nhập đơn trên bàn ⇒ đơn vào chuyến này
@@ -164,7 +166,8 @@ export default function TripPage({ id }: { id: string }) {
       replaceRoute({ page: 'trip', id: fork.to })
     } else if (fork.to === id) {
       markForkSeen()
-      setToast(t('Đã lưu thành chuyến mới {code}, chuyến mẫu giữ nguyên', { code: useData.getState().trips.find(x => x.id === id)?.code ?? '' }))
+      const st = useData.getState(), nt = st.trips.find(x => x.id === id)
+      setToast(t('Đã lưu thành chuyến mới {code}, chuyến mẫu giữ nguyên', { code: nt ? tripTitle(nt, st.orders) : '' }))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fork, id])
@@ -230,7 +233,16 @@ export default function TripPage({ id }: { id: string }) {
     if (!ids.length || denyEdit()) return
     const tid = newId()
     upsertTrip({ id: tid, ...newTripLabel(trips), vehicleId: null, orderIds: ids, updatedAt: 0 })
+    takeFrom(ids, tid)
     go({ page: 'trip', id: tid })
+  }
+  // đơn đang ở chuyến KHÁC ⇒ CHUYỂN sang, không để một đơn nằm hai chuyến (hàng bị tính hai lần — thử 14/11). Chuyến mẫu giữ nguyên
+  // (thêm đơn mẫu vào chuyến của mình thì store tự chép bản sao).
+  const takeFrom = (ids: string[], keep: string) => {
+    const st = useData.getState()
+    const from = st.trips.filter(x => x.id !== keep && !isSample(x.id) && x.orderIds.some(o => ids.includes(o)))
+    from.forEach(x => upsertTrip({ ...x, orderIds: x.orderIds.filter(o => !ids.includes(o)) }))
+    if (from.length) setToast(t('Đã chuyển đơn từ chuyến {name}', { name: from.map(x => tripTitle(x, st.orders)).join(', ') }))
   }
 
   // ── sửa XE ngay tại chỗ (xe mẫu ⇒ thành xe của tôi) ──
@@ -375,8 +387,10 @@ export default function TripPage({ id }: { id: string }) {
               <TitleBlock r={r} busy={planning} error={error} hasCargo={hasCargo} vehicle={vehicle} tripName={tripLabel}
                 orders={orderRows}
                 // chỉ gợi ý xe NHỎ HƠN thật — bản "(của tôi)" cùng cỡ xe đang dùng từng hiện "Xe nhỏ hơn vẫn vừa" (đơn thật 13/11)
-                sug={suggestion && vehicle && suggestion !== vehicle.id ? vehicles.find(v => v.id === suggestion && v.l * v.w * v.h < vehicle.l * vehicle.w * vehicle.h) : undefined}
-                noneFits={!suggestion} onPick={vid => { pickVehicle(vid); setToast(t('Đã đổi xe')) }} />
+                // xe đang dùng chưa chở hết ⇒ xe vừa nhất (lớn hơn) — bản 13/11 lọc cả ca này, mất gợi ý (thử 14/11)
+                sug={suggestion && vehicle && suggestion !== vehicle.id ? vehicles.find(v => v.id === suggestion && (!r?.fits || v.l * v.w * v.h < vehicle.l * vehicle.w * vehicle.h)) : undefined}
+                noneFits={!suggestion} onPick={vid => { pickVehicle(vid); setToast(t('Đã đổi xe')) }}
+                onSplit={trip && !isSample(trip.id) ? () => { if (!denyEdit()) setSplitting(true) } : undefined} />
               {/* điện thoại: nút diễn giải chỉ biểu tượng, xếp dưới nút góc nhìn — dải số liệu bên trái cần đủ bề ngang */}
               <div className="flex shrink-0 flex-col-reverse items-end gap-2 sm:flex-row">
                 {r && r.plan.placed.length > 0 && (
@@ -438,7 +452,7 @@ export default function TripPage({ id }: { id: string }) {
             summary={hasCargo ? (
               <span className="flex flex-wrap gap-x-3">
                 <SumChip label={t('Đơn')} value={fmtInt(rawOrders.length)} /><SumChip label={t('Thùng')} value={fmtInt(all.cartons)} />
-                <SumChip label={t('Nặng')} value={all.kgKnown ? fmtKgShort(all.kg) : all.kg > 0 ? `≥${fmtKgShort(all.kg)}` : '?'} /><SumChip label={t('Khối')} value={fmtM3(all.m3)} />
+                <SumChip label={t('Nặng')} value={fmtKgOf(all)} /><SumChip label={t('Khối')} value={fmtM3(all.m3)} />
               </span>
             ) : t('Chưa có hàng')}>
             {!rawOrders.length ? (
@@ -491,8 +505,8 @@ export default function TripPage({ id }: { id: string }) {
                               </span>
                               <div className="flex shrink-0 items-center">
                               <IconButton label={t('Bớt 1')} onClick={() => setQty(o, l.itemId, l.qty - 1)} disabled={l.qty <= 0}><Minus size={15} /></IconButton>
-                              <input inputMode="numeric" value={l.qty || ''} placeholder={t('Số thùng')} aria-label={t('Số thùng {name}', { name: tx(it.name) })}
-                                onChange={e => setQty(o, l.itemId, Number(e.target.value.replace(/\D/g, '')) || 0)}
+                              <QtyInput value={l.qty} placeholder={t('Số thùng')} aria-label={t('Số thùng {name}', { name: tx(it.name) })}
+                                onChange={n => setQty(o, l.itemId, n)}
                                 className={cx('tap num w-[68px] rounded-md border px-1.5 text-center text-base font-semibold outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-sm',
                                   l.qty > 0 ? 'border-slate-300 bg-white' : 'border-amber-400 bg-amber-50 placeholder:text-[12px] placeholder:font-normal placeholder:text-amber-800')} />
                               <IconButton label={t('Thêm 1')} onClick={() => setQty(o, l.itemId, l.qty + 1)}><Plus size={15} /></IconButton>
@@ -536,6 +550,8 @@ export default function TripPage({ id }: { id: string }) {
       </div>
 
       <PalletSheet open={palletOpen} onClose={() => setPalletOpen(false)} />
+      {trip && vehicle && <SplitSheet open={splitting} onClose={() => setSplitting(false)} trip={trip} vehicle={vehicle} vehicles={vehicles}
+        input={input} candidates={candidates} onDone={n => setToast(t('Đã chia thành {n} chuyến — xem ở ô Chuyến xe', { n: fmtInt(n) }))} />}
       <ExplainPopup open={explain} onClose={() => setExplain(false)} r={r} vehicle={vehicle} items={items} colors={colors} tripName={tripLabel} onToast={setToast} />
       <VehicleSheet open={!!editVehicle} vehicle={editVehicle?.v ?? null} onClose={() => setEditVehicle(null)}
         onSaved={nv => { if (!editVehicle?.v || editVehicle.v.id === trip.vehicleId) pickVehicle(nv.id) }} />
@@ -546,13 +562,13 @@ export default function TripPage({ id }: { id: string }) {
         onSaved={saved => { if (editLine) adoptItem(editLine.it, saved) }}
         onUnlink={() => { if (editLine) toggleLine(editLine.o, editLine.it.id) }} />
       <OrderPicker open={!!pickOrders} fresh={pickOrders === 'fresh'} onClose={() => setPickOrders(false)} inTrip={pickOrders === 'fresh' ? [] : trip.orderIds}
-        onAdd={ids => (pickOrders === 'fresh' ? tripOf(ids) : upsertTrip({ ...trip, orderIds: [...trip.orderIds, ...ids] }))}
+        onAdd={ids => { if (pickOrders === 'fresh') tripOf(ids); else { upsertTrip({ ...trip, orderIds: [...trip.orderIds, ...ids] }); takeFrom(ids, trip.id) } }}
         onNew={() => { setPickOrders(false); setPickFor(newOrderInTrip()) }} />
       {pickOrder && (
         <ItemPicker open onClose={closePicker} picked={new Set(pickOrder.lines.map(l => l.itemId))}
           onToggle={it => toggleLine(useData.getState().orders.find(o => o.id === pickOrder.id) ?? pickOrder, it.id)} />
       )}
-      <Confirm open={!!delTrip} onClose={() => setDelTrip(null)} title={t('Xoá {name}?', { name: delTrip ? tripTitle(delTrip, orders) : '' })} body={t('Các đơn trong chuyến vẫn giữ nguyên, xem lại ở Đơn hàng.')}
+      <Confirm open={!!delTrip} onClose={() => setDelTrip(null)} title={t('Xoá chuyến {name}?', { name: delTrip ? tripTitle(delTrip, orders) : '' })} body={t('Các đơn trong chuyến vẫn giữ nguyên, xem lại ở Đơn hàng.')}
         onOk={() => { if (!delTrip) return; removeTrip(delTrip.id); if (delTrip.id === trip.id) go({ page: 'trips' }); else setToast(t('Đã xoá {name}', { name: tripTitle(delTrip, orders) })) }} />
 
       <Confirm open={!!unlink} onClose={() => setUnlink(null)} okText={t('Gỡ khỏi chuyến')} title={t('Gỡ {name} khỏi chuyến?', { name: tx(unlink?.name ?? '') })}
@@ -677,7 +693,7 @@ function TripSwitch({ trip, trips, onRename, onDelete, onAll, onNew, onShare, lo
                     </span>
                     {(places || n > 1) && <span className="block break-words text-[13px] leading-snug text-slate-700">{[places, n > 1 && t('{n} đơn', { n: fmtInt(n) })].filter(Boolean).join(' · ')}</span>}
                     <span className="num block break-words text-[12px] leading-snug text-slate-600">
-                      {v ? tx(v.name) : <span className="text-amber-700">{t('Chưa chọn xe')}</span>} · {t('{n} thùng', { n: fmtInt(tot.cartons) })} · {fmtKgShort(tot.kg)}
+                      {v ? tx(v.name) : <span className="text-amber-700">{t('Chưa chọn xe')}</span>} · {t('{n} thùng', { n: fmtInt(tot.cartons) })} · {fmtKgOf(tot)}
                     </span>
                   </a>
                   {isSample(tr.id)
@@ -1001,10 +1017,10 @@ function OrderEdit({ orders, onEdit, chip, className }: {
 }
 
 // ── Khung tên GỌN (góc trên trái): một dải mảnh, chạm để mở chi tiết ─────────────
-function TitleBlock({ r, busy, error, hasCargo, vehicle, tripName, orders, sug, noneFits, onPick }: {
+function TitleBlock({ r, busy, error, hasCargo, vehicle, tripName, orders, sug, noneFits, onPick, onSplit }: {
   r: TripResult | null; busy: boolean; error: string | null; hasCargo: boolean; vehicle?: Vehicle; tripName: string
   orders: { id: string; name: string; cartons: number }[]
-  sug?: Vehicle; noneFits: boolean; onPick: (id: string) => void
+  sug?: Vehicle; noneFits: boolean; onPick: (id: string) => void; onSplit?: () => void
 }) {
   const [more, setMore] = useState(false)
   const frame = 'pointer-events-auto border-[1.5px] border-navy-950 bg-white text-navy-950'
@@ -1012,7 +1028,7 @@ function TitleBlock({ r, busy, error, hasCargo, vehicle, tripName, orders, sug, 
   if (error) return <div className={cx(frame, 'px-2.5 py-1.5 text-[12px] text-red-800')}>{t('Lỗi khi tính: {error}', { error: tx(error) })}</div>
   if (!r || !vehicle) return <div className={cx(frame, 'flex items-center gap-2 px-2.5 py-1.5 text-[12px]')}><Loader2 size={14} className="animate-spin" />{t('Đang tính…')}</div>
   const p = r.plan
-  const { left, pal, palPlaced, palTotal, topPlaced, topTotal, head, count, kgPart, loadPct } = tripVerdict(r, vehicle)
+  const { left, pal, palPlaced, palTotal, topPlaced, topTotal, head, count, kgPart, loadPct, boxM3, loadedM3 } = tripVerdict(r, vehicle)
   return (
     <div className="pointer-events-none min-w-0">
       <button onClick={() => setMore(v => !v)} aria-expanded={more} aria-label={t('Kết quả: {head}. Bấm để xem chi tiết', { head })}
@@ -1033,7 +1049,7 @@ function TitleBlock({ r, busy, error, hasCargo, vehicle, tripName, orders, sug, 
         <div className={cx(frame, 'mt-1 max-h-[calc(50vh-80px)] w-[272px] overflow-y-auto lg:max-h-[60vh]')}>
           <Row label={pal ? 'Pallet' : t('Thùng')} value={`${count}${pal && topTotal ? ` ${t('+{n} th', { n: fmtInt(topPlaced) })}` : ''}`} bad={pal ? palPlaced < palTotal : left > 0} />
           <Row label={t('Tải')} value={`${kgPart(fmtKgShort(r.weightKg))}${vehicle.payloadKg ? ` / ${fmtKgShort(vehicle.payloadKg)}` : ''}`} pct={loadPct} />
-          <Row label={t('Thể tích')} value={fmtM3(r.totals.m3)} pct={p.volumePct} />
+          <Row label={t('Thể tích')} value={`${fmtM3(loadedM3)} / ${fmtM3(boxM3)}`} pct={p.volumePct} />
           <Row label={t('Sàn')} value={`${m((vehicle.l * p.lengthUsedPct) / 100)}/${m(vehicle.l)} m`} pct={p.lengthUsedPct} />
           {/* từng đơn trên xe: bao nhiêu thùng, đã lên xe đủ chưa */}
           <div className="border-t border-navy-950 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600">{t('Theo đơn')}</div>
@@ -1063,8 +1079,14 @@ function TitleBlock({ r, busy, error, hasCargo, vehicle, tripName, orders, sug, 
           <span className="shrink-0 font-semibold text-brand-700">{t('Dùng')}</span>
         </button>
       ) : !r.fits && noneFits ? (
-        <div className={cx(frame, 'mt-1 border bg-red-50 px-2 py-1 text-[12px] text-red-900')}>{pal ? t('Không xe pallet nào chở hết, tách bớt hàng.') : t('Không xe thùng rời nào chở hết, tách bớt hàng.')}</div>
+        <div className={cx(frame, 'mt-1 border bg-red-50 px-2 py-1 text-[12px] text-red-900')}>{pal ? t('Không xe pallet nào chở hết.') : t('Không xe thùng rời nào chở hết.')}</div>
       ) : null}
+      {/* một xe không chở hết ⇒ chia ra nhiều xe cùng loại (giữ xe này; hoặc dùng xe lớn hơn ở nút trên) */}
+      {onSplit && !busy && !r.fits && !r.errors.length && p.placedCount > 0 && (
+        <button onClick={onSplit} className={cx(frame, 'mt-1 flex max-w-full items-center gap-1.5 border px-2 py-1 text-left text-[12px] font-semibold text-brand-700 hover:bg-brand-50 [@media(pointer:coarse)]:min-h-[40px]')}>
+          <Split size={13} className="shrink-0" /><span className="min-w-0 break-words">{t('Chia ra nhiều xe')}</span>
+        </button>
+      )}
     </div>
   )
 }
@@ -1389,7 +1411,7 @@ function OrderBlock({ o, i, count, tot, selected, onSelect, onEdit, onMove, onOp
           className={cx('grid min-w-0 flex-1 divide-x divide-slate-200 text-left transition-colors', where ? 'grid-cols-[0.8fr_1fr_1fr_1.15fr]' : 'grid-cols-3',
             selected ? 'bg-brand-50' : 'hover:bg-slate-50')}>
           <Stat label={t('Thùng')} value={fmtInt(tot.cartons)} />
-          <Stat label={t('Nặng')} value={fmtKgShort(tot.kg)} />
+          <Stat label={t('Nặng')} value={fmtKgOf(tot)} />
           <Stat label={t('Khối')} value={fmtM3(tot.m3)} />
           {where && <Stat label={t('Giao thứ {n}', { n: i + 1 })} value={where} />}
         </button>
@@ -1467,10 +1489,14 @@ function CountSheet({ r, colors, focus, onFocus, tripName, vehicle, onToast, onP
         const n = c.placed < c.total ? `${fmtInt(c.placed)}/${fmtInt(c.total)}` : fmtInt(c.placed)
         const pal = c.placed < c.total ? t('{n} pallet', { n }) : ''
         const sum = c.unit === 'pallet' ? pal : t('{n} thùng', { n })
-        return `${i + 1}. ${tx(c.label)} [${tx(c.orderName)}]: ${stackText(c)}${sum ? ' = ' + sum : ''}${c.onTopOfOthers ? onTop : ''}${mix}`
+        // dòng chưa lên xe: không có cách xếp ⇒ chỉ ghi số + "chưa lên xe" (trước: "…:  = 0/2 thùng")
+        const how = [stackText(c), sum].filter(Boolean).join(' = ')
+        return `${i + 1}. ${tx(c.label)} [${tx(c.orderName)}]: ${how}${c.placed === 0 ? ' — ' + t('chưa lên xe') : ''}${c.onTopOfOthers ? onTop : ''}${mix}`
       }),
       t('Tổng: {placed}/{total} · {kg} · thể tích {pct}%', {
-        placed: fmtInt(r.plan.placedCount), total: fmtInt(r.plan.totalCount), kg: fmtKgShort(r.weightKg), pct: fmtDec(r.plan.volumePct, 0),
+        // khối lượng ĐÃ LÊN XE (hàng bỏ lại không cộng); có mã chưa khai kg ⇒ "≥"
+        placed: fmtInt(r.plan.placedCount), total: fmtInt(r.plan.totalCount), pct: fmtDec(r.plan.volumePct, 0),
+        kg: (r.totals.kgKnown ? '' : '≥') + fmtKgShort(r.plan.placedCount < r.plan.totalCount ? r.plan.weightKg : r.weightKg),
       }),
     ]
     try { await navigator.clipboard.writeText(lines.join('\n')); onToast(t('Đã chép bảng đếm chân')) }
@@ -1543,6 +1569,7 @@ function OrderSheet({ order, items, colorOf, onClose, onSave }: {
   }
   return (<>
     <Sheet open={!!order && !picking} onClose={onClose} title={t('Sửa đơn')} subtitle={t('Tên, điểm giao và hàng trong đơn')}
+      dirty={!!order && (name !== tx(order.name) || place !== tx(order.place) || JSON.stringify(lines) !== JSON.stringify(order.lines))}
       footer={<div className="flex gap-2">
         <Button className="flex-1" onClick={onClose}>{t('Huỷ')}</Button>
         <Button variant="primary" className="flex-[2]" onClick={save}>{t('Lưu')}</Button>
@@ -1580,8 +1607,8 @@ function OrderSheet({ order, items, colorOf, onClose, onSave }: {
               {it && (
                 <div className="flex items-center justify-end">
                   <IconButton label={t('Bớt 1')} onClick={() => qty(l.itemId, l.qty - 1)} disabled={l.qty <= 0}><Minus size={15} /></IconButton>
-                  <input inputMode="numeric" value={l.qty || ''} placeholder={t('Số thùng')} aria-label={t('Số thùng {name}', { name: tx(it.name) })}
-                    onChange={e => qty(l.itemId, Number(e.target.value.replace(/\D/g, '')) || 0)}
+                  <QtyInput value={l.qty} placeholder={t('Số thùng')} aria-label={t('Số thùng {name}', { name: tx(it.name) })}
+                    onChange={n => qty(l.itemId, n)}
                     className={cx('tap num w-[76px] rounded-md border px-1.5 text-center text-base font-semibold outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 sm:text-sm',
                       l.qty > 0 ? 'border-slate-300 bg-white' : 'border-amber-400 bg-amber-50 placeholder:text-[12px] placeholder:font-normal placeholder:text-amber-800')} />
                   <IconButton label={t('Thêm 1')} onClick={() => qty(l.itemId, l.qty + 1)}><Plus size={15} /></IconButton>
@@ -1615,7 +1642,7 @@ function OrderPicker({ open, fresh, onClose, inTrip, onAdd, onNew }: { open: boo
     const used = new Set(trips.flatMap(x => x.orderIds))
     return orders.filter(o => !inTrip.includes(o.id)).sort((a, b) => Number(used.has(a.id)) - Number(used.has(b.id)))
   }, [orders, trips, inTrip])
-  const tripName = useMemo(() => new Map(trips.flatMap(tr => tr.orderIds.map(id => [id, tr.name] as const))), [trips])
+  const tripName = useMemo(() => new Map(trips.flatMap(tr => tr.orderIds.map(id => [id, tripTitle(tr, orders)] as const))), [trips, orders])
   return (
     <Sheet open={open} onClose={onClose} title={fresh ? t('Xếp đơn lên chuyến mới') : t('Thêm đơn / điểm giao')} subtitle={t('Đơn giao trước được xếp sát cửa')}
       footer={<div className="flex gap-2">
@@ -1635,8 +1662,8 @@ function OrderPicker({ open, fresh, onClose, inTrip, onAdd, onNew }: { open: boo
                 <span className={cx('grid h-5 w-5 shrink-0 place-items-center rounded border-2', on ? 'border-brand-500 bg-brand-500 text-white' : 'border-slate-400')}>{on && <Check size={13} strokeWidth={3} />}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{tx(o.name)}{o.place && <span className="font-normal text-slate-600"> · {tx(o.place)}</span>}</span>
-                  <span className="num block text-[13px] text-slate-600">{t('{n} thùng', { n: fmtInt(tot.cartons) })} · {fmtKgShort(tot.kg)} · {fmtM3(tot.m3)}</span>
-                  {tripName.has(o.id) && <span className="block break-words text-[12px] text-slate-500">{t('Đang ở chuyến {name}', { name: tx(tripName.get(o.id)!) })}</span>}
+                  <span className="num block text-[13px] text-slate-600">{t('{n} thùng', { n: fmtInt(tot.cartons) })} · {fmtKgOf(tot)} · {fmtM3(tot.m3)}</span>
+                  {tripName.has(o.id) && <span className="block break-words text-[12px] text-slate-500">{t('Đang ở chuyến {name} — chọn thì chuyển sang', { name: tripName.get(o.id)! })}</span>}
                 </span>
               </button>
             )

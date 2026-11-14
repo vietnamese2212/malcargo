@@ -3,7 +3,7 @@ import { Boxes, ChevronRight, Plus } from 'lucide-react'
 import { denyEdit, findVehicle, isSample, newId, newTripLabel, tripTime, tripTitle, tripsByDay, useAllItems, useAllVehicles, useData } from '../data/store'
 import { resolveOrder } from '../data/resolve'
 import { orderTotals } from '../engine/plan'
-import { Button, Confirm, DayHead, Empty, ListFooter, ListHead, RowCheck, SelectBar, SummaryBand, cx, fmtDate, fmtInt, fmtKgShort, fmtM3, fmtTime, useFold, useSelection } from '../ui/kit'
+import { Button, Confirm, DayHead, Empty, ListFooter, ListHead, RowCheck, SelectBar, SummaryBand, cx, fmtDate, fmtInt, fmtKgOf, fmtKgShort, fmtM3, fmtTime, useFold, useSelection } from '../ui/kit'
 import { ListCard, Page, PageHeader, usePanel } from '../ui/Shell'
 import { go, useRoute } from '../ui/route'
 import { t, tx } from '../i18n'
@@ -30,8 +30,10 @@ export default function TripsPage() {
   // mở sẵn ngày mới nhất + ngày của chuyến đang mở
   const dayKey = (d: number | null) => String(d ?? 'mau')
   const fold = useFold([dayKey(days[0]?.day ?? null), dayKey(days.find(g => route.page === 'trip' && g.rows.some(r => r.t.id === route.id))?.day ?? null)])
-  const sum = rows.reduce((s, r) => ({ cartons: s.cartons + r.tot.cartons, kg: s.kg + r.tot.kg }), { cartons: 0, kg: 0 })
-  const noVehicle = rows.filter(r => !r.v).length
+  // dải tổng chỉ tính chuyến của người dùng — 2 chuyến mẫu (5.790 thùng / 40 tấn) từng làm tổng phình ra (thử 14/11)
+  const own = rows.filter(r => !isSample(r.t.id))
+  const sum = own.reduce((s, r) => ({ cartons: s.cartons + r.tot.cartons, kg: s.kg + r.tot.kg, known: s.known && r.tot.kgKnown }), { cartons: 0, kg: 0, known: true })
+  const noVehicle = own.filter(r => !r.v).length
   // chọn nhiều để xoá (chuyến mẫu không xoá được); xoá luôn các đơn chỉ nằm trong những chuyến đã chọn
   const ids = rows.map(r => r.t.id).filter(id => !isSample(id))
   const sel = useSelection(ids)
@@ -72,10 +74,10 @@ export default function TripsPage() {
         ) : (
           <ListCard>
             <SummaryBand className="sm:rounded-t-[7px]" tiles={[
-              { label: t('Chuyến'), value: fmtInt(rows.length) },
+              { label: t('Chuyến'), value: fmtInt(own.length) },
               { label: t('Chưa chọn xe'), value: fmtInt(noVehicle), tone: noVehicle ? 'warn' : undefined },
               { label: t('Tổng thùng'), value: fmtInt(sum.cartons) },
-              { label: t('Tổng khối lượng'), value: fmtKgShort(sum.kg) },
+              { label: t('Tổng khối lượng'), value: `${sum.known ? '' : '≥'}${fmtKgShort(sum.kg)}` },
             ]} />
             <ListHead grid={GRID} check={ids.length ? <RowCheck checked={sel.all} mixed={sel.some} onChange={sel.toggleAll} label={t('Chọn tất cả')} /> : <span className="w-11 shrink-0" />}>
               <span>{t('Chuyến')}</span><span>{t('Xe')}</span><span className="text-right">{t('Đơn')}</span><span className="text-right">{t('Thùng')}</span>
@@ -98,7 +100,7 @@ export default function TripsPage() {
                     <span className="block break-words text-[15px] font-semibold leading-snug text-slate-900 sm:text-sm">{tripTitle(trip, orders)}</span>
                     {made && <span className="num hidden text-[12px] text-slate-600 sm:block">{made}</span>}
                     <span className="num block text-[13px] leading-snug text-slate-600 sm:hidden">
-                      {v ? tx(v.name) : t('Chưa chọn xe')} · {t('{n} đơn', { n })} · <span className="whitespace-nowrap">{fmtKgShort(tot.kg)}</span> · <span className="whitespace-nowrap">{fmtM3(tot.m3)}</span>{made && <> · <span className="whitespace-nowrap">{made}</span></>}
+                      {v ? tx(v.name) : t('Chưa chọn xe')} · {t('{n} đơn', { n })} · <span className="whitespace-nowrap">{fmtKgOf(tot)}</span> · <span className="whitespace-nowrap">{fmtM3(tot.m3)}</span>{made && <> · <span className="whitespace-nowrap">{made}</span></>}
                     </span>
                   </span>
                   <span className={`hidden break-words text-sm sm:block ${v ? 'text-slate-700' : 'text-amber-700'}`}>{v ? tx(v.name) : t('Chưa chọn xe')}</span>
@@ -106,7 +108,7 @@ export default function TripsPage() {
                   <span className="num shrink-0 text-right text-sm font-semibold text-slate-900">
                     {fmtInt(tot.cartons)}<span className="font-normal text-slate-600 sm:hidden"> {t('{n:thùng|thùng}', { n: tot.cartons })}</span>
                   </span>
-                  <span className="num hidden text-right text-sm text-slate-700 sm:block">{fmtKgShort(tot.kg)}</span>
+                  <span className="num hidden text-right text-sm text-slate-700 sm:block">{fmtKgOf(tot)}</span>
                   <span className="num hidden text-right text-sm text-slate-700 sm:block">{fmtM3(tot.m3)}</span>
                   <ChevronRight size={16} className="shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
                 </a>

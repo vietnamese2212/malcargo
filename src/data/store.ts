@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import type { Item, Order, PalletSettings, Trip, Vehicle } from './types'
+import type { SplitPart } from '../engine/split'
 import { t, tx } from '../i18n'
 import { ADMIN_ITEMS, ADMIN_VEHICLES, DEFAULT_PALLET_SETTINGS, PREV_SAMPLES, SAMPLE_ORDERS, SAMPLE_TRIPS } from './catalog'
 
@@ -145,6 +146,54 @@ export function tripCode(trips: Trip[], d = new Date()): string {
   const day = `${p2(d.getDate())}${p2(d.getMonth() + 1)}${p2(d.getFullYear() % 100)}`
   const n = Math.max(0, ...trips.filter(t => t.code?.startsWith(`${day}-`)).map(t => Number(t.code!.split('-')[2]) || 0)) + 1
   return `${day}-${p2(d.getHours())}${p2(d.getMinutes())}-${p2(n)}`
+}
+
+/** Ghi kết quả "Chia ra nhiều xe" (`engine/split.ts`): phần 1 ở lại chuyến này, phần 2… thành chuyến MỚI (mã ngày như mọi chuyến
+ *  mới) cùng xe + cài đặt — `lastVehicle` = xe nhỏ hơn cho chuyến cuối. Đơn nằm trọn một phần ⇒ chuyển nguyên đơn; đơn bị chia ⇒ đơn gốc
+ *  giữ phần đầu, mỗi phần sau là đơn MỚI cùng điểm giao, tên "<tên> (k)" (k = số thứ tự xe). Giữ thứ tự giao. Trả id các chuyến mới. */
+export function splitTripInto(tripId: string, parts: SplitPart[], lastVehicle?: string | null): string[] {
+  if (blocked()) return []
+  const s = useData.getState()
+  const trip = s.trips.find(t => t.id === tripId)
+  if (!trip || isSample(tripId) || parts.length < 2) return []
+  const now = Date.now()
+  const byTrip: string[][] = parts.map(() => [])
+  const changed: Order[] = [], added: Order[] = []
+  for (const oid of trip.orderIds) {
+    const o = s.orders.find(x => x.id === oid)
+    if (!o) continue
+    const ins = parts.map((p, k) => ({ k, ls: p.filter(x => x.orderId === oid && x.qty > 0) })).filter(x => x.ls.length)
+    if (ins.length <= 1) { byTrip[ins[0]?.k ?? 0].push(oid); continue }   // nguyên đơn (dòng mã không còn trong danh mục ⇒ ở lại xe 1)
+    ins.forEach(({ k, ls }, j) => {
+      const lines = ls.map(x => ({ itemId: x.itemId, qty: x.qty }))
+      if (j === 0) {
+        // dòng mã không tính được (mã đã xoá…) giữ nguyên ở đơn gốc
+        const known = new Set(parts.flat().filter(x => x.orderId === oid).map(x => x.itemId))
+        changed.push(who({ ...o, lines: [...lines, ...o.lines.filter(l => !known.has(l.itemId))], updatedAt: now }, false))
+        byTrip[k].push(oid)
+      } else {
+        const id = newId()
+        draft(id)
+        added.push(who<Order>({ id, name: `${o.name} (${k + 1})`, place: o.place, lines, updatedAt: now }, true))
+        byTrip[k].push(id)
+      }
+    })
+  }
+  const trips = [...s.trips]
+  const fresh: Trip[] = byTrip.slice(1).map((orderIds, i) => {
+    const code = tripCode(trips)
+    const last = i === byTrip.length - 2 && lastVehicle
+    const t: Trip = { id: newId(), code, name: code, vehicleId: last ? lastVehicle : trip.vehicleId, orderIds, updatedAt: now,
+      ...(last ? {} : { kind: trip.kind }), lightOwnLoose: trip.lightOwnLoose, lightOwnPallet: trip.lightOwnPallet }
+    trips.push(t)   // mã chuyến kế tiếp tính cả chuyến vừa tạo
+    draft(t.id)
+    return who(t, true)
+  })
+  useData.setState(st => ({
+    orders: [...added, ...st.orders.map(o => changed.find(c => c.id === o.id) ?? o)],
+    trips: [...fresh, ...st.trips.map(t => (t.id === tripId ? who({ ...t, orderIds: byTrip[0], updatedAt: now }, false) : t))],
+  }))
+  return fresh.map(t => t.id)
 }
 
 /** Chuyến mới: tên mặc định = mã chuyến (đổi tên sau vẫn giữ mã). */

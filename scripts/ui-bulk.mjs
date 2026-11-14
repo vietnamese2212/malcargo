@@ -42,8 +42,12 @@ for (const dev of [DEVICES[0], { ...DEVICES[1], name: 'small', viewport: { width
     await p.touchscreen.tap(dev.viewport.width / 2, 15); await p.waitForTimeout(200)
     const typing = await p.evaluate(() => ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName ?? ''))
     ok(await sheet.isVisible() && !typing && (await sheet.getByRole('textbox').nth(1).inputValue()).endsWith(' sửa'), 'đang gõ, chạm ra ngoài ⇒ cất bàn phím, tấm sửa vẫn mở, chữ còn nguyên')
+    // form đã sửa ⇒ chạm lần nữa thì HỎI trước (14/11: chạm dải mờ từng làm mất form), "Bỏ thay đổi" mới đóng
     await p.touchscreen.tap(dev.viewport.width / 2, 15); await p.waitForTimeout(200)
-    ok(!(await sheet.count()), 'chạm ra ngoài lần nữa ⇒ đóng tấm sửa')
+    const askD = p.getByRole('alertdialog')
+    ok(await askD.isVisible() && await sheet.isVisible(), 'chạm ra ngoài lần nữa (form đã sửa) ⇒ hỏi "Bỏ những gì vừa sửa?", tấm chưa đóng')
+    await askD.getByRole('button', { name: T('Bỏ thay đổi') }).click(); await p.waitForTimeout(300)
+    ok(!(await sheet.count()), '"Bỏ thay đổi" ⇒ đóng tấm sửa')
     await p.keyboard.press('Escape'); await p.waitForTimeout(200)
   }
 
