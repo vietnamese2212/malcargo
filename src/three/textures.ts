@@ -1,15 +1,25 @@
 // Vân bề mặt vẽ bằng canvas — không tải ảnh ngoài, chạy được khi mất mạng.
 import * as THREE from 'three'
 
-function canvas(w: number, h: number, draw: (c: CanvasRenderingContext2D, w: number, h: number) => void, srgb = true): THREE.CanvasTexture {
-  const el = document.createElement('canvas')
-  el.width = w; el.height = h
-  const c = el.getContext('2d')!
-  draw(c, w, h)
+// Ảnh vẽ bằng canvas (vân sơn, ván sàn, thùng in mã…) đều cố định theo đầu vào (rng có hạt) ⇒ NHỚ ảnh đã vẽ theo khoá: đổi xe / đổi
+// cấu hình dựng lại xe + hàng chỉ tạo texture mới từ ảnh có sẵn (vẽ lại từng tốn ~80 ms / lần ở máy chậm — đo 15/11, "đổi xe hơi giật")
+const drawn = new Map<string, HTMLCanvasElement>()
+const texOf = (el: HTMLCanvasElement, srgb: boolean) => {
   const t = new THREE.CanvasTexture(el)
   if (srgb) t.colorSpace = THREE.SRGBColorSpace
   t.anisotropy = 4
   return t
+}
+function canvas(w: number, h: number, draw: (c: CanvasRenderingContext2D, w: number, h: number) => void, srgb = true, key?: string): THREE.CanvasTexture {
+  const k = key && `${key}|${w}x${h}`
+  let el = k ? drawn.get(k) : undefined
+  if (!el) {
+    el = document.createElement('canvas')
+    el.width = w; el.height = h
+    draw(el.getContext('2d')!, w, h)
+    if (k) { drawn.set(k, el); if (drawn.size > 160) drawn.delete(drawn.keys().next().value!) }
+  }
+  return texOf(el, srgb)
 }
 
 // Ngẫu nhiên có hạt giống — vân giữ nguyên mỗi lần dựng lại cảnh (không "nhảy" khi đổi số thùng)
@@ -87,7 +97,17 @@ export interface CartonArt { hex: string; code: string; name: string; l: number;
  * Thùng carton IN theo mã: nền màu mã trên giấy, nhãn trắng ghi TÊN hàng (mặt dài), MÃ hàng (mặt đầu),
  * nóc có đường nắp gấp + băng keo. Mỗi mặt vẽ đúng tỉ lệ mm của thùng ⇒ chữ không bị kéo méo.
  */
+const facesDrawn = new Map<string, { long: HTMLCanvasElement; end: HTMLCanvasElement; top: HTMLCanvasElement }>()
 export function cartonFaces(a: CartonArt) {
+  const fk = JSON.stringify([a.code, a.name, a.hex, a.l, a.w, a.h])
+  const hit = facesDrawn.get(fk)
+  if (hit) return { long: texOf(hit.long, true), end: texOf(hit.end, true), top: texOf(hit.top, true) }
+  const r = cartonFacesDraw(a)
+  facesDrawn.set(fk, { long: r.long.image as HTMLCanvasElement, end: r.end.image as HTMLCanvasElement, top: r.top.image as HTMLCanvasElement })
+  if (facesDrawn.size > 80) facesDrawn.delete(facesDrawn.keys().next().value!)
+  return r
+}
+function cartonFacesDraw(a: CartonArt) {
   const k = Math.min(1.5, 384 / Math.max(a.l, a.w, a.h))
   const px = (mm: number) => Math.max(24, Math.round(mm * k))
   const rnd = rng(hashStr(a.code + a.name))
@@ -211,7 +231,7 @@ export const wrappedTexture = () => canvas(256, 256, (c) => {
     c.fillRect(0, rnd() * 256, 256, 3 + rnd() * 6)
   }
   edgeShade(c, 256, 256, 0.18)
-})
+}, true, 'wrap')
 
 /** Một tấm ván pallet gỗ thông: thớ chạy dọc, vài mắt gỗ, hai đầu sẫm hơn. */
 export const boardTexture = () => canvas(512, 64, (c, w, h) => {
@@ -235,7 +255,7 @@ export const boardTexture = () => canvas(512, 64, (c, w, h) => {
   e.addColorStop(0, 'rgba(70,40,15,0.35)'); e.addColorStop(0.03, 'rgba(70,40,15,0)'); e.addColorStop(0.97, 'rgba(70,40,15,0)'); e.addColorStop(1, 'rgba(70,40,15,0.35)')
   c.fillStyle = e; c.fillRect(0, 0, w, h)
   grain(c, w, h, 0.06, 2600, rnd)
-})
+}, true, 'board')
 
 /** Sàn thùng: ván ghép chạy dọc xe, đã dùng lâu (vệt mòn, khe sẫm). `ply` = ván ép container (nâu sẫm, tấm rộng). */
 export const floorTexture = (planks: number, ply = false) => canvas(1024, 256, (c, w, h) => {
@@ -260,7 +280,7 @@ export const floorTexture = (planks: number, ply = false) => canvas(1024, 256, (
   // vệt mòn sáng do xe nâng / thùng kéo lê
   for (let i = 0; i < 14; i++) { c.fillStyle = `rgba(255,240,220,${rnd() * 0.06})`; c.fillRect(rnd() * w, 0, 30 + rnd() * 160, h) }
   grain(c, w, h, 0.07, 6000, rnd)
-})
+}, true, `floor|${planks}|${ply}`)
 
 /** Tấm ốp vách (lòng thùng / vỏ thùng): nối tấm dọc + đinh tán. Lặp theo chiều dài xe. */
 export const panelTexture = (base: string, seam: number) => canvas(512, 256, (c, w, h) => {
@@ -273,7 +293,7 @@ export const panelTexture = (base: string, seam: number) => canvas(512, 256, (c,
     c.fillStyle = 'rgba(255,255,255,0.25)'; c.fillRect(x + 2, 0, 1, h)
     for (let y = 10; y < h; y += 22) { c.fillStyle = `rgba(0,0,0,${seam * 0.9})`; c.beginPath(); c.arc(x + 7, y, 1.6, 0, Math.PI * 2); c.fill() }
   }
-})
+}, true, `panel|${base}|${seam}`)
 
 /** Gai lốp: khối gai so le + rãnh dọc. Dùng làm cả màu lẫn bump. */
 export const treadTexture = () => canvas(512, 64, (c, w, h) => {
@@ -285,7 +305,7 @@ export const treadTexture = () => canvas(512, 64, (c, w, h) => {
     c.fillRect(i * bw + bw * 0.4, h * 0.52, bw * 0.62, h * 0.42)
   }
   c.fillStyle = '#121314'; c.fillRect(0, h * 0.46, w, 3)
-})
+}, true, 'tread')
 
 /** Hông lốp: vòng tròn đồng tâm mờ. */
 export const sidewallTexture = () => canvas(256, 256, (c, w) => {
@@ -294,14 +314,14 @@ export const sidewallTexture = () => canvas(256, 256, (c, w) => {
   c.fillStyle = g; c.fillRect(0, 0, w, w)
   c.strokeStyle = 'rgba(255,255,255,0.06)'; c.lineWidth = 2
   c.beginPath(); c.arc(w / 2, w / 2, w * 0.4, 0, Math.PI * 2); c.stroke()
-})
+}, true, 'sidewall')
 
 /** Decal phản quang đỏ - trắng xen kẽ (dán dọc hông + đuôi thùng). Một ô lặp = 1 đỏ + 1 trắng. */
 export const tapeTexture = () => canvas(128, 16, (c, w, h) => {
   c.fillStyle = '#c8202c'; c.fillRect(0, 0, w / 2, h)
   c.fillStyle = '#f3f3f0'; c.fillRect(w / 2, 0, w / 2, h)
   c.fillStyle = 'rgba(255,255,255,0.18)'; c.fillRect(0, 2, w, 2)
-})
+}, true, 'tape')
 
 /** Biển số xe kinh doanh vận tải (nền vàng, chữ đen) — chỉ vẽ khi người dùng khai biển số. */
 export const plateTexture = (lines: string[], wMM: number, hMM: number) => {
@@ -352,14 +372,14 @@ export const lineTexture = () => canvas(512, 32, (c, w, h) => {
   c.fillStyle = 'rgba(245,245,240,0.92)'; c.fillRect(0, 0, w, h)
   for (let i = 0; i < 900; i++) { c.clearRect(rnd() * w, rnd() * h, 1 + rnd() * 4, 1 + rnd() * 3) }
   for (let i = 0; i < 12; i++) { c.fillStyle = 'rgba(0,0,0,0.12)'; c.fillRect(rnd() * w, 0, 6 + rnd() * 30, h) }
-})
+}, true, 'line')
 
 /** Kính xe: sẫm, phần trên ánh trời nhạt — cộng với phản chiếu môi trường cho cảm giác kính thật, không đen đặc. */
 export const glassTexture = () => canvas(64, 256, (c, w, h) => {
   const g = c.createLinearGradient(0, 0, 0, h)
   g.addColorStop(0, '#5d728a'); g.addColorStop(0.35, '#2b3a4b'); g.addColorStop(0.7, '#18212c'); g.addColorStop(1, '#10161d')
   c.fillStyle = g; c.fillRect(0, 0, w, h)
-})
+}, true, 'glass')
 
 /** Lưới tản nhiệt: nan ngang tối. */
 export const grilleTexture = () => canvas(256, 128, (c) => {
@@ -370,4 +390,4 @@ export const grilleTexture = () => canvas(256, 128, (c) => {
     g.addColorStop(0, '#6a717b'); g.addColorStop(1, '#2a2f36')
     c.fillStyle = g; c.fillRect(8, y, 240, 8)
   }
-})
+}, true, 'grille')

@@ -147,6 +147,11 @@ export const FAMILY: Record<string, string> = {
   'Family chưa có đơn hàng nào.': 'This Family has no orders yet.',
   'Xem thêm {n} đơn': 'Show {n} more {n:order|orders}',
   'Ẩn dữ liệu mẫu cho cả Family': 'Hide sample data for the whole Family',
-  'Mọi người trong Family không thấy chuyến và đơn mẫu (Mẫu pallet, Mẫu 40ft).': 'Nobody in the Family sees the sample trips and orders (Pallet demo, 40ft demo).',
-  'Chuyến và đơn mẫu đang hiện cho mọi người — để làm quen app.': 'Sample trips and orders are shown to everyone — to get to know the app.',
+  'Bật ⇒ mọi người trong Family chỉ dùng dữ liệu của Family. Không xoá gì; đơn, chuyến đang dùng mã / xe mẫu vẫn giữ nguyên.': 'On ⇒ everyone in the Family works only with the Family’s own data. Nothing is deleted; orders and trips already using sample items / trucks stay as they are.',
+  'Ẩn đơn mẫu': 'Hide sample orders',
+  'Chuyến và đơn mẫu (Mẫu pallet, Mẫu 40ft).': 'Sample trips and orders (Pallet demo, 40ft demo).',
+  'Ẩn mã hàng mẫu chung': 'Hide shared sample items',
+  'Chọn mã chỉ thấy mã hàng của Family.': 'Item pickers only show the Family’s items.',
+  'Ẩn xe mẫu chung': 'Hide shared sample trucks',
+  'Chọn xe, gợi ý xe chỉ dùng xe của Family.': 'Truck pickers and suggestions only use the Family’s trucks.',
 }

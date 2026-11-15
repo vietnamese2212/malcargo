@@ -498,15 +498,31 @@ export function myCatalog(): Pick<BackupData, 'items' | 'vehicles' | 'pallet'> {
 export const useCatalog = create<{ items: Item[]; vehicles: Vehicle[] }>(() => ({ items: ADMIN_ITEMS, vehicles: ADMIN_VEHICLES }))
 
 // ── Tra cứu: mẫu chung + của tôi ────────────────────────────────────────────
+/** Cờ ẩn của Family đang mở (chủ dự án 15/11: "cho config ẩn: ẩn xe, ẩn đơn, ẩn mã"; "nếu ẩn thì chỉ lấy dữ liệu của family thôi") —
+ *  cloud.ts đặt theo `families.hide_*` + bộ đang mở. samples = chuyến + đơn mẫu; items / vehicles = mã hàng / xe Mẫu chung. */
+export const useHidden = create<{ samples: boolean; items: boolean; vehicles: boolean }>(() => ({ samples: false, items: false, vehicles: false }))
+// ẩn Mẫu chung: không liệt kê / không chọn được, nhưng mã / xe mà đơn, chuyến ĐANG dùng vẫn đọc được (dữ liệu cũ không thành mã thô)
 export function useAllItems(): Item[] {
   const mine = useData(s => s.items)
   const shared = useCatalog(s => s.items)
-  return useMemo(() => [...mine, ...shared], [mine, shared])
+  const hide = useHidden(s => s.items), noSamples = useHidden(s => s.samples)
+  const orders = useData(s => s.orders)
+  return useMemo(() => {
+    if (!hide) return [...mine, ...shared]
+    const used = new Set(orders.filter(o => !(noSamples && isSample(o.id))).flatMap(o => o.lines.map(l => l.itemId)))
+    return [...mine, ...shared.filter(x => used.has(x.id))]
+  }, [mine, shared, hide, noSamples, orders])
 }
 export function useAllVehicles(): Vehicle[] {
   const mine = useData(s => s.vehicles)
   const shared = useCatalog(s => s.vehicles)
-  return useMemo(() => [...mine, ...shared], [mine, shared])
+  const hide = useHidden(s => s.vehicles), noSamples = useHidden(s => s.samples)
+  const trips = useData(s => s.trips)
+  return useMemo(() => {
+    if (!hide) return [...mine, ...shared]
+    const used = new Set(trips.filter(t => !(noSamples && isSample(t.id))).map(t => t.vehicleId))
+    return [...mine, ...shared.filter(x => used.has(x.id))]
+  }, [mine, shared, hide, noSamples, trips])
 }
 export const findItem = (items: Item[], id: string) => items.find(x => x.id === id)
 export const findVehicle = (vs: Vehicle[], id: string | null) => (id ? vs.find(x => x.id === id) : undefined)

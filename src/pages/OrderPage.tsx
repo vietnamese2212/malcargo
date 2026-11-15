@@ -41,7 +41,7 @@ export default function OrderPage({ id, back }: { id: string; back?: string }) {
   }, [fork, id])
 
   const resolved = useMemo(() => (order ? resolveOrder(order, items) : null), [order, items])
-  const totals = useMemo(() => (resolved ? orderTotals(resolved.lines, pallet) : null), [resolved, pallet])
+  const totals = useMemo(() => (resolved ? orderTotals(resolved.lines, pallet, true) : null), [resolved, pallet])
 
   if (!order || !resolved || !totals) {
     return <><PageHeader title={t('Không thấy đơn')} back={backHref} backLabel={backLabel} /><Page><Empty icon={<AlertTriangle size={28} strokeWidth={1.5} />} title={t('Đơn này không còn')} body={t('Có thể đã bị xoá.')} /></Page></>

@@ -33,7 +33,7 @@ export default function OrdersPage({ onOpenTrip }: { onOpenTrip?: () => void } =
   const create = useCreateOrder()
   const rows = useMemo(() => [...orders].sort((a, b) => b.updatedAt - a.updatedAt).map(o => {
     const r = resolveOrder(o, items)
-    return { o, t: orderTotals(r.lines, pallet), trip: trips.find(t => t.orderIds.includes(o.id)) }
+    return { o, t: orderTotals(r.lines, pallet, true), trip: trips.find(t => t.orderIds.includes(o.id)) }
   }), [orders, items, pallet, trips])
   const sum = rows.reduce((s, r) => ({ cartons: s.cartons + r.t.cartons, kg: s.kg + r.t.kg }), { cartons: 0, kg: 0 })
   const loose = rows.filter(r => !r.trip).length

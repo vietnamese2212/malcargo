@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import { Check, ClipboardCopy, Crown, Loader2, Mail, RefreshCw, Send, Share2, Trash2, UsersRound, X } from 'lucide-react'
 import {
   acceptInvite, adminDeleteCode, adminSaveCode, adminSetPrice, applyCode, approveMember, createFamily, declineInvite, deleteFamily, familyLink,
-  inviteMember, isFamAdmin, leaveFamily, myFamilyWork, removeMember, renameFamily, setFamilyHideSamples, setFamilyOpen, setMemberRole, signInGoogle, switchSpace,
+  inviteMember, isFamAdmin, leaveFamily, myFamilyWork, removeMember, renameFamily, setFamilyHide, setFamilyOpen, setMemberRole, signInGoogle, switchSpace,
   transferOwner, useAuth, useFamily, type Family, type Fee, type Member,
 } from '../data/cloud'
 import { familyUrl } from '../data/famlink'
@@ -241,11 +241,19 @@ function FamilyCard({ f }: { f: Family }) {
             hint={f.open ? t('Ai có link Family xem được đơn hàng (chỉ xem, không sửa). Mã hàng, xe, chuyến vẫn kín.') : t('Đang đóng: chỉ người trong Family xem được dữ liệu.')} />
           <Button className="mt-3 w-full sm:w-auto" onClick={() => setSharing(true)}><Share2 size={16} />{t('Chia sẻ Family')}</Button>
           <p className="mt-1.5 text-[12px] text-slate-600">{t('Gửi link cho người muốn vào: họ đăng nhập rồi bấm Xin vào, bạn duyệt ở đây.')}</p>
-          {/* chủ dự án 14/11: "chủ family có thể chọn — hide hết đơn mẫu đi cho toàn family" */}
+          {/* chủ dự án 14–15/11: "chủ family có thể chọn — hide hết đơn mẫu đi cho toàn family"; "cho config ẩn: ẩn xe, ẩn đơn, ẩn mã";
+              "nếu ẩn thì chỉ lấy dữ liệu của family thôi" */}
           {f.hideSupported && <div className="mt-4">
-            <Switch checked={f.hideSamples} onChange={v => void run(setFamilyHideSamples(f.id, v))}
-              label={t('Ẩn dữ liệu mẫu cho cả Family')}
-              hint={f.hideSamples ? t('Mọi người trong Family không thấy chuyến và đơn mẫu (Mẫu pallet, Mẫu 40ft).') : t('Chuyến và đơn mẫu đang hiện cho mọi người — để làm quen app.')} />
+            <h3 className="text-sm font-semibold text-slate-900">{t('Ẩn dữ liệu mẫu cho cả Family')}</h3>
+            <p className="mt-0.5 text-[12px] text-slate-600">{t('Bật ⇒ mọi người trong Family chỉ dùng dữ liệu của Family. Không xoá gì; đơn, chuyến đang dùng mã / xe mẫu vẫn giữ nguyên.')}</p>
+            <div className="mt-2 space-y-2">
+              <Switch checked={f.hide.samples} onChange={v => void run(setFamilyHide(f.id, 'samples', v))}
+                label={t('Ẩn đơn mẫu')} hint={t('Chuyến và đơn mẫu (Mẫu pallet, Mẫu 40ft).')} />
+              <Switch checked={f.hide.items} onChange={v => void run(setFamilyHide(f.id, 'items', v))}
+                label={t('Ẩn mã hàng mẫu chung')} hint={t('Chọn mã chỉ thấy mã hàng của Family.')} />
+              <Switch checked={f.hide.vehicles} onChange={v => void run(setFamilyHide(f.id, 'vehicles', v))}
+                label={t('Ẩn xe mẫu chung')} hint={t('Chọn xe, gợi ý xe chỉ dùng xe của Family.')} />
+            </div>
           </div>}
         </section>
       )}

@@ -8,7 +8,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Item, Order, Trip, Vehicle } from './types'
 import {
   applyChanges, catalogLocked, changesSince, dropSpace, exportBackup, markSynced, mergeBackup, myCatalog, openSpace, parseBackup, readOnly,
-  resetMine, setAuthor, syncedOf, useCatalog, useData, useSpace, type BackupData, type FamilyRole, type Synced,
+  resetMine, setAuthor, syncedOf, useCatalog, useData, useHidden, useSpace, type BackupData, type FamilyRole, type Synced,
 } from './store'
 import { adoptShare, cleanPack, type SharePack } from './share'
 import { t } from '../i18n'
@@ -338,8 +338,9 @@ export interface Family {
   id: string; name: string; role: FamilyRole; discountCode: string | null; paidUntil: string | null
   open: boolean        // MỞ: ai có link xem được đơn hàng (chỉ xem)
   link: string | null  // mã link xin vào / xem (chủ, quản lý tạo)
-  hideSamples: boolean // chủ / quản lý giấu chuyến + đơn MẪU cho cả Family (chủ dự án 14/11)
-  hideSupported: boolean   // máy chủ đã có cột hide_samples (chưa áp SQL ⇒ không hiện công tắc)
+  // chủ / quản lý giấu dữ liệu MẪU cho cả Family (chủ dự án 14–15/11): chuyến + đơn mẫu · mã hàng Mẫu chung · xe Mẫu chung
+  hide: { samples: boolean; items: boolean; vehicles: boolean }
+  hideSupported: boolean   // máy chủ đã có các cột hide_* (chưa áp SQL ⇒ không hiện công tắc)
 }
 export interface Member { email: string; name: string | null; role: FamilyRole; status: 'invited' | 'requested' | 'active'; invited_at?: string }
 export interface Invite { familyId: string; name: string; owner: string }
@@ -402,12 +403,13 @@ export async function loadFamilies() {
   if (error) return
   const rows = (ms ?? []) as (Member & { family_id: string })[]
   const families: Family[] = [], invites: Invite[] = [], asked: FamilyState['asked'] = [], members: Record<string, Member[]> = {}
-  type Row = { id: string; name: string; discount_code: string | null; paid_until: string | null; open: boolean | null; link: string | null; hide_samples?: boolean | null }
+  type Row = { id: string; name: string; discount_code: string | null; paid_until: string | null; open: boolean | null; link: string | null
+    hide_samples?: boolean | null; hide_items?: boolean | null; hide_vehicles?: boolean | null }
   for (const f of (fs ?? []) as Row[]) {
     const mine = rows.find(m => m.family_id === f.id && m.email === me)
     const list = rows.filter(m => m.family_id === f.id)
     if (mine?.status === 'active') {
-      families.push({ id: f.id, name: f.name, role: mine.role, discountCode: f.discount_code, paidUntil: f.paid_until, open: !!f.open, link: f.link ?? null, hideSamples: !!f.hide_samples, hideSupported: 'hide_samples' in f })
+      families.push({ id: f.id, name: f.name, role: mine.role, discountCode: f.discount_code, paidUntil: f.paid_until, open: !!f.open, link: f.link ?? null, hide: { samples: !!f.hide_samples, items: !!f.hide_items, vehicles: !!f.hide_vehicles }, hideSupported: 'hide_items' in f })
       members[f.id] = list
     } else if (mine?.status === 'requested') asked.push({ familyId: f.id, name: f.name })
     else if (mine) { const o = list.find(m => m.role === 'owner'); invites.push({ familyId: f.id, name: f.name, owner: o?.name || o?.email || '' }) }
@@ -457,13 +459,20 @@ export async function deleteFamily(id: string) { const r = await call('family_de
 export async function approveMember(id: string, email: string) { const r = await call('family_approve', { p_family: id, p_email: email }); await loadFamilies(); return r.error }
 export async function setMemberRole(id: string, email: string, role: Exclude<FamilyRole, 'owner'>) { const r = await call('family_set_role', { p_family: id, p_email: email, p_role: role }); await loadFamilies(); return r.error }
 export async function transferOwner(id: string, email: string) { const r = await call('family_transfer', { p_family: id, p_email: email }); await loadFamilies(); return r.error }
-export async function setFamilyHideSamples(id: string, hide: boolean) { const r = await call('family_set_hide_samples', { p_family: id, p_hide: hide }); await loadFamilies(); return r.error }
-/** Bộ đang mở là Family đã bật "Ẩn dữ liệu mẫu" ⇒ danh sách chuyến / đơn không hiện chuyến + đơn mẫu. */
-export const hideSamplesNow = () => { const sp = useSpace.getState().id; return !!useFamily.getState().families.find(f => f.id === sp)?.hideSamples }
-export function useHideSamples() {
-  const sp = useSpace(s => s.id)
-  return useFamily(s => !!s.families.find(f => f.id === sp)?.hideSamples)
+export async function setFamilyHide(id: string, what: 'samples' | 'items' | 'vehicles', on: boolean) {
+  const r = await call('family_set_hide', { p_family: id, p_what: what, p_on: on }); await loadFamilies(); return r.error
 }
+/** Cờ ẩn của bộ đang mở ⇒ `useHidden` (store) — danh sách, ô chọn mã / xe, gợi ý xe đọc từ đó. */
+const syncHidden = () => {
+  const sp = useSpace.getState().id, f = useFamily.getState().families.find(x => x.id === sp)
+  const h = f?.hide ?? { samples: false, items: false, vehicles: false }, cur = useHidden.getState()
+  if (h.samples !== cur.samples || h.items !== cur.items || h.vehicles !== cur.vehicles) useHidden.setState({ ...h })
+}
+useFamily.subscribe(syncHidden)
+useSpace.subscribe(syncHidden)
+/** Bộ đang mở là Family đã ẩn chuyến + đơn mẫu. */
+export const hideSamplesNow = () => useHidden.getState().samples
+export const useHideSamples = () => useHidden(s => s.samples)
 export async function setFamilyOpen(id: string, open: boolean) { const r = await call('family_set_open', { p_family: id, p_open: open }); await loadFamilies(); return r.error }
 /** Link xin vào / xem của Family (chưa có thì tạo); `renew` ⇒ đổi link, link cũ hết tác dụng. */
 export async function familyLink(id: string, renew = false): Promise<{ code: string } | { error: string }> {

@@ -116,7 +116,12 @@ function cartonGroupsOf(orders: OrderInput[], lightOwn = false): G[] {
   return out
 }
 
-export function orderTotals(lines: { item: Item; qty: number }[], pallet: PalletSettings) {
+// số pallet ước của một bộ hàng: chia pallet (luật 24 xếp THẬT từng pallet gộp để đo cao) — nặng, nhớ theo đầu vào
+const palMemo = new Map<string, number | null>()
+/** Tổng thùng · kg · m³ của các dòng hàng. `withPallets` = ước cả số pallet (chỉ màn Đơn hàng cần): chia pallet thật khá nặng — gọi trên
+ *  luồng chính mỗi lần vẽ lại (thẻ đơn, ô chuyến, danh sách chuyến…) từng làm đổi Thùng rời ↔ Pallet / đổi xe khoá màn 1–2,8 giây
+ *  ở máy chậm (đo 15/11, chủ dự án: "chuyển xe, đổi config hơi giật"). */
+export function orderTotals(lines: { item: Item; qty: number }[], pallet: PalletSettings, withPallets = false) {
   const spec = toSpec(pallet)
   let cartons = 0, kg = 0, m3 = 0, kgKnown = true, palletKnown = true
   for (const { item, qty } of lines) {
@@ -127,13 +132,17 @@ export function orderTotals(lines: { item: Item; qty: number }[], pallet: Pallet
     if (!perPalletOf(item, spec)) palletKnown = false
   }
   let pallets: number | null = null
-  if (cartons > 0 && palletKnown) {
+  if (withPallets && cartons > 0 && palletKnown) {
+    const key = JSON.stringify([pallet, lines.filter(l => l.qty > 0).map(({ item: i, qty }) => [i.id, qty, i.l, i.w, i.h, i.kg, i.perPallet, i.maxLayers, i.light])])
+    if (palMemo.has(key)) return { cartons, kg, kgKnown, m3, pallets: palMemo.get(key)! }
     const res = palletizeGroups(lines.filter(l => l.qty > 0).map(({ item, qty }) => ({
       key: item.id, label: item.name, doKey: 'o', doLabel: 'o', cartons: qty,
       cartonsPerPallet: perPalletOf(item, spec), layers: item.maxLayers, isPalletCarrier: false, weightKg: item.kg,
       carton: { l: item.l, w: item.w, h: item.h }, assumed: false, unitless: false,
     })), spec)
     pallets = res.palletCount
+    palMemo.set(key, pallets)
+    if (palMemo.size > 300) palMemo.delete(palMemo.keys().next().value!)
   }
   return { cartons, kg, kgKnown, m3, pallets }
 }

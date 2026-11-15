@@ -41,6 +41,7 @@ interface Ctx {
   blob: THREE.Mesh
   ao: GTAOPass | null
   truck: TruckHandle | null
+  warm: TruckHandle | null   // xe kiểu kia (container ↔ thùng kín) dựng sẵn KHÔNG hiện, giữ cho shader đã dịch nằm lại
   cargo: CargoHandle | null
   marks: MarksHandle | null   // nhãn số lớp trên nóc từng vùng hàng
   walls: 'glass' | 'open'
@@ -95,6 +96,9 @@ export default function TruckScene(p: TruckSceneProps) {
     try {
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: true })
     } catch { setNoGL(true); return }
+    // kiểm lỗi shader bắt trình duyệt CHỜ dịch xong từng shader ngay lúc dựng (đổi xe khoá màn ~380 ms ở máy chậm — đo 15/11);
+    // bản chạy thật không cần, bản dev vẫn kiểm
+    renderer.debug.checkShaderErrors = import.meta.env.DEV
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.NeutralToneMapping
@@ -185,7 +189,7 @@ export default function TruckScene(p: TruckSceneProps) {
       composer.addPass(new OutputPass())
     } catch { composer = null; ao = null }
 
-    const c: Ctx = { renderer, scene, camera, controls, sun, blob, ao, truck: null, cargo: null, marks: null, walls: 'open', dirty: true, moved: false, tween: null }
+    const c: Ctx = { renderer, scene, camera, controls, sun, blob, ao, truck: null, warm: null, cargo: null, marks: null, walls: 'open', dirty: true, moved: false, tween: null }
     ctx.current = c
     controls.addEventListener('change', () => { c.dirty = true; c.moved = true })
 
@@ -243,7 +247,7 @@ export default function TruckScene(p: TruckSceneProps) {
 
     return () => {
       cancelAnimationFrame(raf); ro.disconnect(); controls.dispose()
-      c.cargo?.dispose(); c.marks?.dispose(); c.truck?.dispose()
+      c.cargo?.dispose(); c.marks?.dispose(); c.truck?.dispose(); c.warm?.dispose()
       composer?.dispose(); ao?.dispose()
       envTex.dispose(); pmrem.dispose(); groundTex.dispose()
       scene.traverse(o => {
@@ -286,6 +290,20 @@ export default function TruckScene(p: TruckSceneProps) {
     // xe khác cỡ mới căn lại camera; cùng cỡ (đổi biển số, xe mẫu thành xe của tôi) giữ góc người dùng đang xem
     if (fitted.current !== fk) { fitted.current = fk; goTo(c, 'overview', false) }
     c.dirty = true
+    // Lần ĐẦU đổi sang kiểu xe kia (container ↔ thùng kín) phải dịch shader của vật liệu mới — khoá màn ~450 ms ở máy chậm (đo 15/11,
+    // chủ dự án "chuyển xe hơi giật"). Lúc rảnh dựng sẵn kiểu kia (không cho vào cảnh) rồi dịch trước; giữ lại để shader không bị nhả.
+    if (!c.warm) {
+      const other = !p.truck.container
+      const run = () => {
+        const cc = ctx.current
+        if (!cc || cc.warm) return
+        const w = buildTruck({ L: 7.4, W: 2.35, H: 2.3, container: other })
+        cc.warm = w
+        try { void cc.renderer.compileAsync(w.group, cc.camera, cc.scene).catch(() => {}) } catch { /* máy không có compileAsync: bỏ qua */ }
+      }
+      const ric = (window as unknown as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => number }).requestIdleCallback
+      setTimeout(() => (ric ? ric(run, { timeout: 4000 }) : run()), 2500)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tk])
 
