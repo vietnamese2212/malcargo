@@ -7,3 +7,4 @@ scripts/out
 CLAUDE.local.md
 .claude/skills/
 skills-lock.json
+docs/private/
